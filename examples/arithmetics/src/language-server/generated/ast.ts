@@ -25,26 +25,130 @@ export type ArithmeticsKeywordNames =
     | ","
     | "-"
     | "/"
-    | ":"
     | ";"
+    | "="
     | "^"
+    | "acos"
+    | "acosh"
+    | "asin"
+    | "asinh"
+    | "atan"
+    | "atan2"
+    | "atanh"
     | "def"
     | "module";
 
 export type ArithmeticsTokenNames = ArithmeticsTerminalNames | ArithmeticsKeywordNames;
 
-export type AbstractDefinition = DeclaredParameter | Definition;
+export interface Acos_Func extends langium.AstNode {
+    readonly $container: Acos_Func | Acosh_Func | Asin_Func | Asinh_Func | Atan2_Func | Atan_Func | Atanh_Func | BinaryExpression | Definition;
+    readonly $type: 'Acos_Func';
+    x: Expression;
+}
 
-export const AbstractDefinition = {
-    $type: 'AbstractDefinition'
+export const Acos_Func = {
+    $type: 'Acos_Func',
+    x: 'x'
 } as const;
 
-export function isAbstractDefinition(item: unknown): item is AbstractDefinition {
-    return reflection.isInstance(item, AbstractDefinition.$type);
+export function isAcos_Func(item: unknown): item is Acos_Func {
+    return reflection.isInstance(item, Acos_Func.$type);
+}
+
+export interface Acosh_Func extends langium.AstNode {
+    readonly $container: Acos_Func | Acosh_Func | Asin_Func | Asinh_Func | Atan2_Func | Atan_Func | Atanh_Func | BinaryExpression | Definition;
+    readonly $type: 'Acosh_Func';
+    x: Expression;
+}
+
+export const Acosh_Func = {
+    $type: 'Acosh_Func',
+    x: 'x'
+} as const;
+
+export function isAcosh_Func(item: unknown): item is Acosh_Func {
+    return reflection.isInstance(item, Acosh_Func.$type);
+}
+
+export interface Asin_Func extends langium.AstNode {
+    readonly $container: Acos_Func | Acosh_Func | Asin_Func | Asinh_Func | Atan2_Func | Atan_Func | Atanh_Func | BinaryExpression | Definition;
+    readonly $type: 'Asin_Func';
+    x: Expression;
+}
+
+export const Asin_Func = {
+    $type: 'Asin_Func',
+    x: 'x'
+} as const;
+
+export function isAsin_Func(item: unknown): item is Asin_Func {
+    return reflection.isInstance(item, Asin_Func.$type);
+}
+
+export interface Asinh_Func extends langium.AstNode {
+    readonly $container: Acos_Func | Acosh_Func | Asin_Func | Asinh_Func | Atan2_Func | Atan_Func | Atanh_Func | BinaryExpression | Definition;
+    readonly $type: 'Asinh_Func';
+    x: Expression;
+}
+
+export const Asinh_Func = {
+    $type: 'Asinh_Func',
+    x: 'x'
+} as const;
+
+export function isAsinh_Func(item: unknown): item is Asinh_Func {
+    return reflection.isInstance(item, Asinh_Func.$type);
+}
+
+export interface Atan_Func extends langium.AstNode {
+    readonly $container: Acos_Func | Acosh_Func | Asin_Func | Asinh_Func | Atan2_Func | Atan_Func | Atanh_Func | BinaryExpression | Definition;
+    readonly $type: 'Atan_Func';
+    x: Expression;
+}
+
+export const Atan_Func = {
+    $type: 'Atan_Func',
+    x: 'x'
+} as const;
+
+export function isAtan_Func(item: unknown): item is Atan_Func {
+    return reflection.isInstance(item, Atan_Func.$type);
+}
+
+export interface Atan2_Func extends langium.AstNode {
+    readonly $container: Acos_Func | Acosh_Func | Asin_Func | Asinh_Func | Atan2_Func | Atan_Func | Atanh_Func | BinaryExpression | Definition;
+    readonly $type: 'Atan2_Func';
+    x: Expression;
+    y: Expression;
+}
+
+export const Atan2_Func = {
+    $type: 'Atan2_Func',
+    x: 'x',
+    y: 'y'
+} as const;
+
+export function isAtan2_Func(item: unknown): item is Atan2_Func {
+    return reflection.isInstance(item, Atan2_Func.$type);
+}
+
+export interface Atanh_Func extends langium.AstNode {
+    readonly $container: Acos_Func | Acosh_Func | Asin_Func | Asinh_Func | Atan2_Func | Atan_Func | Atanh_Func | BinaryExpression | Definition;
+    readonly $type: 'Atanh_Func';
+    x: Expression;
+}
+
+export const Atanh_Func = {
+    $type: 'Atanh_Func',
+    x: 'x'
+} as const;
+
+export function isAtanh_Func(item: unknown): item is Atanh_Func {
+    return reflection.isInstance(item, Atanh_Func.$type);
 }
 
 export interface BinaryExpression extends langium.AstNode {
-    readonly $container: BinaryExpression | Definition | Evaluation | FunctionCall;
+    readonly $container: Acos_Func | Acosh_Func | Asin_Func | Asinh_Func | Atan2_Func | Atan_Func | Atanh_Func | BinaryExpression | Definition;
     readonly $type: 'BinaryExpression';
     left: Expression;
     operator: '%' | '*' | '+' | '-' | '/' | '^';
@@ -62,32 +166,15 @@ export function isBinaryExpression(item: unknown): item is BinaryExpression {
     return reflection.isInstance(item, BinaryExpression.$type);
 }
 
-export interface DeclaredParameter extends langium.AstNode {
-    readonly $container: Definition;
-    readonly $type: 'DeclaredParameter';
-    name: string;
-}
-
-export const DeclaredParameter = {
-    $type: 'DeclaredParameter',
-    name: 'name'
-} as const;
-
-export function isDeclaredParameter(item: unknown): item is DeclaredParameter {
-    return reflection.isInstance(item, DeclaredParameter.$type);
-}
-
 export interface Definition extends langium.AstNode {
     readonly $container: Module;
     readonly $type: 'Definition';
-    args: Array<DeclaredParameter>;
     expr: Expression;
     name: string;
 }
 
 export const Definition = {
     $type: 'Definition',
-    args: 'args',
     expr: 'expr',
     name: 'name'
 } as const;
@@ -96,22 +183,7 @@ export function isDefinition(item: unknown): item is Definition {
     return reflection.isInstance(item, Definition.$type);
 }
 
-export interface Evaluation extends langium.AstNode {
-    readonly $container: Module;
-    readonly $type: 'Evaluation';
-    expression: Expression;
-}
-
-export const Evaluation = {
-    $type: 'Evaluation',
-    expression: 'expression'
-} as const;
-
-export function isEvaluation(item: unknown): item is Evaluation {
-    return reflection.isInstance(item, Evaluation.$type);
-}
-
-export type Expression = BinaryExpression | FunctionCall | NumberLiteral;
+export type Expression = BinaryExpression | FieldExpression | FunctionCall | NumberLiteral;
 
 export const Expression = {
     $type: 'Expression'
@@ -121,17 +193,40 @@ export function isExpression(item: unknown): item is Expression {
     return reflection.isInstance(item, Expression.$type);
 }
 
-export interface FunctionCall extends langium.AstNode {
-    readonly $container: BinaryExpression | Definition | Evaluation | FunctionCall;
-    readonly $type: 'FunctionCall';
-    args: Array<Expression>;
-    func: langium.Reference<AbstractDefinition>;
+export interface FieldExpression extends langium.AstNode {
+    readonly $container: Acos_Func | Acosh_Func | Asin_Func | Asinh_Func | Atan2_Func | Atan_Func | Atanh_Func | BinaryExpression | Definition;
+    readonly $type: 'FieldExpression';
+    fieldName: FieldName;
 }
 
+export const FieldExpression = {
+    $type: 'FieldExpression',
+    fieldName: 'fieldName'
+} as const;
+
+export function isFieldExpression(item: unknown): item is FieldExpression {
+    return reflection.isInstance(item, FieldExpression.$type);
+}
+
+export interface FieldName extends langium.AstNode {
+    readonly $container: FieldExpression;
+    readonly $type: 'FieldName';
+    name: string;
+}
+
+export const FieldName = {
+    $type: 'FieldName',
+    name: 'name'
+} as const;
+
+export function isFieldName(item: unknown): item is FieldName {
+    return reflection.isInstance(item, FieldName.$type);
+}
+
+export type FunctionCall = Acos_Func | Acosh_Func | Asin_Func | Asinh_Func | Atan2_Func | Atan_Func | Atanh_Func;
+
 export const FunctionCall = {
-    $type: 'FunctionCall',
-    args: 'args',
-    func: 'func'
+    $type: 'FunctionCall'
 } as const;
 
 export function isFunctionCall(item: unknown): item is FunctionCall {
@@ -155,7 +250,7 @@ export function isModule(item: unknown): item is Module {
 }
 
 export interface NumberLiteral extends langium.AstNode {
-    readonly $container: BinaryExpression | Definition | Evaluation | FunctionCall;
+    readonly $container: Acos_Func | Acosh_Func | Asin_Func | Asinh_Func | Atan2_Func | Atan_Func | Atanh_Func | BinaryExpression | Definition;
     readonly $type: 'NumberLiteral';
     value: number;
 }
@@ -169,7 +264,7 @@ export function isNumberLiteral(item: unknown): item is NumberLiteral {
     return reflection.isInstance(item, NumberLiteral.$type);
 }
 
-export type Statement = Definition | Evaluation;
+export type Statement = Definition;
 
 export const Statement = {
     $type: 'Statement'
@@ -180,12 +275,18 @@ export function isStatement(item: unknown): item is Statement {
 }
 
 export type ArithmeticsAstType = {
-    AbstractDefinition: AbstractDefinition
+    Acos_Func: Acos_Func
+    Acosh_Func: Acosh_Func
+    Asin_Func: Asin_Func
+    Asinh_Func: Asinh_Func
+    Atan2_Func: Atan2_Func
+    Atan_Func: Atan_Func
+    Atanh_Func: Atanh_Func
     BinaryExpression: BinaryExpression
-    DeclaredParameter: DeclaredParameter
     Definition: Definition
-    Evaluation: Evaluation
     Expression: Expression
+    FieldExpression: FieldExpression
+    FieldName: FieldName
     FunctionCall: FunctionCall
     Module: Module
     NumberLiteral: NumberLiteral
@@ -194,11 +295,71 @@ export type ArithmeticsAstType = {
 
 export class ArithmeticsAstReflection extends langium.AbstractAstReflection {
     override readonly types = {
-        AbstractDefinition: {
-            name: AbstractDefinition.$type,
+        Acos_Func: {
+            name: Acos_Func.$type,
             properties: {
+                x: {
+                    name: Acos_Func.x
+                }
             },
-            superTypes: []
+            superTypes: [FunctionCall.$type]
+        },
+        Acosh_Func: {
+            name: Acosh_Func.$type,
+            properties: {
+                x: {
+                    name: Acosh_Func.x
+                }
+            },
+            superTypes: [FunctionCall.$type]
+        },
+        Asin_Func: {
+            name: Asin_Func.$type,
+            properties: {
+                x: {
+                    name: Asin_Func.x
+                }
+            },
+            superTypes: [FunctionCall.$type]
+        },
+        Asinh_Func: {
+            name: Asinh_Func.$type,
+            properties: {
+                x: {
+                    name: Asinh_Func.x
+                }
+            },
+            superTypes: [FunctionCall.$type]
+        },
+        Atan2_Func: {
+            name: Atan2_Func.$type,
+            properties: {
+                x: {
+                    name: Atan2_Func.x
+                },
+                y: {
+                    name: Atan2_Func.y
+                }
+            },
+            superTypes: [FunctionCall.$type]
+        },
+        Atan_Func: {
+            name: Atan_Func.$type,
+            properties: {
+                x: {
+                    name: Atan_Func.x
+                }
+            },
+            superTypes: [FunctionCall.$type]
+        },
+        Atanh_Func: {
+            name: Atanh_Func.$type,
+            properties: {
+                x: {
+                    name: Atanh_Func.x
+                }
+            },
+            superTypes: [FunctionCall.$type]
         },
         BinaryExpression: {
             name: BinaryExpression.$type,
@@ -215,36 +376,14 @@ export class ArithmeticsAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: [Expression.$type]
         },
-        DeclaredParameter: {
-            name: DeclaredParameter.$type,
-            properties: {
-                name: {
-                    name: DeclaredParameter.name
-                }
-            },
-            superTypes: [AbstractDefinition.$type]
-        },
         Definition: {
             name: Definition.$type,
             properties: {
-                args: {
-                    name: Definition.args,
-                    defaultValue: []
-                },
                 expr: {
                     name: Definition.expr
                 },
                 name: {
                     name: Definition.name
-                }
-            },
-            superTypes: [AbstractDefinition.$type, Statement.$type]
-        },
-        Evaluation: {
-            name: Evaluation.$type,
-            properties: {
-                expression: {
-                    name: Evaluation.expression
                 }
             },
             superTypes: [Statement.$type]
@@ -255,17 +394,27 @@ export class ArithmeticsAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: []
         },
+        FieldExpression: {
+            name: FieldExpression.$type,
+            properties: {
+                fieldName: {
+                    name: FieldExpression.fieldName
+                }
+            },
+            superTypes: [Expression.$type]
+        },
+        FieldName: {
+            name: FieldName.$type,
+            properties: {
+                name: {
+                    name: FieldName.name
+                }
+            },
+            superTypes: []
+        },
         FunctionCall: {
             name: FunctionCall.$type,
             properties: {
-                args: {
-                    name: FunctionCall.args,
-                    defaultValue: []
-                },
-                func: {
-                    name: FunctionCall.func,
-                    referenceType: AbstractDefinition.$type
-                }
             },
             superTypes: [Expression.$type]
         },

@@ -7,40 +7,45 @@
 import { type Module, inject } from 'langium';
 import { createDefaultModule, createDefaultSharedModule, type DefaultSharedModuleContext, type LangiumServices, type LangiumSharedServices, type PartialLangiumServices } from 'langium/lsp';
 import { ArithmeticsScopeProvider } from './arithmetics-scope-provider.js';
-import { ArithmeticsValidator, registerValidationChecks } from './arithmetics-validator.js';
+// import { ArithmeticsValidator, registerValidationChecks } from './arithmetics-validator.js';
 import { ArithmeticsGeneratedModule, ArithmeticsGeneratedSharedModule } from './generated/module.js';
-import { ArithmeticsCodeActionProvider } from './lsp/arithmetics-code-actions.js';
+import { ArithmeticsTokenBuilder } from './arithmetics-token-builder.js';
+// import { ArithmeticsCodeActionProvider } from './lsp/arithmetics-code-actions.js';
 
 /**
  * Declaration of custom services - add your own service classes here.
  */
-export type ArithmeticsAddedServices = {
-    validation: {
-        ArithmeticsValidator: ArithmeticsValidator
-    }
-}
+// export type ArithmeticsAddedServices = {
+//     validation: {
+//         ArithmeticsValidator: ArithmeticsValidator
+//     }
+// }
 
 /**
  * Union of Langium default services and your custom services - use this as constructor parameter
  * of custom service classes.
  */
-export type ArithmeticsServices = LangiumServices & ArithmeticsAddedServices
+export type ArithmeticsServices = LangiumServices
 
 /**
  * Dependency injection module that overrides Langium default services and contributes the
  * declared custom services. The Langium defaults can be partially specified to override only
  * selected services, while the custom services must be fully specified.
  */
-export const ArithmeticsModule: Module<ArithmeticsServices, PartialLangiumServices & ArithmeticsAddedServices> = {
+export const ArithmeticsModule: Module<ArithmeticsServices, PartialLangiumServices> = {
     references: {
         ScopeProvider: (services) => new ArithmeticsScopeProvider(services)
     },
-    validation: {
-        ArithmeticsValidator: () => new ArithmeticsValidator()
+    // validation: {
+    //     ArithmeticsValidator: () => new ArithmeticsValidator()
+    // },
+    // lsp: {
+    //     CodeActionProvider: () => new ArithmeticsCodeActionProvider()
+    // },
+    parser: {
+        TokenBuilder: () => new ArithmeticsTokenBuilder(),
     },
-    lsp: {
-        CodeActionProvider: () => new ArithmeticsCodeActionProvider()
-    }
+
 };
 
 /**
@@ -72,7 +77,7 @@ export function createArithmeticsServices(context: DefaultSharedModuleContext): 
         ArithmeticsModule
     );
     shared.ServiceRegistry.register(arithmetics);
-    registerValidationChecks(arithmetics);
+    // registerValidationChecks(arithmetics);
     if (!context.connection) {
         // We don't run inside a language server
         // Therefore, initialize the configuration provider instantly

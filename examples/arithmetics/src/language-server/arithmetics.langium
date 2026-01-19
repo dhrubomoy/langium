@@ -4,20 +4,13 @@ entry Module:
     'module' name=ID
     (statements+=Statement)*;
 
-Statement:
-    Definition | Evaluation;
+Statement: Definition;
 
 Definition:
-    'def' name=ID ('(' args+=DeclaredParameter (',' args+=DeclaredParameter)* ')')?
-    ':' expr=Expression ';';
+    'def' name=ID '=' expr=Expression ';';
 
-DeclaredParameter:
+FieldName:
     name=ID;
-
-type AbstractDefinition = Definition | DeclaredParameter;
-
-Evaluation:
-    expression=Expression ';';
 
 Expression:
     BinaryExpression;
@@ -29,9 +22,24 @@ infix BinaryExpression on PrimaryExpression:
     > '+' | '-';
 
 PrimaryExpression infers Expression:
-    '(' Expression ')' |
+    {infer FieldExpression} fieldName=FieldName |
     {infer NumberLiteral} value=NUMBER |
-    {infer FunctionCall} func=[AbstractDefinition] ('(' args+=Expression (',' args+=Expression)* ')')?;
+    { infer FunctionCall} FunctionCall;
+
+FunctionCall: Acosh_Func | Acos_Func | Asinh_Func | Asin_Func | Atanh_Func | Atan2_Func | Atan_Func;
+
+Acos_Func: 'acos' '(' x=Expression ')';
+Acosh_Func: 'acosh' '(' x=Expression ')';
+Asin_Func:
+    'asin' '(' x=Expression ')';
+Asinh_Func:
+    'asinh' '(' x=Expression ')';
+Atan_Func:
+    'atan' '(' x=Expression ')';
+Atan2_Func:
+    'atan2' '(' y=Expression ',' x=Expression ')';
+Atanh_Func:
+    'atanh' '(' x=Expression ')';
 
 hidden terminal WS: /\s+/;
 terminal ID: /[_a-zA-Z][\w_]*/;

@@ -10,7 +10,7 @@
     },
     {
       "name": "keyword.control.arithmetics",
-      "match": "(?i)\\b(def|module)\\b"
+      "match": "(?i)\\b(acos|acosh|asin|asinh|atan|atan2|atanh|def|module)\\b"
     }
   ],
   "repository": {

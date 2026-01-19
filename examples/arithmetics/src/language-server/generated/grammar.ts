@@ -30,7 +30,7 @@ export const ArithmeticsGrammar = (): Grammar => loadedArithmeticsGrammar ?? (lo
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@9"
+                "$ref": "#/rules@16"
               },
               "arguments": []
             }
@@ -57,23 +57,11 @@ export const ArithmeticsGrammar = (): Grammar => loadedArithmeticsGrammar ?? (lo
       "$type": "ParserRule",
       "name": "Statement",
       "definition": {
-        "$type": "Alternatives",
-        "elements": [
-          {
-            "$type": "RuleCall",
-            "rule": {
-              "$ref": "#/rules@2"
-            },
-            "arguments": []
-          },
-          {
-            "$type": "RuleCall",
-            "rule": {
-              "$ref": "#/rules@4"
-            },
-            "arguments": []
-          }
-        ]
+        "$type": "RuleCall",
+        "rule": {
+          "$ref": "#/rules@2"
+        },
+        "arguments": []
       },
       "entry": false,
       "fragment": false,
@@ -96,62 +84,14 @@ export const ArithmeticsGrammar = (): Grammar => loadedArithmeticsGrammar ?? (lo
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@9"
+                "$ref": "#/rules@16"
               },
               "arguments": []
             }
           },
           {
-            "$type": "Group",
-            "elements": [
-              {
-                "$type": "Keyword",
-                "value": "("
-              },
-              {
-                "$type": "Assignment",
-                "feature": "args",
-                "operator": "+=",
-                "terminal": {
-                  "$type": "RuleCall",
-                  "rule": {
-                    "$ref": "#/rules@3"
-                  },
-                  "arguments": []
-                }
-              },
-              {
-                "$type": "Group",
-                "elements": [
-                  {
-                    "$type": "Keyword",
-                    "value": ","
-                  },
-                  {
-                    "$type": "Assignment",
-                    "feature": "args",
-                    "operator": "+=",
-                    "terminal": {
-                      "$type": "RuleCall",
-                      "rule": {
-                        "$ref": "#/rules@3"
-                      },
-                      "arguments": []
-                    }
-                  }
-                ],
-                "cardinality": "*"
-              },
-              {
-                "$type": "Keyword",
-                "value": ")"
-              }
-            ],
-            "cardinality": "?"
-          },
-          {
             "$type": "Keyword",
-            "value": ":"
+            "value": "="
           },
           {
             "$type": "Assignment",
@@ -160,7 +100,7 @@ export const ArithmeticsGrammar = (): Grammar => loadedArithmeticsGrammar ?? (lo
             "terminal": {
               "$type": "RuleCall",
               "rule": {
-                "$ref": "#/rules@5"
+                "$ref": "#/rules@4"
               },
               "arguments": []
             }
@@ -177,7 +117,7 @@ export const ArithmeticsGrammar = (): Grammar => loadedArithmeticsGrammar ?? (lo
     },
     {
       "$type": "ParserRule",
-      "name": "DeclaredParameter",
+      "name": "FieldName",
       "definition": {
         "$type": "Assignment",
         "feature": "name",
@@ -185,38 +125,10 @@ export const ArithmeticsGrammar = (): Grammar => loadedArithmeticsGrammar ?? (lo
         "terminal": {
           "$type": "RuleCall",
           "rule": {
-            "$ref": "#/rules@9"
+            "$ref": "#/rules@16"
           },
           "arguments": []
         }
-      },
-      "entry": false,
-      "fragment": false,
-      "parameters": []
-    },
-    {
-      "$type": "ParserRule",
-      "name": "Evaluation",
-      "definition": {
-        "$type": "Group",
-        "elements": [
-          {
-            "$type": "Assignment",
-            "feature": "expression",
-            "operator": "=",
-            "terminal": {
-              "$type": "RuleCall",
-              "rule": {
-                "$ref": "#/rules@5"
-              },
-              "arguments": []
-            }
-          },
-          {
-            "$type": "Keyword",
-            "value": ";"
-          }
-        ]
       },
       "entry": false,
       "fragment": false,
@@ -228,7 +140,7 @@ export const ArithmeticsGrammar = (): Grammar => loadedArithmeticsGrammar ?? (lo
       "definition": {
         "$type": "RuleCall",
         "rule": {
-          "$ref": "#/rules@6"
+          "$ref": "#/rules@5"
         },
         "arguments": []
       },
@@ -242,7 +154,7 @@ export const ArithmeticsGrammar = (): Grammar => loadedArithmeticsGrammar ?? (lo
       "call": {
         "$type": "RuleCall",
         "rule": {
-          "$ref": "#/rules@7"
+          "$ref": "#/rules@6"
         },
         "arguments": []
       },
@@ -311,19 +223,23 @@ export const ArithmeticsGrammar = (): Grammar => loadedArithmeticsGrammar ?? (lo
             "$type": "Group",
             "elements": [
               {
-                "$type": "Keyword",
-                "value": "("
+                "$type": "Action",
+                "inferredType": {
+                  "$type": "InferredType",
+                  "name": "FieldExpression"
+                }
               },
               {
-                "$type": "RuleCall",
-                "rule": {
-                  "$ref": "#/rules@5"
-                },
-                "arguments": []
-              },
-              {
-                "$type": "Keyword",
-                "value": ")"
+                "$type": "Assignment",
+                "feature": "fieldName",
+                "operator": "=",
+                "terminal": {
+                  "$type": "RuleCall",
+                  "rule": {
+                    "$ref": "#/rules@3"
+                  },
+                  "arguments": []
+                }
               }
             ]
           },
@@ -344,7 +260,7 @@ export const ArithmeticsGrammar = (): Grammar => loadedArithmeticsGrammar ?? (lo
                 "terminal": {
                   "$type": "RuleCall",
                   "rule": {
-                    "$ref": "#/rules@10"
+                    "$ref": "#/rules@17"
                   },
                   "arguments": []
                 }
@@ -362,67 +278,342 @@ export const ArithmeticsGrammar = (): Grammar => loadedArithmeticsGrammar ?? (lo
                 }
               },
               {
-                "$type": "Assignment",
-                "feature": "func",
-                "operator": "=",
-                "terminal": {
-                  "$type": "CrossReference",
-                  "type": {
-                    "$ref": "#/types@0"
-                  },
-                  "deprecatedSyntax": false,
-                  "isMulti": false
-                }
-              },
-              {
-                "$type": "Group",
-                "elements": [
-                  {
-                    "$type": "Keyword",
-                    "value": "("
-                  },
-                  {
-                    "$type": "Assignment",
-                    "feature": "args",
-                    "operator": "+=",
-                    "terminal": {
-                      "$type": "RuleCall",
-                      "rule": {
-                        "$ref": "#/rules@5"
-                      },
-                      "arguments": []
-                    }
-                  },
-                  {
-                    "$type": "Group",
-                    "elements": [
-                      {
-                        "$type": "Keyword",
-                        "value": ","
-                      },
-                      {
-                        "$type": "Assignment",
-                        "feature": "args",
-                        "operator": "+=",
-                        "terminal": {
-                          "$type": "RuleCall",
-                          "rule": {
-                            "$ref": "#/rules@5"
-                          },
-                          "arguments": []
-                        }
-                      }
-                    ],
-                    "cardinality": "*"
-                  },
-                  {
-                    "$type": "Keyword",
-                    "value": ")"
-                  }
-                ],
-                "cardinality": "?"
+                "$type": "RuleCall",
+                "rule": {
+                  "$ref": "#/rules@7"
+                },
+                "arguments": []
               }
             ]
+          }
+        ]
+      },
+      "entry": false,
+      "fragment": false,
+      "parameters": []
+    },
+    {
+      "$type": "ParserRule",
+      "name": "FunctionCall",
+      "definition": {
+        "$type": "Alternatives",
+        "elements": [
+          {
+            "$type": "RuleCall",
+            "rule": {
+              "$ref": "#/rules@9"
+            },
+            "arguments": []
+          },
+          {
+            "$type": "RuleCall",
+            "rule": {
+              "$ref": "#/rules@8"
+            },
+            "arguments": []
+          },
+          {
+            "$type": "RuleCall",
+            "rule": {
+              "$ref": "#/rules@11"
+            },
+            "arguments": []
+          },
+          {
+            "$type": "RuleCall",
+            "rule": {
+              "$ref": "#/rules@10"
+            },
+            "arguments": []
+          },
+          {
+            "$type": "RuleCall",
+            "rule": {
+              "$ref": "#/rules@14"
+            },
+            "arguments": []
+          },
+          {
+            "$type": "RuleCall",
+            "rule": {
+              "$ref": "#/rules@13"
+            },
+            "arguments": []
+          },
+          {
+            "$type": "RuleCall",
+            "rule": {
+              "$ref": "#/rules@12"
+            },
+            "arguments": []
+          }
+        ]
+      },
+      "entry": false,
+      "fragment": false,
+      "parameters": []
+    },
+    {
+      "$type": "ParserRule",
+      "name": "Acos_Func",
+      "definition": {
+        "$type": "Group",
+        "elements": [
+          {
+            "$type": "Keyword",
+            "value": "acos"
+          },
+          {
+            "$type": "Keyword",
+            "value": "("
+          },
+          {
+            "$type": "Assignment",
+            "feature": "x",
+            "operator": "=",
+            "terminal": {
+              "$type": "RuleCall",
+              "rule": {
+                "$ref": "#/rules@4"
+              },
+              "arguments": []
+            }
+          },
+          {
+            "$type": "Keyword",
+            "value": ")"
+          }
+        ]
+      },
+      "entry": false,
+      "fragment": false,
+      "parameters": []
+    },
+    {
+      "$type": "ParserRule",
+      "name": "Acosh_Func",
+      "definition": {
+        "$type": "Group",
+        "elements": [
+          {
+            "$type": "Keyword",
+            "value": "acosh"
+          },
+          {
+            "$type": "Keyword",
+            "value": "("
+          },
+          {
+            "$type": "Assignment",
+            "feature": "x",
+            "operator": "=",
+            "terminal": {
+              "$type": "RuleCall",
+              "rule": {
+                "$ref": "#/rules@4"
+              },
+              "arguments": []
+            }
+          },
+          {
+            "$type": "Keyword",
+            "value": ")"
+          }
+        ]
+      },
+      "entry": false,
+      "fragment": false,
+      "parameters": []
+    },
+    {
+      "$type": "ParserRule",
+      "name": "Asin_Func",
+      "definition": {
+        "$type": "Group",
+        "elements": [
+          {
+            "$type": "Keyword",
+            "value": "asin"
+          },
+          {
+            "$type": "Keyword",
+            "value": "("
+          },
+          {
+            "$type": "Assignment",
+            "feature": "x",
+            "operator": "=",
+            "terminal": {
+              "$type": "RuleCall",
+              "rule": {
+                "$ref": "#/rules@4"
+              },
+              "arguments": []
+            }
+          },
+          {
+            "$type": "Keyword",
+            "value": ")"
+          }
+        ]
+      },
+      "entry": false,
+      "fragment": false,
+      "parameters": []
+    },
+    {
+      "$type": "ParserRule",
+      "name": "Asinh_Func",
+      "definition": {
+        "$type": "Group",
+        "elements": [
+          {
+            "$type": "Keyword",
+            "value": "asinh"
+          },
+          {
+            "$type": "Keyword",
+            "value": "("
+          },
+          {
+            "$type": "Assignment",
+            "feature": "x",
+            "operator": "=",
+            "terminal": {
+              "$type": "RuleCall",
+              "rule": {
+                "$ref": "#/rules@4"
+              },
+              "arguments": []
+            }
+          },
+          {
+            "$type": "Keyword",
+            "value": ")"
+          }
+        ]
+      },
+      "entry": false,
+      "fragment": false,
+      "parameters": []
+    },
+    {
+      "$type": "ParserRule",
+      "name": "Atan_Func",
+      "definition": {
+        "$type": "Group",
+        "elements": [
+          {
+            "$type": "Keyword",
+            "value": "atan"
+          },
+          {
+            "$type": "Keyword",
+            "value": "("
+          },
+          {
+            "$type": "Assignment",
+            "feature": "x",
+            "operator": "=",
+            "terminal": {
+              "$type": "RuleCall",
+              "rule": {
+                "$ref": "#/rules@4"
+              },
+              "arguments": []
+            }
+          },
+          {
+            "$type": "Keyword",
+            "value": ")"
+          }
+        ]
+      },
+      "entry": false,
+      "fragment": false,
+      "parameters": []
+    },
+    {
+      "$type": "ParserRule",
+      "name": "Atan2_Func",
+      "definition": {
+        "$type": "Group",
+        "elements": [
+          {
+            "$type": "Keyword",
+            "value": "atan2"
+          },
+          {
+            "$type": "Keyword",
+            "value": "("
+          },
+          {
+            "$type": "Assignment",
+            "feature": "y",
+            "operator": "=",
+            "terminal": {
+              "$type": "RuleCall",
+              "rule": {
+                "$ref": "#/rules@4"
+              },
+              "arguments": []
+            }
+          },
+          {
+            "$type": "Keyword",
+            "value": ","
+          },
+          {
+            "$type": "Assignment",
+            "feature": "x",
+            "operator": "=",
+            "terminal": {
+              "$type": "RuleCall",
+              "rule": {
+                "$ref": "#/rules@4"
+              },
+              "arguments": []
+            }
+          },
+          {
+            "$type": "Keyword",
+            "value": ")"
+          }
+        ]
+      },
+      "entry": false,
+      "fragment": false,
+      "parameters": []
+    },
+    {
+      "$type": "ParserRule",
+      "name": "Atanh_Func",
+      "definition": {
+        "$type": "Group",
+        "elements": [
+          {
+            "$type": "Keyword",
+            "value": "atanh"
+          },
+          {
+            "$type": "Keyword",
+            "value": "("
+          },
+          {
+            "$type": "Assignment",
+            "feature": "x",
+            "operator": "=",
+            "terminal": {
+              "$type": "RuleCall",
+              "rule": {
+                "$ref": "#/rules@4"
+              },
+              "arguments": []
+            }
+          },
+          {
+            "$type": "Keyword",
+            "value": ")"
           }
         ]
       },
@@ -490,29 +681,7 @@ export const ArithmeticsGrammar = (): Grammar => loadedArithmeticsGrammar ?? (lo
       "fragment": false
     }
   ],
-  "types": [
-    {
-      "$type": "Type",
-      "name": "AbstractDefinition",
-      "type": {
-        "$type": "UnionType",
-        "types": [
-          {
-            "$type": "SimpleType",
-            "typeRef": {
-              "$ref": "#/rules@2"
-            }
-          },
-          {
-            "$type": "SimpleType",
-            "typeRef": {
-              "$ref": "#/rules@3"
-            }
-          }
-        ]
-      }
-    }
-  ],
   "imports": [],
-  "interfaces": []
+  "interfaces": [],
+  "types": []
 }`));
