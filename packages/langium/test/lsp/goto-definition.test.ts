@@ -228,3 +228,66 @@ describe('Definition Provider with Infix Operators', async () => {
     });
 
 });
+
+describe('Definition Provider with Infix Operators with intermediate Expression', async () => {
+
+    const infixGrammar = `
+    grammar Test
+    entry Model: elements+=Element*;
+    Element: Statement | Item;
+    Item: 'item' name=ID ';';
+
+    Statement: value=Expression ';';
+
+    Expression:
+        BinaryExpression;
+
+    infix BinaryExpression on Primary:
+        '*' | '/' 
+        > '+' | '-';
+
+    Primary: '(' Expression ')' | {infer ItemRef} ref=[Item];
+    terminal ID: /\\w+/;
+    hidden terminal WS: /\\s+/;
+    hidden terminal COMMENT: /\\/\\/.*/;
+    `;
+
+    const infixServices = await createServicesForGrammar({ grammar: infixGrammar });
+    const gotoDefinitionInfix = expectGoToDefinition(infixServices);
+
+    test('Simple infix operator expression should find Item from reference', async () => {
+        await gotoDefinitionInfix({
+            text: `
+            item <|a|>;
+            <|>a;
+            `,
+            index: 0,
+            rangeIndex: 0
+        });
+    });
+
+    test('Complex infix operator expression should find Item from reference', async () => {
+        const text = `
+            item <|a|>;
+            item <|b|>;
+            item <|c|>;
+            <|>a + <|>b * <|>c;
+        `;
+        await gotoDefinitionInfix({
+            text,
+            index: 0,
+            rangeIndex: 0
+        });
+        await gotoDefinitionInfix({
+            text,
+            index: 1,
+            rangeIndex: 1
+        });
+        await gotoDefinitionInfix({
+            text,
+            index: 2,
+            rangeIndex: 2
+        });
+    });
+
+});
