@@ -44,6 +44,11 @@ export class LezerGrammarTranslator implements GrammarTranslator {
             }
         }
 
+        // Phase 3 validations
+        this.validatePrecedence(grammar, diagnostics);
+        this.validateExternalContext(grammar, diagnostics);
+        this.validateSpecializeExtend(grammar, diagnostics);
+
         return diagnostics;
     }
 
@@ -130,6 +135,20 @@ export class LezerGrammarTranslator implements GrammarTranslator {
         const visibleTerminals: GrammarAST.TerminalRule[] = [];
         const wrapperRules: string[] = [];
 
+        // Collect names of externally-provided and locally-scoped tokens
+        // so they are excluded from the main @tokens block
+        const excludedTokenNames = new Set<string>();
+        for (const block of grammar.externalTokenBlocks ?? []) {
+            for (const tok of block.tokens) {
+                excludedTokenNames.add(tok.name);
+            }
+        }
+        for (const block of grammar.localTokenBlocks ?? []) {
+            for (const terminal of block.terminals) {
+                excludedTokenNames.add(terminal.name);
+            }
+        }
+
         // Separate rules by type
         for (const rule of grammar.rules) {
             if (GrammarAST.isTerminalRule(rule) && rule.hidden) {
@@ -139,24 +158,56 @@ export class LezerGrammarTranslator implements GrammarTranslator {
             }
         }
 
-        // Emit @top rule
+        // Build conflict marker map for rule body injection
+        const conflictMarkers = this.buildConflictMarkerMap(grammar);
+
+        // ---- Top-level declarations (order matters for Lezer) ----
+
+        // 1. Emit unified @precedence declaration (merging PrecedenceBlocks + InfixRule levels)
+        const precLevels = this.collectPrecedenceLevels(grammar);
+        if (precLevels.length > 0) {
+            const decls = precLevels.map(l => `${l.name} @${l.associativity}`);
+            lines.push(`@precedence { ${decls.join(', ')} }`);
+            lines.push('');
+        }
+
+        // 2. Emit @external tokens declarations
+        for (const block of grammar.externalTokenBlocks ?? []) {
+            lines.push(this.translateExternalTokenBlock(block));
+        }
+        if ((grammar.externalTokenBlocks ?? []).length > 0) {
+            lines.push('');
+        }
+
+        // 3. Emit @context declaration (at most one)
+        for (const ctx of grammar.externalContexts ?? []) {
+            lines.push(this.translateExternalContext(ctx));
+        }
+        if ((grammar.externalContexts ?? []).length > 0) {
+            lines.push('');
+        }
+
+        // 4. Emit @top rule
         for (const rule of grammar.rules) {
             if (GrammarAST.isParserRule(rule) && rule.entry) {
-                const body = this.translateParserRuleBody(rule, rule.definition, fieldMapData, keywords, wrapperRules);
-                lines.push(`@top ${rule.name} { ${body} }`);
+                const { body, dynamicPrec } = this.translateParserRuleBodyWithMeta(
+                    rule, rule.definition, fieldMapData, keywords, wrapperRules, conflictMarkers
+                );
+                const annotation = dynamicPrec !== undefined ? `[@dynamicPrecedence=${dynamicPrec}]` : '';
+                lines.push(`@top ${rule.name}${annotation} { ${body} }`);
                 lines.push('');
                 break;
             }
         }
 
-        // Emit @skip declaration for hidden terminals
+        // 5. Emit @skip declaration for hidden terminals
         if (hiddenTerminals.length > 0) {
             const skipNames = hiddenTerminals.map(t => this.getLezerTerminalName(t));
             lines.push(`@skip { ${skipNames.join(' | ')} }`);
             lines.push('');
         }
 
-        // Emit infix rules as @precedence declarations + flat rules
+        // 6. Emit infix rules (no longer emit per-rule @precedence — it's merged above)
         for (const rule of grammar.rules) {
             if (GrammarAST.isInfixRule(rule)) {
                 const infixLines = this.translateInfixRule(rule, keywords);
@@ -165,16 +216,19 @@ export class LezerGrammarTranslator implements GrammarTranslator {
             }
         }
 
-        // Emit parser rules (non-entry, non-infix)
+        // 7. Emit parser rules (non-entry, non-infix) with @dynamicPrecedence and ~conflict markers
         for (const rule of grammar.rules) {
             if (GrammarAST.isParserRule(rule) && !rule.entry && !rule.fragment) {
-                const body = this.translateParserRuleBody(rule, rule.definition, fieldMapData, keywords, wrapperRules);
-                lines.push(`${rule.name} { ${body} }`);
+                const { body, dynamicPrec } = this.translateParserRuleBodyWithMeta(
+                    rule, rule.definition, fieldMapData, keywords, wrapperRules, conflictMarkers
+                );
+                const annotation = dynamicPrec !== undefined ? `[@dynamicPrecedence=${dynamicPrec}]` : '';
+                lines.push(`${rule.name}${annotation} { ${body} }`);
                 lines.push('');
             }
         }
 
-        // Emit fragment rules (lowercase name = hidden in Lezer)
+        // 8. Emit fragment rules (lowercase name = hidden in Lezer)
         for (const rule of grammar.rules) {
             if (GrammarAST.isParserRule(rule) && rule.fragment) {
                 const name = this.toLowerCamel(rule.name);
@@ -184,27 +238,48 @@ export class LezerGrammarTranslator implements GrammarTranslator {
             }
         }
 
-        // Emit wrapper rules for field access
+        // 9. Emit wrapper rules for field access
         if (wrapperRules.length > 0) {
             lines.push('// Wrapper rules for field access');
             lines.push(...wrapperRules);
             lines.push('');
         }
 
-        // Emit keyword template
+        // 10. Emit keyword template
         if (keywords.size > 0) {
             lines.push(`kw<term> { @specialize[@name={term}]<Identifier, term> }`);
             lines.push('');
         }
 
-        // Emit @tokens block
+        // 11. Emit specialize/extend rules from explicit blocks
+        for (const block of grammar.specializeBlocks ?? []) {
+            const specRules = this.translateSpecializeBlock(block, keywords);
+            lines.push(...specRules);
+        }
+        for (const block of grammar.extendBlocks ?? []) {
+            const extRules = this.translateExtendBlock(block, keywords);
+            lines.push(...extRules);
+        }
+        if ((grammar.specializeBlocks ?? []).length + (grammar.extendBlocks ?? []).length > 0) {
+            lines.push('');
+        }
+
+        // 12. Emit @local tokens blocks
+        for (const block of grammar.localTokenBlocks ?? []) {
+            lines.push(...this.translateLocalTokenBlock(block));
+            lines.push('');
+        }
+
+        // 13. Emit @tokens block (excluding external and local token names)
         lines.push('@tokens {');
         for (const terminal of visibleTerminals) {
+            if (excludedTokenNames.has(terminal.name)) continue;
             const tokenBody = this.translateTerminalBody(terminal);
             const name = this.getLezerTerminalName(terminal);
             lines.push(`  ${name} { ${tokenBody} }`);
         }
         for (const terminal of hiddenTerminals) {
+            if (excludedTokenNames.has(terminal.name)) continue;
             const tokenBody = this.translateTerminalBody(terminal);
             const name = this.getLezerTerminalName(terminal);
             lines.push(`  ${name} { ${tokenBody} }`);
@@ -216,6 +291,137 @@ export class LezerGrammarTranslator implements GrammarTranslator {
             fieldMapData,
             keywords
         };
+    }
+
+    // ---- Phase 3: Precedence collection ----
+
+    private collectPrecedenceLevels(grammar: Grammar): Array<{ name: string; associativity: string }> {
+        const levels: Array<{ name: string; associativity: string }> = [];
+
+        // From explicit PrecedenceBlock declarations
+        for (const block of grammar.precedenceBlocks ?? []) {
+            for (const level of block.levels) {
+                levels.push({
+                    name: level.name,
+                    associativity: level.associativity ?? 'left'
+                });
+            }
+        }
+
+        // From infix rules (generated precedence names)
+        for (const rule of grammar.rules) {
+            if (GrammarAST.isInfixRule(rule)) {
+                for (let i = 0; i < rule.operators.precedences.length; i++) {
+                    const precLevel = rule.operators.precedences[i];
+                    levels.push({
+                        name: `prec_${rule.name}_${i}`,
+                        associativity: precLevel.associativity ?? 'left'
+                    });
+                }
+            }
+        }
+
+        return levels;
+    }
+
+    // ---- Phase 3: External tokens + context ----
+
+    private translateExternalTokenBlock(block: GrammarAST.ExternalTokenBlock): string {
+        const tokenizerName = this.pathToIdentifier(block.path);
+        const tokenNames = block.tokens.map(t => t.name).join(', ');
+        return `@external tokens ${tokenizerName} from "${block.path}" { ${tokenNames} }`;
+    }
+
+    private translateExternalContext(ctx: GrammarAST.ExternalContext): string {
+        return `@context ${ctx.name} from "${ctx.path}"`;
+    }
+
+    private pathToIdentifier(modulePath: string): string {
+        const basename = modulePath.split('/').pop() ?? modulePath;
+        // Remove leading dot, convert dashes to camelCase
+        return basename
+            .replace(/^\./, '')
+            .replace(/-([a-z])/g, (_, c) => c.toUpperCase())
+            .replace(/\.[^.]*$/, ''); // Remove file extension if present
+    }
+
+    // ---- Phase 3: Specialize / Extend blocks ----
+
+    private translateSpecializeBlock(
+        block: GrammarAST.SpecializeBlock,
+        keywords: Set<string>
+    ): string[] {
+        const terminalRef = block.terminal.ref;
+        if (!terminalRef) return [];
+        const lezerTermName = this.getLezerTerminalName(terminalRef);
+
+        return block.mappings.map(mapping => {
+            keywords.add(mapping.source);
+            const source = this.escapeLezerString(mapping.source);
+            return `${mapping.target} { @specialize[@name={${mapping.target}}]<${lezerTermName}, "${source}"> }`;
+        });
+    }
+
+    private translateExtendBlock(
+        block: GrammarAST.ExtendBlock,
+        keywords: Set<string>
+    ): string[] {
+        const terminalRef = block.terminal.ref;
+        if (!terminalRef) return [];
+        const lezerTermName = this.getLezerTerminalName(terminalRef);
+
+        return block.mappings.map(mapping => {
+            keywords.add(mapping.source);
+            const source = this.escapeLezerString(mapping.source);
+            return `${mapping.target} { @extend[@name={${mapping.target}}]<${lezerTermName}, "${source}"> }`;
+        });
+    }
+
+    // ---- Phase 3: Conflict markers ----
+
+    /**
+     * Build a map of rule name → conflict markers to inject into rule bodies.
+     * Best-effort: detects shared first element between conflicting rules.
+     */
+    private buildConflictMarkerMap(grammar: Grammar): Map<string, string[]> {
+        const markers = new Map<string, string[]>();
+
+        for (const block of grammar.conflictBlocks ?? []) {
+            for (const set of block.sets) {
+                const ruleNames = set.rules
+                    .map(r => r.ref?.name)
+                    .filter((n): n is string => n !== undefined);
+                if (ruleNames.length < 2) continue;
+
+                const markerName = `conflict_${ruleNames.join('_')}`;
+
+                // Add marker to each rule in the conflict set
+                for (const ruleName of ruleNames) {
+                    const existing = markers.get(ruleName) ?? [];
+                    existing.push(markerName);
+                    markers.set(ruleName, existing);
+                }
+            }
+        }
+
+        return markers;
+    }
+
+    // ---- Phase 3: Local token blocks ----
+
+    private translateLocalTokenBlock(block: GrammarAST.LocalTokenBlock): string[] {
+        const lines: string[] = [];
+        const ruleName = block.rule.ref?.name ?? 'Unknown';
+
+        lines.push('@local tokens {');
+        for (const terminal of block.terminals) {
+            const tokenBody = this.translateTerminalBody(terminal);
+            lines.push(`  ${terminal.name} { ${tokenBody} }`);
+        }
+        lines.push(`  @else ${ruleName}Content`);
+        lines.push('}');
+
+        return lines;
     }
 
     // ---- Parser rule translation ----
@@ -230,6 +436,49 @@ export class LezerGrammarTranslator implements GrammarTranslator {
         return this.translateElement(rule.name, element, fieldMapData, keywords, wrapperRules);
     }
 
+    /**
+     * Translate a parser rule body and extract @dynamicPrecedence if present.
+     * Also injects ~conflict markers based on the conflict marker map.
+     */
+    private translateParserRuleBodyWithMeta(
+        rule: GrammarAST.ParserRule,
+        element: GrammarAST.AbstractElement,
+        fieldMapData: FieldMapData,
+        keywords: Set<string>,
+        wrapperRules: string[],
+        conflictMarkers: Map<string, string[]>
+    ): { body: string; dynamicPrec?: number } {
+        let body = this.translateElement(rule.name, element, fieldMapData, keywords, wrapperRules);
+
+        // Inject conflict markers at the start of the rule body
+        const markers = conflictMarkers.get(rule.name);
+        if (markers && markers.length > 0) {
+            const markerStr = markers.map(m => `~${m}`).join(' ');
+            body = `${markerStr} ${body}`;
+        }
+
+        // Detect @dynamicPrecedence on the top-level definition element
+        const dynPrec = this.findDynamicPrecedence(element);
+
+        return { body, dynamicPrec: dynPrec };
+    }
+
+    private findDynamicPrecedence(element: GrammarAST.AbstractElement): number | undefined {
+        // Check the element itself
+        if (element.dynamicPrecedence !== undefined) {
+            return element.dynamicPrecedence;
+        }
+        // Check immediate children (e.g., first element in a Group)
+        if (GrammarAST.isGroup(element)) {
+            for (const child of element.elements) {
+                if (child.dynamicPrecedence !== undefined) {
+                    return child.dynamicPrecedence;
+                }
+            }
+        }
+        return undefined;
+    }
+
     private translateElement(
         parentRuleName: string,
         element: GrammarAST.AbstractElement,
@@ -238,6 +487,11 @@ export class LezerGrammarTranslator implements GrammarTranslator {
         wrapperRules: string[]
     ): string {
         let result = this.translateElementCore(parentRuleName, element, fieldMapData, keywords, wrapperRules);
+
+        // Apply @precMarker — Lezer !tag syntax before the element
+        if (element.precMarker) {
+            result = `!${element.precMarker} ${result}`;
+        }
 
         // Apply cardinality
         if (element.cardinality) {
@@ -453,14 +707,12 @@ export class LezerGrammarTranslator implements GrammarTranslator {
 
     private translateInfixRule(rule: GrammarAST.InfixRule, keywords: Set<string>): string[] {
         const lines: string[] = [];
-        const precNames: string[] = [];
         const ruleAlternatives: string[] = [];
 
         // Each precedence level in the operators
         for (let i = 0; i < rule.operators.precedences.length; i++) {
             const precLevel = rule.operators.precedences[i];
             const precName = `prec_${rule.name}_${i}`;
-            precNames.push(precName);
 
             const assoc = precLevel.associativity ?? 'left';
             const ops = precLevel.operators.map(op => {
@@ -477,12 +729,7 @@ export class LezerGrammarTranslator implements GrammarTranslator {
             lines.push(`// precedence ${i}: ${precLevel.operators.map(o => o.value).join(', ')} (${assoc})`);
         }
 
-        // Emit @precedence declaration
-        const precDecls = precNames.map((name, i) => {
-            const assoc = rule.operators.precedences[i].associativity ?? 'left';
-            return `${name} @${assoc}`;
-        });
-        lines.unshift(`@precedence { ${precDecls.join(', ')} }`);
+        // No per-rule @precedence — it's in the merged declaration at the top
 
         // Emit the rule
         const operandRef = rule.call.rule.ref?.name ?? 'expr';
@@ -586,6 +833,82 @@ export class LezerGrammarTranslator implements GrammarTranslator {
                 }
             }
         });
+    }
+
+    // ---- Phase 3 validations ----
+
+    private validatePrecedence(grammar: Grammar, diagnostics: TranslationDiagnostic[]): void {
+        // Collect all defined precedence level names
+        const definedNames = new Set<string>();
+        for (const block of grammar.precedenceBlocks ?? []) {
+            for (const level of block.levels) {
+                if (definedNames.has(level.name)) {
+                    diagnostics.push({
+                        message: `Duplicate precedence level '${level.name}'.`,
+                        severity: 'error',
+                        source: 'precedence'
+                    });
+                }
+                definedNames.add(level.name);
+            }
+        }
+
+        // Validate @precMarker references
+        if (definedNames.size > 0) {
+            for (const rule of grammar.rules) {
+                if (GrammarAST.isParserRule(rule)) {
+                    this.walkElements(rule.definition, element => {
+                        if (element.precMarker && !definedNames.has(element.precMarker)) {
+                            diagnostics.push({
+                                message: `Precedence tag '${element.precMarker}' is not defined in any precedence block.`,
+                                severity: 'error',
+                                source: rule.name
+                            });
+                        }
+                    });
+                }
+            }
+        }
+    }
+
+    private validateExternalContext(grammar: Grammar, diagnostics: TranslationDiagnostic[]): void {
+        if ((grammar.externalContexts ?? []).length > 1) {
+            diagnostics.push({
+                message: 'Only one external context tracker is allowed per grammar.',
+                severity: 'error',
+                source: 'external context'
+            });
+        }
+    }
+
+    private validateSpecializeExtend(grammar: Grammar, diagnostics: TranslationDiagnostic[]): void {
+        // Check for duplicate source strings within the same terminal
+        for (const block of grammar.specializeBlocks ?? []) {
+            const seen = new Set<string>();
+            for (const mapping of block.mappings) {
+                if (seen.has(mapping.source)) {
+                    diagnostics.push({
+                        message: `Duplicate specialize mapping for '${mapping.source}'.`,
+                        severity: 'warning',
+                        source: 'specialize'
+                    });
+                }
+                seen.add(mapping.source);
+            }
+        }
+        for (const block of grammar.extendBlocks ?? []) {
+            const seen = new Set<string>();
+            for (const mapping of block.mappings) {
+                if (seen.has(mapping.source)) {
+                    diagnostics.push({
+                        message: `Duplicate extend mapping for '${mapping.source}'.`,
+                        severity: 'warning',
+                        source: 'extend'
+                    });
+                }
+                seen.add(mapping.source);
+            }
+        }
     }
 
     // ---- Utility methods ----

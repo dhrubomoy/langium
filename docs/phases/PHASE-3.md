@@ -504,45 +504,45 @@ Phase 3 features have dependencies. Implement in this order:
 This is required because the `Assignment` sub-rule creates a new AST node via `{Assignment}`
 action, so properties set before it would be lost on the old node.
 
-### Step 2: Precedence Blocks + @precMarker
+### Step 2: Precedence Blocks + @precMarker ✅
 
-1. Add `translatePrecedenceBlock()` to LezerGrammarTranslator
-2. Add `@precMarker` handling in `translateElementCore()`
-3. Add validation (undefined tags, duplicates)
-4. Chevrotain: desugar to rule ordering + warning
-5. Tests: grammars with precedence blocks, cross-backend
+1. ~~`collectPrecedenceLevels()` merges PrecedenceBlock + InfixRule levels into single @precedence~~
+2. ~~`!tag` emission in `translateElement()` for @precMarker~~
+3. ~~Validation: undefined tags, duplicate level names~~
+4. Chevrotain: desugar to rule ordering + warning (deferred)
+5. ~~Tests: 7 tests in `precedence.test.ts`~~
 
-### Step 3: External Tokens + External Context
+### Step 3: External Tokens + External Context ✅
 
-1. Add `translateExternalTokenBlock()` to LezerGrammarTranslator
-2. Add `translateExternalContext()` to LezerGrammarTranslator
-3. Validate module paths at build time
-4. Chevrotain: custom matcher for external tokens, error for context
-5. Tests: grammar with external tokenizer module
+1. ~~`translateExternalTokenBlock()` → `@external tokens name from "path" { ... }`~~
+2. ~~`translateExternalContext()` → `@context name from "path"`~~
+3. ~~Exclude external token names from @tokens block~~
+4. ~~Validation: at most one external context~~
+5. ~~Tests: 5 tests in `external-tokens.test.ts`~~
 
-### Step 4: Specialize / Extend
+### Step 4: Specialize / Extend ✅
 
-1. Add `translateSpecializeBlock()` to LezerGrammarTranslator
-2. Add `translateExtendBlock()` to LezerGrammarTranslator
-3. Update keyword set with specialized tokens
-4. Chevrotain: keyword config / LONGER_ALT
-5. Tests: keyword specialization grammars
+1. ~~`translateSpecializeBlock()` → individual `@specialize` rules~~
+2. ~~`translateExtendBlock()` → individual `@extend` rules~~
+3. ~~Add specialize/extend source strings to keywords set~~
+4. ~~Validation: duplicate source strings~~
+5. ~~Tests: 5 tests in `specialize-extend.test.ts`~~
 
-### Step 5: Conflict Declarations + Dynamic Precedence
+### Step 5: Conflict Declarations + Dynamic Precedence ✅
 
-1. Add `translateConflictBlock()` to LezerGrammarTranslator
-2. Add `@dynamicPrecedence` handling in translator
-3. Chevrotain: error diagnostics
-4. Tests: ambiguous grammars with conflict resolution
+1. ~~`buildConflictMarkerMap()` → `~conflict_RuleA_RuleB` markers injected into rule bodies~~
+2. ~~`findDynamicPrecedence()` → `[@dynamicPrecedence=N]` annotation on rule definition~~
+3. Chevrotain: error diagnostics (deferred)
+4. ~~Tests: 4 tests in `conflicts.test.ts`~~
 
-### Step 6: Local Token Groups
+### Step 6: Local Token Groups ✅
 
-1. Add `translateLocalTokenBlock()` to LezerGrammarTranslator
-2. Generate scoped `@local tokens` blocks
-3. Chevrotain: map to lexer modes
-4. Tests: string interpolation-style grammars
+1. ~~`translateLocalTokenBlock()` → `@local tokens { ... @else RuleContent }`~~
+2. ~~Exclude local token names from @tokens block~~
+3. Chevrotain: map to lexer modes (deferred)
+4. ~~Tests: 3 tests in `local-tokens.test.ts`~~
 
-### Step 7: Integration Testing
+### Step 7: Integration Testing ✅
 
 1. Example grammars using all Phase 3 features
 2. Cross-backend conformance where applicable

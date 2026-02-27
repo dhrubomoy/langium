@@ -102,8 +102,9 @@ Phase file: [docs/phases/PHASE-2.md](docs/phases/PHASE-2.md)
 ### Phase 3: Grammar Extensions
 - [x] Extend grammar parser (precedence blocks, external tokens, conflicts, specialize/extend, local tokens)
 - [x] Extend Grammar AST types (11 new interfaces, Grammar + AbstractElement extended)
-- [ ] Implement translation per feature per backend
-- [ ] Diagnostics for unsupported feature+backend combos
+- [x] Implement Lezer translation (precedence, external tokens/context, specialize/extend, conflicts, dynamic precedence, local tokens)
+- [x] Validation diagnostics (undefined precMarker, duplicate levels, multiple contexts, duplicate mappings)
+- [ ] Chevrotain backend diagnostics for unsupported features (deferred)
 
 ### Phase 4: Polish
 - [ ] Performance benchmarks

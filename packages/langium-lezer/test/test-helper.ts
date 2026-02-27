@@ -58,7 +58,7 @@ export const CROSS_REF_GRAMMAR = `
 /**
  * Parse a grammar string into a Grammar AST using Langium's grammar language.
  */
-async function parseGrammarString(grammarString: string): Promise<Grammar> {
+export async function parseGrammarString(grammarString: string): Promise<Grammar> {
     const grammarServices = createLangiumGrammarServices(EmptyFileSystem).grammar;
     const uri = URI.parse('memory:/test-grammar.langium');
     const doc = grammarServices.shared.workspace.LangiumDocumentFactory.fromString(grammarString, uri);
@@ -218,6 +218,21 @@ export function assertTreesStructurallyEqual(a: SyntaxNode, b: SyntaxNode, path 
     for (let i = 0; i < aChildren.length; i++) {
         assertTreesStructurallyEqual(aChildren[i], bChildren[i], `${path}.children[${i}]`);
     }
+}
+
+/**
+ * Generate Lezer grammar text from a Langium grammar string.
+ * Only does grammar text generation — does NOT call buildParser().
+ * Useful for testing grammar output structure without needing working parse tables.
+ */
+export async function generateLezerGrammarText(grammarString: string): Promise<{
+    grammarText: string;
+    keywords: Set<string>;
+}> {
+    const grammar = await parseGrammarString(grammarString);
+    const translator = new LezerGrammarTranslator();
+    const { grammarText, keywords } = translator.generateGrammarInMemory(grammar);
+    return { grammarText, keywords };
 }
 
 /**
