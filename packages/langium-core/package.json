@@ -1,0 +1,64 @@
+{
+  "name": "langium-core",
+  "version": "4.2.0",
+  "description": "Core framework for Langium — parser-agnostic types, services, DI, and utilities",
+  "homepage": "https://langium.org",
+  "engines": {
+    "node": ">=20.10.0",
+    "npm": ">=10.2.3"
+  },
+  "keywords": [
+    "language",
+    "dsl",
+    "low-code",
+    "typescript"
+  ],
+  "license": "MIT",
+  "files": [
+    "lib",
+    "src"
+  ],
+  "sideEffects": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "import": "./lib/index.js"
+    },
+    "./grammar": {
+      "types": "./lib/grammar/index.d.ts",
+      "import": "./lib/grammar/index.js"
+    },
+    "./generate": {
+      "types": "./lib/generate/index.d.ts",
+      "import": "./lib/generate/index.js"
+    },
+    "./node": {
+      "types": "./lib/node/index.d.ts",
+      "import": "./lib/node/index.js"
+    },
+    "./test": {
+      "types": "./lib/test/index.d.ts",
+      "import": "./lib/test/index.js"
+    }
+  },
+  "scripts": {
+    "clean": "shx rm -rf lib coverage",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "vscode-languageserver-types": "~3.17.5",
+    "vscode-languageserver-textdocument": "~1.0.11",
+    "vscode-uri": "~3.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eclipse-langium/langium.git",
+    "directory": "packages/langium-core"
+  },
+  "bugs": "https://github.com/eclipse-langium/langium/issues",
+  "author": {
+    "name": "TypeFox",
+    "url": "https://www.typefox.io"
+  }
+}

@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 import type { TokenType } from '@chevrotain/types';
-import type { AstNode, Grammar, IndentationTokenBuilderOptions, LangiumParser, Lexer, Module } from 'langium';
+import type { AstNode, Grammar, IndentationTokenBuilderOptions, LangiumParser, Lexer, Module, LangiumChevrotainServices } from 'langium';
 import { describe, expect, test } from 'vitest';
 import { EmptyFileSystem, IndentationAwareLexer, IndentationAwareTokenBuilder } from 'langium';
 import { createLangiumGrammarServices, createServicesForGrammar } from 'langium/grammar';
@@ -31,12 +31,12 @@ async function getTokens(grammarString: string): Promise<TokenType[]> {
 
 async function getLexer(grammar: string, options?: Partial<IndentationTokenBuilderOptions>): Promise<Lexer> {
     const services = await createIndentationAwareServices(grammar, options);
-    return services.parser.Lexer;
+    return (services as unknown as LangiumChevrotainServices).parser.Lexer;
 }
 
 async function getParser(grammar: string, options?: Partial<IndentationTokenBuilderOptions>): Promise<LangiumParser> {
     const services = await createIndentationAwareServices(grammar, options);
-    return services.parser.LangiumParser;
+    return (services as unknown as LangiumChevrotainServices).parser.LangiumParser;
 }
 
 async function createIndentationAwareServices(grammar: string, options?: Partial<IndentationTokenBuilderOptions>): Promise<LangiumServices> {
@@ -45,9 +45,9 @@ async function createIndentationAwareServices(grammar: string, options?: Partial
         module: {
             parser: {
                 TokenBuilder: () => new IndentationAwareTokenBuilder(options),
-                Lexer: services => new IndentationAwareLexer(services)
+                Lexer: (services: any) => new IndentationAwareLexer(services)
             }
-        } satisfies Module<LangiumServices, PartialLangiumServices>
+        } as Module<LangiumServices, PartialLangiumServices>
     });
     return services;
 }

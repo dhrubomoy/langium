@@ -7,7 +7,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import type { TokenType, TokenVocabulary } from 'chevrotain';
-import type { AstNode, CstNode, GenericAstNode, Grammar, GrammarAST, LangiumParser, ParseResult, ReferenceInfo, Scope, TokenBuilderOptions } from 'langium';
+import type { AstNode, CstNode, GenericAstNode, Grammar, GrammarAST, LangiumParser, ParseResult, ReferenceInfo, Scope, TokenBuilderOptions, LangiumChevrotainServices } from 'langium';
 import { EmptyFileSystem, DefaultTokenBuilder, GrammarUtils, CstUtils, DefaultScopeProvider, URI } from 'langium';
 import { describe, expect, test, onTestFailed, beforeAll } from 'vitest';
 import { createLangiumGrammarServices, createServicesForGrammar } from 'langium/grammar';
@@ -668,7 +668,7 @@ describe('MultiMode Lexing', () => {
                 }
             }
         });
-        parser = services.parser.LangiumParser;
+        parser = (services as unknown as LangiumChevrotainServices).parser.LangiumParser;
     });
 
     test('multimode lexing works in default mode as expected', () => {
@@ -935,7 +935,7 @@ describe('Parsing actions', () => {
         hidden terminal WS: /\\s+/;
         `;
         const services = await createServicesForGrammar({ grammar });
-        const parseResult = services.parser.LangiumParser.parse('a b').value as GenericAstNode;
+        const parseResult = (services as unknown as LangiumChevrotainServices).parser.LangiumParser.parse('a b').value as GenericAstNode;
         expect(parseResult.$type).toBe('B');
         expect(parseResult).toHaveProperty('a', 'a');
         expect(parseResult).toHaveProperty('b', 'b');
@@ -962,7 +962,7 @@ describe('Parsing actions', () => {
 
     async function testCorrectAssignedActions(grammar: string): Promise<void> {
         const services = await createServicesForGrammar({ grammar });
-        const parseResult = services.parser.LangiumParser.parse('a b b b').value as GenericAstNode;
+        const parseResult = (services as unknown as LangiumChevrotainServices).parser.LangiumParser.parse('a b b b').value as GenericAstNode;
         const value = parseResult.value as GenericAstNode;
         expect(value.$type).toBe('B');
         expect(value.$cstNode).toBeDefined();
@@ -1097,12 +1097,12 @@ describe('Handling EOF', () => {
         const document = await parse('Hello!user!', { validation: true });
         expect(document.parseResult.parserErrors.length).toBe(1);
         expect(document.parseResult.parserErrors[0].name).toBe('MismatchedTokenException');
-        expect(document.parseResult.parserErrors[0].token.tokenType.name).toBe('user!');
+        expect((document.parseResult.parserErrors[0].token as any).tokenType.name).toBe('user!');
 
         const second = await parse('Hello!', { validation: true });
         expect(second.parseResult.parserErrors.length).toBe(1);
         expect(second.parseResult.parserErrors[0].name).toBe('MismatchedTokenException');
-        expect(second.parseResult.parserErrors[0].token.tokenType).toBe(EOF);
+        expect((second.parseResult.parserErrors[0].token as any).tokenType).toBe(EOF);
     });
 
     [
@@ -1193,5 +1193,5 @@ describe('Parsing with lookbehind tokens', () => {
 });
 
 async function parserFromGrammar(grammar: string): Promise<LangiumParser> {
-    return (await createServicesForGrammar({ grammar })).parser.LangiumParser;
+    return ((await createServicesForGrammar({ grammar })) as unknown as LangiumChevrotainServices).parser.LangiumParser;
 }

@@ -25,7 +25,7 @@
     "test.js",
     "test.d.ts"
   ],
-  "sideEffects": false,
+  "sideEffects": ["./lib/default-module.js", "./lib/index.js"],
   "type": "module",
   "exports": {
     ".": {
@@ -65,6 +65,9 @@
     "publish:latest": "npm publish --tag latest --access public"
   },
   "dependencies": {
+    "langium-core": "~4.2.0",
+    "langium-chevrotain": "~4.2.0",
+    "langium-lsp": "~4.2.0",
     "chevrotain": "~11.1.1",
     "chevrotain-allstar": "~0.3.1",
     "vscode-languageserver": "~9.0.1",

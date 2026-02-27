@@ -4,7 +4,7 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import type { Lexer } from 'langium';
+import type { Lexer, LangiumChevrotainServices } from 'langium';
 import { describe, expect, test } from 'vitest';
 import { createServicesForGrammar } from 'langium/grammar';
 
@@ -87,5 +87,5 @@ async function getLexer(grammar: string): Promise<Lexer> {
     const services = await createServicesForGrammar({
         grammar
     });
-    return services.parser.Lexer;
+    return (services as unknown as LangiumChevrotainServices).parser.Lexer;
 }

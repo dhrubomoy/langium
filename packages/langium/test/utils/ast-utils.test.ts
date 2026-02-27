@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 import { describe, expect, test } from 'vitest';
-import type { AstNode, Reference } from 'langium';
+import type { AstNode, Reference, LangiumChevrotainServices } from 'langium';
 import { AstUtils, EmptyFileSystem, GrammarAST } from 'langium';
 import { createLangiumGrammarServices } from 'langium/grammar';
 
@@ -64,7 +64,7 @@ describe('AST Utils', () => {
 
     test('Streaming ast works with range', () => {
         const services = createLangiumGrammarServices(EmptyFileSystem);
-        const parseResult = services.grammar.parser.LangiumParser.parse(`Before: 'before';
+        const parseResult = (services.grammar as unknown as LangiumChevrotainServices).parser.LangiumParser.parse(`Before: 'before';
         OverlapBefore:
             'before';
         Inside: 'inside';

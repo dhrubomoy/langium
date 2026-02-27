@@ -6,5 +6,10 @@
   },
   "include": [
     "src/**/*.ts"
+  ],
+  "references": [
+    { "path": "../langium-core/tsconfig.src.json" },
+    { "path": "../langium-chevrotain/tsconfig.src.json" },
+    { "path": "../langium-lsp/tsconfig.src.json" }
   ]
 }
