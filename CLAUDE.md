@@ -104,7 +104,7 @@ Phase file: [docs/phases/PHASE-2.md](docs/phases/PHASE-2.md)
 - [x] Extend Grammar AST types (11 new interfaces, Grammar + AbstractElement extended)
 - [x] Implement Lezer translation (precedence, external tokens/context, specialize/extend, conflicts, dynamic precedence, local tokens)
 - [x] Validation diagnostics (undefined precMarker, duplicate levels, multiple contexts, duplicate mappings)
-- [ ] Chevrotain backend diagnostics for unsupported features (deferred)
+- [x] Chevrotain backend diagnostics for unsupported features
 
 ### Phase 4: Polish
 - [ ] Performance benchmarks

@@ -7,7 +7,7 @@
 import chalk from 'chalk';
 import fs from 'fs-extra';
 import { validate } from 'jsonschema';
-import { AstUtils, GrammarAST, URI, type AstNode, type Grammar, type LangiumDocument, type Mutable } from 'langium';
+import { AstUtils, ChevrotainGrammarTranslator, GrammarAST, URI, type AstNode, type Grammar, type LangiumDocument, type Mutable } from 'langium';
 import { createGrammarDiagramHtml, createGrammarDiagramSvg } from 'langium-railroad';
 import { createLangiumGrammarServices, resolveImport, resolveImportUri, resolveTransitiveImports, type LangiumGrammarServices } from 'langium/grammar';
 import { NodeFileSystem } from 'langium/node';
@@ -391,6 +391,27 @@ export async function runGenerator(config: LangiumConfig, options: GenerateOptio
             log('error', options, chalk.red(`Failed to load langium-lezer package. Install it with: npm install langium-lezer`));
             log('error', options, chalk.red(String(e)));
             return buildResult(false);
+        }
+    }
+
+    // Chevrotain backend: validate Phase 3 grammar extensions
+    if (backend === 'chevrotain') {
+        const chevrotainTranslator = new ChevrotainGrammarTranslator();
+        for (const grammar of embeddedGrammars) {
+            const chevDiags = chevrotainTranslator.validate(grammar);
+            const hasChevErrors = chevDiags.some(d => d.severity === 'error');
+            for (const diag of chevDiags) {
+                if (diag.severity === 'error') {
+                    log('error', options, chalk.red(`[chevrotain] ${diag.message}`));
+                } else if (diag.severity === 'warning') {
+                    log('warn', options, chalk.yellow(`[chevrotain] ${diag.message}`));
+                } else {
+                    log('log', options, `[chevrotain] ${diag.message}`);
+                }
+            }
+            if (hasChevErrors) {
+                return buildResult(false);
+            }
         }
     }
 

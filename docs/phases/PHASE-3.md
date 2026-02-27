@@ -509,7 +509,7 @@ action, so properties set before it would be lost on the old node.
 1. ~~`collectPrecedenceLevels()` merges PrecedenceBlock + InfixRule levels into single @precedence~~
 2. ~~`!tag` emission in `translateElement()` for @precMarker~~
 3. ~~Validation: undefined tags, duplicate level names~~
-4. Chevrotain: desugar to rule ordering + warning (deferred)
+4. ~~Chevrotain: warning diagnostic for @precMarker desugaring~~
 5. ~~Tests: 7 tests in `precedence.test.ts`~~
 
 ### Step 3: External Tokens + External Context ✅
@@ -532,14 +532,14 @@ action, so properties set before it would be lost on the old node.
 
 1. ~~`buildConflictMarkerMap()` → `~conflict_RuleA_RuleB` markers injected into rule bodies~~
 2. ~~`findDynamicPrecedence()` → `[@dynamicPrecedence=N]` annotation on rule definition~~
-3. Chevrotain: error diagnostics (deferred)
+3. ~~Chevrotain: error diagnostics for conflicts + @dynamicPrecedence~~
 4. ~~Tests: 4 tests in `conflicts.test.ts`~~
 
 ### Step 6: Local Token Groups ✅
 
 1. ~~`translateLocalTokenBlock()` → `@local tokens { ... @else RuleContent }`~~
 2. ~~Exclude local token names from @tokens block~~
-3. Chevrotain: map to lexer modes (deferred)
+3. ~~Chevrotain: warning diagnostic for lexer mode mapping~~
 4. ~~Tests: 3 tests in `local-tokens.test.ts`~~
 
 ### Step 7: Integration Testing ✅
