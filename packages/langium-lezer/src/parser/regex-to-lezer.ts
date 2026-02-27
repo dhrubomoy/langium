@@ -197,9 +197,75 @@ function translateCharClass(pattern: string, start: number): TranslateResult {
     }
     if (pattern[i] === ']') i++; // skip closing bracket
 
+    // Deduplicate the character class content to avoid overlapping ranges
+    // Parse ranges (x-y) and individual chars, then reassemble without duplicates
+    content = deduplicateCharClassContent(content);
+
     // Lezer: $[...] for positive class, ![...] for negated class
     const prefix = negated ? '!' : '$';
     return { result: `${prefix}[${content}]`, consumed: i - start };
+}
+
+/**
+ * Deduplicate character class content to avoid Lezer's "Overlapping character range" error.
+ * Parses ranges (a-z) and individual characters, removes duplicates, and reassembles.
+ */
+function deduplicateCharClassContent(content: string): string {
+    const chars = new Set<number>();
+    let i = 0;
+    while (i < content.length) {
+        if (content[i] === '\\' && i + 1 < content.length) {
+            // Escape sequence in class (e.g., \n, \t)
+            const ch = content[i + 1];
+            switch (ch) {
+                case 'n': chars.add(10); break;
+                case 'r': chars.add(13); break;
+                case 't': chars.add(9); break;
+                default: chars.add(ch.charCodeAt(0));
+            }
+            i += 2;
+        } else if (i + 2 < content.length && content[i + 1] === '-') {
+            // Range a-z
+            const from = content.charCodeAt(i);
+            const to = content.charCodeAt(i + 2);
+            for (let c = from; c <= to; c++) {
+                chars.add(c);
+            }
+            i += 3;
+        } else {
+            chars.add(content.charCodeAt(i));
+            i++;
+        }
+    }
+
+    // Reassemble into compact ranges
+    const sorted = Array.from(chars).sort((a, b) => a - b);
+    if (sorted.length === 0) return content;
+
+    const parts: string[] = [];
+    let rangeStart = sorted[0];
+    let rangeEnd = sorted[0];
+
+    for (let j = 1; j < sorted.length; j++) {
+        if (sorted[j] === rangeEnd + 1) {
+            rangeEnd = sorted[j];
+        } else {
+            parts.push(formatRange(rangeStart, rangeEnd));
+            rangeStart = sorted[j];
+            rangeEnd = sorted[j];
+        }
+    }
+    parts.push(formatRange(rangeStart, rangeEnd));
+
+    return parts.join('');
+}
+
+function formatRange(from: number, to: number): string {
+    const fromCh = escapeCharClassChar(from);
+    if (from === to) return fromCh;
+    const toCh = escapeCharClassChar(to);
+    if (to === from + 1) return fromCh + toCh;
+    return `${fromCh}-${toCh}`;
 }
 
 function translateEscape(pattern: string, start: number): TranslateResult {
@@ -225,6 +291,12 @@ function translateEscape(pattern: string, start: number): TranslateResult {
 function translateCharClassEscape(pattern: string, start: number): TranslateResult {
     const next = pattern[start + 1];
     switch (next) {
+        case 'w': return { result: 'a-zA-Z0-9_', consumed: 2 };
+        case 'W': return { result: '\\x00-\\x2F\\x3A-\\x40\\x5B-\\x60\\x7B-\\x7F', consumed: 2 };
+        case 'd': return { result: '0-9', consumed: 2 };
+        case 'D': return { result: '\\x00-\\x2F\\x3A-\\x7F', consumed: 2 };
+        case 's': return { result: ' \\t\\n\\r', consumed: 2 };
+        case 'S': return { result: '!-~', consumed: 2 };
         case 'n': return { result: '\\n', consumed: 2 };
         case 'r': return { result: '\\r', consumed: 2 };
         case 't': return { result: '\\t', consumed: 2 };
@@ -244,4 +316,20 @@ function escapeLiteralForLezer(ch: string): string {
         return `"${ch}"`;
     }
     return `"${ch}"`;
+}
+
+function escapeCharClassChar(code: number): string {
+    switch (code) {
+        case 9: return '\\t';
+        case 10: return '\\n';
+        case 13: return '\\r';
+        case 92: return '\\\\';
+        case 93: return '\\]';
+        case 45: return '\\-';
+        default: {
+            const ch = String.fromCharCode(code);
+            if (code >= 32 && code <= 126) return ch;
+            return `\\x${code.toString(16).padStart(2, '0')}`;
+        }
+    }
 }

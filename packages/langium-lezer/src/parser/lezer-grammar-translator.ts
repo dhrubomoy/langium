@@ -104,6 +104,18 @@ export class LezerGrammarTranslator implements GrammarTranslator {
         return { outputFiles, diagnostics };
     }
 
+    /**
+     * Generate Lezer grammar text, field map, and keywords in memory (no file I/O).
+     * Used by tests and tooling that need parse tables without writing to disk.
+     */
+    generateGrammarInMemory(grammar: Grammar): {
+        grammarText: string;
+        fieldMapData: FieldMapData;
+        keywords: Set<string>;
+    } {
+        return this.generateLezerGrammar(grammar);
+    }
+
     // ---- Grammar generation ----
 
     private generateLezerGrammar(grammar: Grammar): {
@@ -310,7 +322,13 @@ export class LezerGrammarTranslator implements GrammarTranslator {
 
     private translateKeyword(kw: GrammarAST.Keyword, keywords: Set<string>): string {
         keywords.add(kw.value);
-        // Use inline keyword syntax
+        // Use kw<> template for identifier-like keywords to make them named nodes in the tree.
+        // @specialize creates a named specialization of Identifier, so the keyword appears
+        // as a visible node (Lezer skips anonymous inline string tokens from the tree).
+        if (/^[_a-zA-Z]\w*$/.test(kw.value)) {
+            return `kw<"${this.escapeLezerString(kw.value)}">`;
+        }
+        // Non-identifier keywords (operators, punctuation) use inline syntax
         return `"${this.escapeLezerString(kw.value)}"`;
     }
 
@@ -319,6 +337,9 @@ export class LezerGrammarTranslator implements GrammarTranslator {
         if (!ref) return '/* unresolved rule */';
         if (GrammarAST.isParserRule(ref) && ref.fragment) {
             return this.toLowerCamel(ref.name);
+        }
+        if (GrammarAST.isTerminalRule(ref)) {
+            return this.getLezerTerminalName(ref);
         }
         return ref.name;
     }
@@ -386,6 +407,9 @@ export class LezerGrammarTranslator implements GrammarTranslator {
         if (crossRef.terminal) {
             if (GrammarAST.isRuleCall(crossRef.terminal)) {
                 const ref = (crossRef.terminal as GrammarAST.RuleCall).rule.ref;
+                if (ref && GrammarAST.isTerminalRule(ref)) {
+                    return this.getLezerTerminalName(ref);
+                }
                 return ref?.name ?? 'Identifier';
             }
         }
@@ -510,7 +534,12 @@ export class LezerGrammarTranslator implements GrammarTranslator {
     }
 
     private translateRegexToken(token: GrammarAST.RegexToken): string {
-        const conversion = convertRegexToLezer(token.regex);
+        // Strip regex delimiters (Langium stores the pattern with /.../ delimiters)
+        let pattern = token.regex;
+        if (pattern.startsWith('/') && pattern.endsWith('/')) {
+            pattern = pattern.slice(1, -1);
+        }
+        const conversion = convertRegexToLezer(pattern);
         if (conversion.lezerSyntax) {
             let result = conversion.lezerSyntax;
             if (token.cardinality) {
@@ -527,7 +556,11 @@ export class LezerGrammarTranslator implements GrammarTranslator {
     private validateTerminalRule(rule: GrammarAST.TerminalRule, diagnostics: TranslationDiagnostic[]): void {
         this.walkTerminalElements(rule.definition, element => {
             if (GrammarAST.isRegexToken(element)) {
-                const error = validateRegexForLezer(element.regex);
+                let pattern = element.regex;
+                if (pattern.startsWith('/') && pattern.endsWith('/')) {
+                    pattern = pattern.slice(1, -1);
+                }
+                const error = validateRegexForLezer(pattern);
                 if (error) {
                     diagnostics.push({
                         message: `Terminal '${rule.name}' ${error}. Rewrite using string body syntax.`,

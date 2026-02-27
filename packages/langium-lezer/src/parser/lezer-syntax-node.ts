@@ -5,6 +5,7 @@
  ******************************************************************************/
 
 import type { SyntaxNode as LezerNode, Tree } from '@lezer/common';
+import { IterMode } from '@lezer/common';
 import type { Range } from 'vscode-languageserver-types';
 import type { ParseDiagnostic, RootSyntaxNode, SyntaxNode } from 'langium-core';
 import type { FieldMap } from './field-map.js';
@@ -142,10 +143,13 @@ export class LezerSyntaxNode implements SyntaxNode {
     get children(): readonly SyntaxNode[] {
         if (!this._children) {
             const kids: SyntaxNode[] = [];
-            let child = this.lezerNode.firstChild;
-            while (child) {
-                kids.push(wrapLezerNode(child, this.sourceText, this.fieldMap, this.keywordSet));
-                child = child.nextSibling;
+            // Use cursor with IncludeAnonymous to include keyword literals
+            // (Lezer's firstChild/nextSibling skip anonymous leaf nodes by default)
+            const cursor = this.lezerNode.cursor(IterMode.IncludeAnonymous);
+            if (cursor.firstChild()) {
+                do {
+                    kids.push(wrapLezerNode(cursor.node, this.sourceText, this.fieldMap, this.keywordSet));
+                } while (cursor.nextSibling());
             }
             this._children = kids;
         }
@@ -159,8 +163,10 @@ export class LezerSyntaxNode implements SyntaxNode {
     }
 
     get isHidden(): boolean {
-        // In Lezer, anonymous nodes (type.name === "") are hidden/skip tokens
-        return this.lezerNode.type.name === '';
+        // In Lezer, @skip tokens (whitespace, comments) do not appear in the parse tree.
+        // Anonymous nodes (type.name === "") that ARE in the tree are typically keyword literals.
+        // Since all truly hidden tokens are already excluded by Lezer, nothing in the tree is hidden.
+        return false;
     }
 
     get isError(): boolean {
@@ -168,12 +174,11 @@ export class LezerSyntaxNode implements SyntaxNode {
     }
 
     get isKeyword(): boolean {
-        // In Lezer, keywords are anonymous leaf nodes whose text matches a known keyword
+        // With @specialize, keyword nodes have the keyword value as their type name
+        // (e.g., type.name === '"model"' for a kw<"model"> node).
+        // Check the type name against the keyword set.
         if (!this.isLeaf) return false;
-        if (this.lezerNode.type.name === '') {
-            return this.keywordSet.has(this.text);
-        }
-        return false;
+        return this.keywordSet.has(this.lezerNode.type.name);
     }
 
     get tokenType(): string | undefined {

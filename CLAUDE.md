@@ -96,8 +96,8 @@ Phase file: [docs/phases/PHASE-2.md](docs/phases/PHASE-2.md)
 - [x] Create DI module (LezerModule) and service types (LangiumLezerServices)
 - [x] CLI integration: langium generate --backend=lezer (config + CLI flag)
 - [x] Wire into root workspace/tsconfig.build.json — full build passes
-- [ ] Cross-backend conformance tests
-- [ ] Incremental parsing correctness + performance tests
+- [x] Cross-backend conformance tests
+- [x] Incremental parsing correctness + performance tests
 
 ### Phase 3: Grammar Extensions
 - [ ] Extend grammar parser (precedence blocks, external tokens, conflicts, specialize/extend, local tokens)
