@@ -301,7 +301,14 @@ export const RequirementsGrammar = (): Grammar => loadedRequirementsGrammar ?? (
       "fragment": false
     }
   ],
+  "conflictBlocks": [],
+  "extendBlocks": [],
+  "externalContexts": [],
+  "externalTokenBlocks": [],
   "interfaces": [],
+  "localTokenBlocks": [],
+  "precedenceBlocks": [],
+  "specializeBlocks": [],
   "types": []
 }`));
 
@@ -796,6 +803,13 @@ export const TestsGrammar = (): Grammar => loadedTestsGrammar ?? (loadedTestsGra
       "fragment": false
     }
   ],
+  "conflictBlocks": [],
+  "extendBlocks": [],
+  "externalContexts": [],
+  "externalTokenBlocks": [],
   "interfaces": [],
+  "localTokenBlocks": [],
+  "precedenceBlocks": [],
+  "specializeBlocks": [],
   "types": []
 }`));

@@ -40,7 +40,14 @@ describe('Langium completion provider', () => {
                 'terminal',
                 'infix',
                 'interface',
-                'type'
+                'type',
+                // Phase 3: grammar extension keywords
+                'precedence',
+                'external',
+                'specialize',
+                'extend',
+                'conflicts',
+                'local'
             ]
         });
     });

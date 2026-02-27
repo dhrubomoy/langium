@@ -100,8 +100,8 @@ Phase file: [docs/phases/PHASE-2.md](docs/phases/PHASE-2.md)
 - [x] Incremental parsing correctness + performance tests
 
 ### Phase 3: Grammar Extensions
-- [ ] Extend grammar parser (precedence blocks, external tokens, conflicts, specialize/extend, local tokens)
-- [ ] Extend Grammar AST types
+- [x] Extend grammar parser (precedence blocks, external tokens, conflicts, specialize/extend, local tokens)
+- [x] Extend Grammar AST types (11 new interfaces, Grammar + AbstractElement extended)
 - [ ] Implement translation per feature per backend
 - [ ] Diagnostics for unsupported feature+backend combos
 

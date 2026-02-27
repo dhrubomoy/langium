@@ -330,7 +330,14 @@ export const StatemachineModelGrammar = (): Grammar => loadedStatemachineModelGr
       "fragment": false
     }
   ],
+  "conflictBlocks": [],
+  "extendBlocks": [],
+  "externalContexts": [],
+  "externalTokenBlocks": [],
   "imports": [],
   "interfaces": [],
+  "localTokenBlocks": [],
+  "precedenceBlocks": [],
+  "specializeBlocks": [],
   "types": []
 }`));

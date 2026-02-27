@@ -42,6 +42,8 @@ export type LangiumGrammarKeywordNames =
     | "?<="
     | "?="
     | "@"
+    | "@dynamicPrecedence"
+    | "@precMarker"
     | "Date"
     | "EOF"
     | "["
@@ -49,25 +51,35 @@ export type LangiumGrammarKeywordNames =
     | "assoc"
     | "bigint"
     | "boolean"
+    | "conflicts"
+    | "context"
     | "current"
     | "entry"
+    | "extend"
     | "extends"
+    | "external"
     | "false"
     | "fragment"
+    | "from"
     | "grammar"
     | "hidden"
     | "import"
+    | "in"
     | "infer"
     | "infers"
     | "infix"
     | "interface"
     | "left"
+    | "local"
     | "number"
     | "on"
+    | "precedence"
     | "returns"
     | "right"
+    | "specialize"
     | "string"
     | "terminal"
+    | "tokens"
     | "true"
     | "type"
     | "with"
@@ -80,11 +92,15 @@ export type LangiumGrammarTokenNames = LangiumGrammarTerminalNames | LangiumGram
 export interface AbstractElement extends langium.AstNode {
     readonly $type: 'AbstractElement' | 'Action' | 'Alternatives' | 'Assignment' | 'CharacterRange' | 'CrossReference' | 'EndOfFile' | 'Group' | 'Keyword' | 'NegatedToken' | 'RegexToken' | 'RuleCall' | 'TerminalAlternatives' | 'TerminalElement' | 'TerminalGroup' | 'TerminalRuleCall' | 'UnorderedGroup' | 'UntilToken' | 'Wildcard';
     cardinality?: '*' | '+' | '?';
+    dynamicPrecedence?: number;
+    precMarker?: string;
 }
 
 export const AbstractElement = {
     $type: 'AbstractElement',
-    cardinality: 'cardinality'
+    cardinality: 'cardinality',
+    dynamicPrecedence: 'dynamicPrecedence',
+    precMarker: 'precMarker'
 } as const;
 
 export function isAbstractElement(item: unknown): item is AbstractElement {
@@ -132,9 +148,11 @@ export interface Action extends AbstractElement {
 export const Action = {
     $type: 'Action',
     cardinality: 'cardinality',
+    dynamicPrecedence: 'dynamicPrecedence',
     feature: 'feature',
     inferredType: 'inferredType',
     operator: 'operator',
+    precMarker: 'precMarker',
     type: 'type'
 } as const;
 
@@ -150,7 +168,9 @@ export interface Alternatives extends AbstractElement {
 export const Alternatives = {
     $type: 'Alternatives',
     cardinality: 'cardinality',
-    elements: 'elements'
+    dynamicPrecedence: 'dynamicPrecedence',
+    elements: 'elements',
+    precMarker: 'precMarker'
 } as const;
 
 export function isAlternatives(item: unknown): item is Alternatives {
@@ -198,8 +218,10 @@ export interface Assignment extends AbstractElement {
 export const Assignment = {
     $type: 'Assignment',
     cardinality: 'cardinality',
+    dynamicPrecedence: 'dynamicPrecedence',
     feature: 'feature',
     operator: 'operator',
+    precMarker: 'precMarker',
     predicate: 'predicate',
     terminal: 'terminal'
 } as const;
@@ -234,9 +256,11 @@ export interface CharacterRange extends TerminalElement {
 export const CharacterRange = {
     $type: 'CharacterRange',
     cardinality: 'cardinality',
+    dynamicPrecedence: 'dynamicPrecedence',
     left: 'left',
     lookahead: 'lookahead',
     parenthesized: 'parenthesized',
+    precMarker: 'precMarker',
     right: 'right'
 } as const;
 
@@ -252,6 +276,36 @@ export const Condition = {
 
 export function isCondition(item: unknown): item is Condition {
     return reflection.isInstance(item, Condition.$type);
+}
+
+export interface ConflictBlock extends langium.AstNode {
+    readonly $container: Grammar;
+    readonly $type: 'ConflictBlock';
+    sets: Array<ConflictSet>;
+}
+
+export const ConflictBlock = {
+    $type: 'ConflictBlock',
+    sets: 'sets'
+} as const;
+
+export function isConflictBlock(item: unknown): item is ConflictBlock {
+    return reflection.isInstance(item, ConflictBlock.$type);
+}
+
+export interface ConflictSet extends langium.AstNode {
+    readonly $container: ConflictBlock;
+    readonly $type: 'ConflictSet';
+    rules: Array<langium.Reference<AbstractRule>>;
+}
+
+export const ConflictSet = {
+    $type: 'ConflictSet',
+    rules: 'rules'
+} as const;
+
+export function isConflictSet(item: unknown): item is ConflictSet {
+    return reflection.isInstance(item, ConflictSet.$type);
 }
 
 export interface Conjunction extends langium.AstNode {
@@ -283,7 +337,9 @@ export const CrossReference = {
     $type: 'CrossReference',
     cardinality: 'cardinality',
     deprecatedSyntax: 'deprecatedSyntax',
+    dynamicPrecedence: 'dynamicPrecedence',
     isMulti: 'isMulti',
+    precMarker: 'precMarker',
     terminal: 'terminal',
     type: 'type'
 } as const;
@@ -315,32 +371,114 @@ export interface EndOfFile extends AbstractElement {
 
 export const EndOfFile = {
     $type: 'EndOfFile',
-    cardinality: 'cardinality'
+    cardinality: 'cardinality',
+    dynamicPrecedence: 'dynamicPrecedence',
+    precMarker: 'precMarker'
 } as const;
 
 export function isEndOfFile(item: unknown): item is EndOfFile {
     return reflection.isInstance(item, EndOfFile.$type);
 }
 
+export interface ExtendBlock extends langium.AstNode {
+    readonly $container: Grammar;
+    readonly $type: 'ExtendBlock';
+    mappings: Array<TokenMapping>;
+    terminal: langium.Reference<TerminalRule>;
+}
+
+export const ExtendBlock = {
+    $type: 'ExtendBlock',
+    mappings: 'mappings',
+    terminal: 'terminal'
+} as const;
+
+export function isExtendBlock(item: unknown): item is ExtendBlock {
+    return reflection.isInstance(item, ExtendBlock.$type);
+}
+
+export interface ExternalContext extends langium.AstNode {
+    readonly $container: Grammar;
+    readonly $type: 'ExternalContext';
+    name: string;
+    path: string;
+}
+
+export const ExternalContext = {
+    $type: 'ExternalContext',
+    name: 'name',
+    path: 'path'
+} as const;
+
+export function isExternalContext(item: unknown): item is ExternalContext {
+    return reflection.isInstance(item, ExternalContext.$type);
+}
+
+export interface ExternalTokenBlock extends langium.AstNode {
+    readonly $container: Grammar;
+    readonly $type: 'ExternalTokenBlock';
+    path: string;
+    tokens: Array<ExternalTokenDecl>;
+}
+
+export const ExternalTokenBlock = {
+    $type: 'ExternalTokenBlock',
+    path: 'path',
+    tokens: 'tokens'
+} as const;
+
+export function isExternalTokenBlock(item: unknown): item is ExternalTokenBlock {
+    return reflection.isInstance(item, ExternalTokenBlock.$type);
+}
+
+export interface ExternalTokenDecl extends langium.AstNode {
+    readonly $container: ExternalTokenBlock;
+    readonly $type: 'ExternalTokenDecl';
+    name: string;
+}
+
+export const ExternalTokenDecl = {
+    $type: 'ExternalTokenDecl',
+    name: 'name'
+} as const;
+
+export function isExternalTokenDecl(item: unknown): item is ExternalTokenDecl {
+    return reflection.isInstance(item, ExternalTokenDecl.$type);
+}
+
 export type FeatureName = 'assoc' | 'current' | 'entry' | 'extends' | 'false' | 'fragment' | 'grammar' | 'hidden' | 'import' | 'infer' | 'infers' | 'infix' | 'interface' | 'left' | 'on' | 'returns' | 'right' | 'terminal' | 'true' | 'type' | 'with' | PrimitiveType | string;
 
 export interface Grammar extends langium.AstNode {
     readonly $type: 'Grammar';
+    conflictBlocks: Array<ConflictBlock>;
+    extendBlocks: Array<ExtendBlock>;
+    externalContexts: Array<ExternalContext>;
+    externalTokenBlocks: Array<ExternalTokenBlock>;
     imports: Array<GrammarImport>;
     interfaces: Array<Interface>;
     isDeclared: boolean;
+    localTokenBlocks: Array<LocalTokenBlock>;
     name?: string;
+    precedenceBlocks: Array<PrecedenceBlock>;
     rules: Array<AbstractRule>;
+    specializeBlocks: Array<SpecializeBlock>;
     types: Array<Type>;
 }
 
 export const Grammar = {
     $type: 'Grammar',
+    conflictBlocks: 'conflictBlocks',
+    extendBlocks: 'extendBlocks',
+    externalContexts: 'externalContexts',
+    externalTokenBlocks: 'externalTokenBlocks',
     imports: 'imports',
     interfaces: 'interfaces',
     isDeclared: 'isDeclared',
+    localTokenBlocks: 'localTokenBlocks',
     name: 'name',
+    precedenceBlocks: 'precedenceBlocks',
     rules: 'rules',
+    specializeBlocks: 'specializeBlocks',
     types: 'types'
 } as const;
 
@@ -373,8 +511,10 @@ export interface Group extends AbstractElement {
 export const Group = {
     $type: 'Group',
     cardinality: 'cardinality',
+    dynamicPrecedence: 'dynamicPrecedence',
     elements: 'elements',
     guardCondition: 'guardCondition',
+    precMarker: 'precMarker',
     predicate: 'predicate'
 } as const;
 
@@ -485,12 +625,31 @@ export interface Keyword extends AbstractElement {
 export const Keyword = {
     $type: 'Keyword',
     cardinality: 'cardinality',
+    dynamicPrecedence: 'dynamicPrecedence',
+    precMarker: 'precMarker',
     predicate: 'predicate',
     value: 'value'
 } as const;
 
 export function isKeyword(item: unknown): item is Keyword {
     return reflection.isInstance(item, Keyword.$type);
+}
+
+export interface LocalTokenBlock extends langium.AstNode {
+    readonly $container: Grammar;
+    readonly $type: 'LocalTokenBlock';
+    rule: langium.Reference<ParserRule>;
+    terminals: Array<TerminalRule>;
+}
+
+export const LocalTokenBlock = {
+    $type: 'LocalTokenBlock',
+    rule: 'rule',
+    terminals: 'terminals'
+} as const;
+
+export function isLocalTokenBlock(item: unknown): item is LocalTokenBlock {
+    return reflection.isInstance(item, LocalTokenBlock.$type);
 }
 
 export interface NamedArgument extends langium.AstNode {
@@ -520,8 +679,10 @@ export interface NegatedToken extends TerminalElement {
 export const NegatedToken = {
     $type: 'NegatedToken',
     cardinality: 'cardinality',
+    dynamicPrecedence: 'dynamicPrecedence',
     lookahead: 'lookahead',
     parenthesized: 'parenthesized',
+    precMarker: 'precMarker',
     terminal: 'terminal'
 } as const;
 
@@ -618,6 +779,38 @@ export function isParserRule(item: unknown): item is ParserRule {
     return reflection.isInstance(item, ParserRule.$type);
 }
 
+export interface PrecedenceBlock extends langium.AstNode {
+    readonly $container: Grammar;
+    readonly $type: 'PrecedenceBlock';
+    levels: Array<PrecedenceLevel>;
+}
+
+export const PrecedenceBlock = {
+    $type: 'PrecedenceBlock',
+    levels: 'levels'
+} as const;
+
+export function isPrecedenceBlock(item: unknown): item is PrecedenceBlock {
+    return reflection.isInstance(item, PrecedenceBlock.$type);
+}
+
+export interface PrecedenceLevel extends langium.AstNode {
+    readonly $container: PrecedenceBlock;
+    readonly $type: 'PrecedenceLevel';
+    associativity?: Associativity;
+    name: string;
+}
+
+export const PrecedenceLevel = {
+    $type: 'PrecedenceLevel',
+    associativity: 'associativity',
+    name: 'name'
+} as const;
+
+export function isPrecedenceLevel(item: unknown): item is PrecedenceLevel {
+    return reflection.isInstance(item, PrecedenceLevel.$type);
+}
+
 export type PrimitiveType = 'Date' | 'bigint' | 'boolean' | 'number' | 'string';
 
 export interface ReferenceType extends langium.AstNode {
@@ -645,8 +838,10 @@ export interface RegexToken extends TerminalElement {
 export const RegexToken = {
     $type: 'RegexToken',
     cardinality: 'cardinality',
+    dynamicPrecedence: 'dynamicPrecedence',
     lookahead: 'lookahead',
     parenthesized: 'parenthesized',
+    precMarker: 'precMarker',
     regex: 'regex'
 } as const;
 
@@ -681,6 +876,8 @@ export const RuleCall = {
     $type: 'RuleCall',
     arguments: 'arguments',
     cardinality: 'cardinality',
+    dynamicPrecedence: 'dynamicPrecedence',
+    precMarker: 'precMarker',
     predicate: 'predicate',
     rule: 'rule'
 } as const;
@@ -708,6 +905,23 @@ export function isSimpleType(item: unknown): item is SimpleType {
     return reflection.isInstance(item, SimpleType.$type);
 }
 
+export interface SpecializeBlock extends langium.AstNode {
+    readonly $container: Grammar;
+    readonly $type: 'SpecializeBlock';
+    mappings: Array<TokenMapping>;
+    terminal: langium.Reference<TerminalRule>;
+}
+
+export const SpecializeBlock = {
+    $type: 'SpecializeBlock',
+    mappings: 'mappings',
+    terminal: 'terminal'
+} as const;
+
+export function isSpecializeBlock(item: unknown): item is SpecializeBlock {
+    return reflection.isInstance(item, SpecializeBlock.$type);
+}
+
 export interface StringLiteral extends langium.AstNode {
     readonly $container: ArrayLiteral | TypeAttribute;
     readonly $type: 'StringLiteral';
@@ -731,9 +945,11 @@ export interface TerminalAlternatives extends TerminalElement {
 export const TerminalAlternatives = {
     $type: 'TerminalAlternatives',
     cardinality: 'cardinality',
+    dynamicPrecedence: 'dynamicPrecedence',
     elements: 'elements',
     lookahead: 'lookahead',
-    parenthesized: 'parenthesized'
+    parenthesized: 'parenthesized',
+    precMarker: 'precMarker'
 } as const;
 
 export function isTerminalAlternatives(item: unknown): item is TerminalAlternatives {
@@ -749,8 +965,10 @@ export interface TerminalElement extends AbstractElement {
 export const TerminalElement = {
     $type: 'TerminalElement',
     cardinality: 'cardinality',
+    dynamicPrecedence: 'dynamicPrecedence',
     lookahead: 'lookahead',
-    parenthesized: 'parenthesized'
+    parenthesized: 'parenthesized',
+    precMarker: 'precMarker'
 } as const;
 
 export function isTerminalElement(item: unknown): item is TerminalElement {
@@ -765,9 +983,11 @@ export interface TerminalGroup extends TerminalElement {
 export const TerminalGroup = {
     $type: 'TerminalGroup',
     cardinality: 'cardinality',
+    dynamicPrecedence: 'dynamicPrecedence',
     elements: 'elements',
     lookahead: 'lookahead',
-    parenthesized: 'parenthesized'
+    parenthesized: 'parenthesized',
+    precMarker: 'precMarker'
 } as const;
 
 export function isTerminalGroup(item: unknown): item is TerminalGroup {
@@ -775,7 +995,7 @@ export function isTerminalGroup(item: unknown): item is TerminalGroup {
 }
 
 export interface TerminalRule extends langium.AstNode {
-    readonly $container: Grammar;
+    readonly $container: Grammar | LocalTokenBlock;
     readonly $type: 'TerminalRule';
     definition: TerminalElement;
     fragment: boolean;
@@ -805,13 +1025,32 @@ export interface TerminalRuleCall extends TerminalElement {
 export const TerminalRuleCall = {
     $type: 'TerminalRuleCall',
     cardinality: 'cardinality',
+    dynamicPrecedence: 'dynamicPrecedence',
     lookahead: 'lookahead',
     parenthesized: 'parenthesized',
+    precMarker: 'precMarker',
     rule: 'rule'
 } as const;
 
 export function isTerminalRuleCall(item: unknown): item is TerminalRuleCall {
     return reflection.isInstance(item, TerminalRuleCall.$type);
+}
+
+export interface TokenMapping extends langium.AstNode {
+    readonly $container: ExtendBlock | SpecializeBlock;
+    readonly $type: 'TokenMapping';
+    source: string;
+    target: string;
+}
+
+export const TokenMapping = {
+    $type: 'TokenMapping',
+    source: 'source',
+    target: 'target'
+} as const;
+
+export function isTokenMapping(item: unknown): item is TokenMapping {
+    return reflection.isInstance(item, TokenMapping.$type);
 }
 
 export interface Type extends langium.AstNode {
@@ -885,7 +1124,9 @@ export interface UnorderedGroup extends AbstractElement {
 export const UnorderedGroup = {
     $type: 'UnorderedGroup',
     cardinality: 'cardinality',
-    elements: 'elements'
+    dynamicPrecedence: 'dynamicPrecedence',
+    elements: 'elements',
+    precMarker: 'precMarker'
 } as const;
 
 export function isUnorderedGroup(item: unknown): item is UnorderedGroup {
@@ -900,8 +1141,10 @@ export interface UntilToken extends TerminalElement {
 export const UntilToken = {
     $type: 'UntilToken',
     cardinality: 'cardinality',
+    dynamicPrecedence: 'dynamicPrecedence',
     lookahead: 'lookahead',
     parenthesized: 'parenthesized',
+    precMarker: 'precMarker',
     terminal: 'terminal'
 } as const;
 
@@ -926,8 +1169,10 @@ export interface Wildcard extends TerminalElement {
 export const Wildcard = {
     $type: 'Wildcard',
     cardinality: 'cardinality',
+    dynamicPrecedence: 'dynamicPrecedence',
     lookahead: 'lookahead',
-    parenthesized: 'parenthesized'
+    parenthesized: 'parenthesized',
+    precMarker: 'precMarker'
 } as const;
 
 export function isWildcard(item: unknown): item is Wildcard {
@@ -947,10 +1192,16 @@ export type LangiumGrammarAstType = {
     BooleanLiteral: BooleanLiteral
     CharacterRange: CharacterRange
     Condition: Condition
+    ConflictBlock: ConflictBlock
+    ConflictSet: ConflictSet
     Conjunction: Conjunction
     CrossReference: CrossReference
     Disjunction: Disjunction
     EndOfFile: EndOfFile
+    ExtendBlock: ExtendBlock
+    ExternalContext: ExternalContext
+    ExternalTokenBlock: ExternalTokenBlock
+    ExternalTokenDecl: ExternalTokenDecl
     Grammar: Grammar
     GrammarImport: GrammarImport
     Group: Group
@@ -960,6 +1211,7 @@ export type LangiumGrammarAstType = {
     InfixRuleOperators: InfixRuleOperators
     Interface: Interface
     Keyword: Keyword
+    LocalTokenBlock: LocalTokenBlock
     NamedArgument: NamedArgument
     NegatedToken: NegatedToken
     Negation: Negation
@@ -967,17 +1219,21 @@ export type LangiumGrammarAstType = {
     Parameter: Parameter
     ParameterReference: ParameterReference
     ParserRule: ParserRule
+    PrecedenceBlock: PrecedenceBlock
+    PrecedenceLevel: PrecedenceLevel
     ReferenceType: ReferenceType
     RegexToken: RegexToken
     ReturnType: ReturnType
     RuleCall: RuleCall
     SimpleType: SimpleType
+    SpecializeBlock: SpecializeBlock
     StringLiteral: StringLiteral
     TerminalAlternatives: TerminalAlternatives
     TerminalElement: TerminalElement
     TerminalGroup: TerminalGroup
     TerminalRule: TerminalRule
     TerminalRuleCall: TerminalRuleCall
+    TokenMapping: TokenMapping
     Type: Type
     TypeAttribute: TypeAttribute
     TypeDefinition: TypeDefinition
@@ -995,6 +1251,12 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
             properties: {
                 cardinality: {
                     name: AbstractElement.cardinality
+                },
+                dynamicPrecedence: {
+                    name: AbstractElement.dynamicPrecedence
+                },
+                precMarker: {
+                    name: AbstractElement.precMarker
                 }
             },
             superTypes: []
@@ -1023,6 +1285,9 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                 cardinality: {
                     name: Action.cardinality
                 },
+                dynamicPrecedence: {
+                    name: Action.dynamicPrecedence
+                },
                 feature: {
                     name: Action.feature
                 },
@@ -1031,6 +1296,9 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                 },
                 operator: {
                     name: Action.operator
+                },
+                precMarker: {
+                    name: Action.precMarker
                 },
                 type: {
                     name: Action.type,
@@ -1045,9 +1313,15 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                 cardinality: {
                     name: Alternatives.cardinality
                 },
+                dynamicPrecedence: {
+                    name: Alternatives.dynamicPrecedence
+                },
                 elements: {
                     name: Alternatives.elements,
                     defaultValue: []
+                },
+                precMarker: {
+                    name: Alternatives.precMarker
                 }
             },
             superTypes: [AbstractElement.$type]
@@ -1077,11 +1351,17 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                 cardinality: {
                     name: Assignment.cardinality
                 },
+                dynamicPrecedence: {
+                    name: Assignment.dynamicPrecedence
+                },
                 feature: {
                     name: Assignment.feature
                 },
                 operator: {
                     name: Assignment.operator
+                },
+                precMarker: {
+                    name: Assignment.precMarker
                 },
                 predicate: {
                     name: Assignment.predicate
@@ -1108,6 +1388,9 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                 cardinality: {
                     name: CharacterRange.cardinality
                 },
+                dynamicPrecedence: {
+                    name: CharacterRange.dynamicPrecedence
+                },
                 left: {
                     name: CharacterRange.left
                 },
@@ -1118,6 +1401,9 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                     name: CharacterRange.parenthesized,
                     defaultValue: false
                 },
+                precMarker: {
+                    name: CharacterRange.precMarker
+                },
                 right: {
                     name: CharacterRange.right
                 }
@@ -1127,6 +1413,27 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
         Condition: {
             name: Condition.$type,
             properties: {
+            },
+            superTypes: []
+        },
+        ConflictBlock: {
+            name: ConflictBlock.$type,
+            properties: {
+                sets: {
+                    name: ConflictBlock.sets,
+                    defaultValue: []
+                }
+            },
+            superTypes: []
+        },
+        ConflictSet: {
+            name: ConflictSet.$type,
+            properties: {
+                rules: {
+                    name: ConflictSet.rules,
+                    defaultValue: [],
+                    referenceType: AbstractRule.$type
+                }
             },
             superTypes: []
         },
@@ -1152,9 +1459,15 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                     name: CrossReference.deprecatedSyntax,
                     defaultValue: false
                 },
+                dynamicPrecedence: {
+                    name: CrossReference.dynamicPrecedence
+                },
                 isMulti: {
                     name: CrossReference.isMulti,
                     defaultValue: false
+                },
+                precMarker: {
+                    name: CrossReference.precMarker
                 },
                 terminal: {
                     name: CrossReference.terminal
@@ -1183,13 +1496,83 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
             properties: {
                 cardinality: {
                     name: EndOfFile.cardinality
+                },
+                dynamicPrecedence: {
+                    name: EndOfFile.dynamicPrecedence
+                },
+                precMarker: {
+                    name: EndOfFile.precMarker
                 }
             },
             superTypes: [AbstractElement.$type]
         },
+        ExtendBlock: {
+            name: ExtendBlock.$type,
+            properties: {
+                mappings: {
+                    name: ExtendBlock.mappings,
+                    defaultValue: []
+                },
+                terminal: {
+                    name: ExtendBlock.terminal,
+                    referenceType: TerminalRule.$type
+                }
+            },
+            superTypes: []
+        },
+        ExternalContext: {
+            name: ExternalContext.$type,
+            properties: {
+                name: {
+                    name: ExternalContext.name
+                },
+                path: {
+                    name: ExternalContext.path
+                }
+            },
+            superTypes: []
+        },
+        ExternalTokenBlock: {
+            name: ExternalTokenBlock.$type,
+            properties: {
+                path: {
+                    name: ExternalTokenBlock.path
+                },
+                tokens: {
+                    name: ExternalTokenBlock.tokens,
+                    defaultValue: []
+                }
+            },
+            superTypes: []
+        },
+        ExternalTokenDecl: {
+            name: ExternalTokenDecl.$type,
+            properties: {
+                name: {
+                    name: ExternalTokenDecl.name
+                }
+            },
+            superTypes: []
+        },
         Grammar: {
             name: Grammar.$type,
             properties: {
+                conflictBlocks: {
+                    name: Grammar.conflictBlocks,
+                    defaultValue: []
+                },
+                extendBlocks: {
+                    name: Grammar.extendBlocks,
+                    defaultValue: []
+                },
+                externalContexts: {
+                    name: Grammar.externalContexts,
+                    defaultValue: []
+                },
+                externalTokenBlocks: {
+                    name: Grammar.externalTokenBlocks,
+                    defaultValue: []
+                },
                 imports: {
                     name: Grammar.imports,
                     defaultValue: []
@@ -1202,11 +1585,23 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                     name: Grammar.isDeclared,
                     defaultValue: false
                 },
+                localTokenBlocks: {
+                    name: Grammar.localTokenBlocks,
+                    defaultValue: []
+                },
                 name: {
                     name: Grammar.name
                 },
+                precedenceBlocks: {
+                    name: Grammar.precedenceBlocks,
+                    defaultValue: []
+                },
                 rules: {
                     name: Grammar.rules,
+                    defaultValue: []
+                },
+                specializeBlocks: {
+                    name: Grammar.specializeBlocks,
                     defaultValue: []
                 },
                 types: {
@@ -1231,12 +1626,18 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                 cardinality: {
                     name: Group.cardinality
                 },
+                dynamicPrecedence: {
+                    name: Group.dynamicPrecedence
+                },
                 elements: {
                     name: Group.elements,
                     defaultValue: []
                 },
                 guardCondition: {
                     name: Group.guardCondition
+                },
+                precMarker: {
+                    name: Group.precMarker
                 },
                 predicate: {
                     name: Group.predicate
@@ -1329,6 +1730,12 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                 cardinality: {
                     name: Keyword.cardinality
                 },
+                dynamicPrecedence: {
+                    name: Keyword.dynamicPrecedence
+                },
+                precMarker: {
+                    name: Keyword.precMarker
+                },
                 predicate: {
                     name: Keyword.predicate
                 },
@@ -1337,6 +1744,20 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                 }
             },
             superTypes: [AbstractElement.$type]
+        },
+        LocalTokenBlock: {
+            name: LocalTokenBlock.$type,
+            properties: {
+                rule: {
+                    name: LocalTokenBlock.rule,
+                    referenceType: ParserRule.$type
+                },
+                terminals: {
+                    name: LocalTokenBlock.terminals,
+                    defaultValue: []
+                }
+            },
+            superTypes: []
         },
         NamedArgument: {
             name: NamedArgument.$type,
@@ -1361,12 +1782,18 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                 cardinality: {
                     name: NegatedToken.cardinality
                 },
+                dynamicPrecedence: {
+                    name: NegatedToken.dynamicPrecedence
+                },
                 lookahead: {
                     name: NegatedToken.lookahead
                 },
                 parenthesized: {
                     name: NegatedToken.parenthesized,
                     defaultValue: false
+                },
+                precMarker: {
+                    name: NegatedToken.precMarker
                 },
                 terminal: {
                     name: NegatedToken.terminal
@@ -1445,6 +1872,28 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: [AbstractParserRule.$type]
         },
+        PrecedenceBlock: {
+            name: PrecedenceBlock.$type,
+            properties: {
+                levels: {
+                    name: PrecedenceBlock.levels,
+                    defaultValue: []
+                }
+            },
+            superTypes: []
+        },
+        PrecedenceLevel: {
+            name: PrecedenceLevel.$type,
+            properties: {
+                associativity: {
+                    name: PrecedenceLevel.associativity
+                },
+                name: {
+                    name: PrecedenceLevel.name
+                }
+            },
+            superTypes: []
+        },
         ReferenceType: {
             name: ReferenceType.$type,
             properties: {
@@ -1464,12 +1913,18 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                 cardinality: {
                     name: RegexToken.cardinality
                 },
+                dynamicPrecedence: {
+                    name: RegexToken.dynamicPrecedence
+                },
                 lookahead: {
                     name: RegexToken.lookahead
                 },
                 parenthesized: {
                     name: RegexToken.parenthesized,
                     defaultValue: false
+                },
+                precMarker: {
+                    name: RegexToken.precMarker
                 },
                 regex: {
                     name: RegexToken.regex
@@ -1495,6 +1950,12 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                 },
                 cardinality: {
                     name: RuleCall.cardinality
+                },
+                dynamicPrecedence: {
+                    name: RuleCall.dynamicPrecedence
+                },
+                precMarker: {
+                    name: RuleCall.precMarker
                 },
                 predicate: {
                     name: RuleCall.predicate
@@ -1522,6 +1983,20 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: [TypeDefinition.$type]
         },
+        SpecializeBlock: {
+            name: SpecializeBlock.$type,
+            properties: {
+                mappings: {
+                    name: SpecializeBlock.mappings,
+                    defaultValue: []
+                },
+                terminal: {
+                    name: SpecializeBlock.terminal,
+                    referenceType: TerminalRule.$type
+                }
+            },
+            superTypes: []
+        },
         StringLiteral: {
             name: StringLiteral.$type,
             properties: {
@@ -1537,6 +2012,9 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                 cardinality: {
                     name: TerminalAlternatives.cardinality
                 },
+                dynamicPrecedence: {
+                    name: TerminalAlternatives.dynamicPrecedence
+                },
                 elements: {
                     name: TerminalAlternatives.elements,
                     defaultValue: []
@@ -1547,6 +2025,9 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                 parenthesized: {
                     name: TerminalAlternatives.parenthesized,
                     defaultValue: false
+                },
+                precMarker: {
+                    name: TerminalAlternatives.precMarker
                 }
             },
             superTypes: [TerminalElement.$type]
@@ -1557,12 +2038,18 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                 cardinality: {
                     name: TerminalElement.cardinality
                 },
+                dynamicPrecedence: {
+                    name: TerminalElement.dynamicPrecedence
+                },
                 lookahead: {
                     name: TerminalElement.lookahead
                 },
                 parenthesized: {
                     name: TerminalElement.parenthesized,
                     defaultValue: false
+                },
+                precMarker: {
+                    name: TerminalElement.precMarker
                 }
             },
             superTypes: [AbstractElement.$type]
@@ -1572,6 +2059,9 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
             properties: {
                 cardinality: {
                     name: TerminalGroup.cardinality
+                },
+                dynamicPrecedence: {
+                    name: TerminalGroup.dynamicPrecedence
                 },
                 elements: {
                     name: TerminalGroup.elements,
@@ -1583,6 +2073,9 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                 parenthesized: {
                     name: TerminalGroup.parenthesized,
                     defaultValue: false
+                },
+                precMarker: {
+                    name: TerminalGroup.precMarker
                 }
             },
             superTypes: [TerminalElement.$type]
@@ -1616,6 +2109,9 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                 cardinality: {
                     name: TerminalRuleCall.cardinality
                 },
+                dynamicPrecedence: {
+                    name: TerminalRuleCall.dynamicPrecedence
+                },
                 lookahead: {
                     name: TerminalRuleCall.lookahead
                 },
@@ -1623,12 +2119,27 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                     name: TerminalRuleCall.parenthesized,
                     defaultValue: false
                 },
+                precMarker: {
+                    name: TerminalRuleCall.precMarker
+                },
                 rule: {
                     name: TerminalRuleCall.rule,
                     referenceType: TerminalRule.$type
                 }
             },
             superTypes: [TerminalElement.$type]
+        },
+        TokenMapping: {
+            name: TokenMapping.$type,
+            properties: {
+                source: {
+                    name: TokenMapping.source
+                },
+                target: {
+                    name: TokenMapping.target
+                }
+            },
+            superTypes: []
         },
         Type: {
             name: Type.$type,
@@ -1683,9 +2194,15 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                 cardinality: {
                     name: UnorderedGroup.cardinality
                 },
+                dynamicPrecedence: {
+                    name: UnorderedGroup.dynamicPrecedence
+                },
                 elements: {
                     name: UnorderedGroup.elements,
                     defaultValue: []
+                },
+                precMarker: {
+                    name: UnorderedGroup.precMarker
                 }
             },
             superTypes: [AbstractElement.$type]
@@ -1696,12 +2213,18 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                 cardinality: {
                     name: UntilToken.cardinality
                 },
+                dynamicPrecedence: {
+                    name: UntilToken.dynamicPrecedence
+                },
                 lookahead: {
                     name: UntilToken.lookahead
                 },
                 parenthesized: {
                     name: UntilToken.parenthesized,
                     defaultValue: false
+                },
+                precMarker: {
+                    name: UntilToken.precMarker
                 },
                 terminal: {
                     name: UntilToken.terminal
@@ -1721,12 +2244,18 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                 cardinality: {
                     name: Wildcard.cardinality
                 },
+                dynamicPrecedence: {
+                    name: Wildcard.dynamicPrecedence
+                },
                 lookahead: {
                     name: Wildcard.lookahead
                 },
                 parenthesized: {
                     name: Wildcard.parenthesized,
                     defaultValue: false
+                },
+                precMarker: {
+                    name: Wildcard.precMarker
                 }
             },
             superTypes: [TerminalElement.$type]
