@@ -25,9 +25,9 @@ Langium's pipeline:
 
 Three changes to Langium:
 
-1. **Parser-agnostic architecture**: Replace the tight Chevrotain coupling with an abstraction layer. Supported backends: Chevrotain (default/backward-compatible), Lezer, Tree-sitter.
-2. **Incremental parsing**: On keystroke, only re-parse the changed region (Lezer and Tree-sitter support this natively). Currently Langium re-parses the entire document.
-3. **Extended grammar syntax**: New grammar constructs for precedence markers, external tokenizers, conflict declarations, and token specialization — exposing features from Lezer/Tree-sitter while remaining backward-compatible.
+1. **Parser-agnostic architecture**: Replace the tight Chevrotain coupling with an abstraction layer. Supported backends: Chevrotain (default/backward-compatible), Lezer.
+2. **Incremental parsing**: On keystroke, only re-parse the changed region (Lezer supports this natively). Currently Langium re-parses the entire document.
+3. **Extended grammar syntax**: New grammar constructs for precedence markers, external tokenizers, conflict declarations, and token specialization — exposing features from Lezer while remaining backward-compatible.
 
 ### 1.3 Key Design Decisions (Resolved)
 
@@ -35,7 +35,7 @@ Three changes to Langium:
 |----------|-----------|
 | Precedence for binary operators | Use Langium 4's `infix` rules (precedence inferred from `>` ordering). No changes needed. |
 | Precedence for non-infix rules | New `precedence { }` block + `@precMarker=tag` annotations on alternatives |
-| External tokenizer module format | Platform-specific: TypeScript for Chevrotain/Lezer, C for Tree-sitter |
+| External tokenizer module format | TypeScript modules for Chevrotain/Lezer |
 | Build-time vs runtime compilation | Build-time grammar compilation for all backends |
 | CST representation | **Eliminate Langium's CST entirely for new backends.** Use a thin `SyntaxNode` interface that wraps each backend's native tree. No tree conversion, no inflation. |
 | Priority of grammar extensions | (1) precedence markers, (2) external tokenizers, (3) token specialization, (4) conflict declarations, (5) local token groups |
@@ -96,7 +96,7 @@ interface LeafCstNode extends CstNode {
 **What Lezer/Tree-sitter use instead:**
 - Node type as a string/integer (not a live grammar object)
 - No AST back-pointer (positional queries are fast O(log n) on the tree itself)
-- Compact buffer-based storage (Lezer: 64 bits per node; Tree-sitter: similarly compact)
+- Compact buffer-based storage (Lezer: 64 bits per node)
 
 ### 2.2 Chevrotain Coupling Points
 
@@ -147,18 +147,18 @@ These parts of Langium are already parser-agnostic and should remain largely unt
 └──────────────────┘                           │ (per backend)       │
                                                └────────┬───────────┘
                                                         │
-                        ┌───────────────────────────────┼──────────────────────┐
-                        │                               │                      │
-                        ▼                               ▼                      ▼
-                 ┌─────────────┐               ┌──────────────┐        ┌──────────────┐
-                 │ Chevrotain   │               │ Lezer         │        │ Tree-sitter   │
-                 │ (in-memory   │               │ (.grammar →   │        │ (grammar.js → │
-                 │  interpreted)│               │  parse tables)│        │  WASM parser) │
-                 └──────┬──────┘               └──────┬───────┘        └──────┬───────┘
-                        │                             │                       │
-                        │         ┌───────────────────┘                       │
-                        │         │                                           │
-                        ▼         ▼                                           ▼
+                                  ┌─────────────────────┘
+                                  │                      │
+                                  ▼                      ▼
+                           ┌─────────────┐        ┌──────────────┐
+                           │ Chevrotain   │        │ Lezer         │
+                           │ (in-memory   │        │ (.grammar →   │
+                           │  interpreted)│        │  parse tables)│
+                           └──────┬──────┘        └──────┬───────┘
+                                  │                      │
+                                  │         ┌────────────┘
+                                  │         │
+                                  ▼         ▼
                  ┌─────────────────────────────────────────────────────────────────┐
                  │                    SyntaxNode Interface                          │
                  │  (thin wrapper — each backend wraps its native tree nodes)       │
@@ -195,10 +195,6 @@ packages/
                              #   LezerGrammarTranslator, incremental parsing,
                              #   completion via parse state analysis
 
-  langium-tree-sitter/       # TreeSitterAdapter, TreeSitterSyntaxNode,
-                             #   TreeSitterGrammarTranslator, incremental parsing,
-                             #   WASM integration via web-tree-sitter
-
   langium-lsp/               # All LSP service implementations.
                              #   Depends on langium-core only.
                              #   Backend-agnostic via SyntaxNode interface.
@@ -228,7 +224,6 @@ This is the most important interface in the entire design. It replaces Langium's
  * Each parser backend implements this by wrapping its native tree nodes:
  * - Chevrotain: wraps existing CstNode
  * - Lezer: cursor-based view over Lezer's buffer tree (zero copy)
- * - Tree-sitter: wraps web-tree-sitter SyntaxNode (near 1:1 mapping)
  *
  * Design principles:
  * - No back-pointer to AST (avoids circular references; use positional lookup instead)
@@ -272,7 +267,6 @@ export interface SyntaxNode {
    * Backends determine this differently:
    * - Chevrotain: token is in the keyword set
    * - Lezer: anonymous string tokens
-   * - Tree-sitter: anonymous nodes matching a string literal
    */
   readonly isKeyword: boolean;
 
@@ -343,7 +337,6 @@ export interface ParserAdapter {
    *
    * For Chevrotain: builds in-memory interpreted parser.
    * For Lezer: loads pre-compiled parse tables (built at CLI time).
-   * For Tree-sitter: loads WASM module (built at CLI time).
    */
   configure(grammar: Grammar, config?: ParserAdapterConfig): void;
 
@@ -371,7 +364,6 @@ export interface ParserAdapter {
    * Different backends implement this differently:
    * - Chevrotain: computeContentAssist()
    * - Lezer: analyze parse state at position
-   * - Tree-sitter: analyze valid tokens from parse table state
    */
   getExpectedTokens(text: string, offset: number): ExpectedToken[];
 
@@ -437,7 +429,6 @@ export interface GrammarTranslator {
    * Returns diagnostics for unsupported features.
    *
    * Example: `conflicts` block with Chevrotain → error diagnostic.
-   * Example: `external tokens` without corresponding .c file for Tree-sitter → error.
    */
   validate(grammar: Grammar): TranslationDiagnostic[];
 
@@ -446,7 +437,6 @@ export interface GrammarTranslator {
    *
    * - Chevrotain: serialize grammar JSON (runtime interpretation)
    * - Lezer: write .grammar file, run @lezer/generator → parse tables JS
-   * - Tree-sitter: write grammar.js, run tree-sitter generate → WASM
    */
   translate(grammar: Grammar, outputDir: string): Promise<TranslationResult>;
 }
@@ -595,58 +585,6 @@ export class LezerAdapter implements ParserAdapter {
 
 **LezerSyntaxNode**: Cursor-based view over Lezer's compact buffer tree. Zero copy — never materializes a full node tree. Lezer nodes are 64 bits each in a flat buffer, so this is extremely memory-efficient.
 
-### 5.3 Tree-sitter Adapter
-
-```typescript
-// packages/langium-tree-sitter/src/tree-sitter-adapter.ts
-
-export class TreeSitterAdapter implements ParserAdapter {
-  readonly name = 'tree-sitter';
-  readonly supportsIncremental = true;
-
-  private parser: Parser;      // from web-tree-sitter
-  private previousTree?: Tree;
-
-  configure(grammar: Grammar, config?: ParserAdapterConfig): void {
-    // Load WASM parser module (generated at build time by CLI)
-  }
-
-  parse(text: string): ParseResult {
-    const tree = this.parser.parse(text);
-    this.previousTree = tree;
-    const root = new TreeSitterSyntaxNode(tree.rootNode, text);
-    return { root, incrementalState: tree };
-  }
-
-  parseIncremental(
-    text: string,
-    previousState: IncrementalParseState,
-    changes: readonly TextChange[]
-  ): ParseResult {
-    const oldTree = previousState as Tree;
-    // Apply edits to old tree (marks changed ranges)
-    for (const change of changes) {
-      oldTree.edit({
-        startIndex: change.rangeOffset,
-        oldEndIndex: change.rangeOffset + change.rangeLength,
-        newEndIndex: change.rangeOffset + change.text.length,
-        // Row/column variants also needed — compute from text
-        startPosition: /* ... */,
-        oldEndPosition: /* ... */,
-        newEndPosition: /* ... */,
-      });
-    }
-    // Re-parse with old tree — Tree-sitter reuses unchanged subtrees
-    const newTree = this.parser.parse(text, oldTree);
-    this.previousTree = newTree;
-    const root = new TreeSitterSyntaxNode(newTree.rootNode, text);
-    return { root, incrementalState: newTree };
-  }
-}
-```
-
-**TreeSitterSyntaxNode**: Direct wrapper around `web-tree-sitter`'s `SyntaxNode`. Near 1:1 API mapping — Tree-sitter already has `.type`, `.startIndex`, `.endIndex`, `.text`, `.children`, `.childForFieldName()`, `.isNamed`, `.isMissing`.
-
 ---
 
 ## 6. Grammar Extensions
@@ -675,7 +613,6 @@ Precedence is inferred from `>` ordering. Associativity defaults to left; use `r
 **Backend translation:**
 - Chevrotain: Langium 4 already generates optimized internal rules (50% faster than manual left-factoring)
 - Lezer: `>` levels → `@precedence { power @right, times @left, plus @left, assign @right }` + `!tag` markers
-- Tree-sitter: `>` levels → `prec.right(4, ...)`, `prec.left(3, ...)`, etc.
 
 ### 6.2 Precedence for Non-Infix Rules: `@precMarker=tag`
 
@@ -707,7 +644,6 @@ Expression:
 **Backend translation:**
 - Chevrotain: desugared to rule ordering + left-factoring (with warnings for unsupported cases)
 - Lezer: maps to `!tag` markers in generated `.grammar` file
-- Tree-sitter: maps to `prec(n, ...)` / `prec.left(n, ...)` / `prec.right(n, ...)`
 
 ### 6.3 External Tokenizers
 
@@ -726,9 +662,7 @@ external context IndentationTracker from "./context";
 Block: Indent statements+=Statement+ Dedent;
 ```
 
-The `"./tokenizer"` path resolves per backend:
-- Chevrotain/Lezer: `./tokenizer.ts` or `./tokenizer.js` (TypeScript module)
-- Tree-sitter: `./tokenizer.c` (C external scanner)
+The `"./tokenizer"` path resolves to `./tokenizer.ts` or `./tokenizer.js` (TypeScript module) for both Chevrotain and Lezer.
 
 **Chevrotain tokenizer module interface:**
 ```typescript
@@ -743,13 +677,6 @@ export const tokenizer: ExternalTokenizer = {
 ```typescript
 import { ExternalTokenizer } from '@lezer/lr';
 export const tokenizer = new ExternalTokenizer((input, stack) => { /* ... */ });
-```
-
-**Tree-sitter scanner (C):**
-```c
-#include "tree_sitter/parser.h"
-enum TokenType { INDENT, DEDENT, NEWLINE };
-// Standard tree-sitter external scanner functions
 ```
 
 ### 6.4 Conflict / Ambiguity Declarations
@@ -770,9 +697,8 @@ Expression:
 ```
 
 **Backend support:**
-- Chevrotain: ❌ not supported (emit clear error: "conflicts require Lezer or Tree-sitter backend")
+- Chevrotain: ❌ not supported (emit clear error: "conflicts require Lezer backend")
 - Lezer: maps to `~ambiguity` markers + `@dynamicPrecedence`
-- Tree-sitter: maps to `conflicts` array + `prec.dynamic()`
 
 ### 6.5 Token Specialization
 
@@ -796,7 +722,6 @@ extend ID {
 **Backend support:**
 - Chevrotain: `specialize` → keyword config / `LONGER_ALT`; `extend` → limited (warning)
 - Lezer: `specialize` → `@specialize`; `extend` → `@extend`
-- Tree-sitter: `specialize` → `word` token; `extend` → partial support
 
 ### 6.6 Local Token Groups
 
@@ -815,22 +740,21 @@ Tokens only active when parsing `StringContent`. Prevents interference with main
 **Backend support:**
 - Chevrotain: lexer modes
 - Lezer: `@local tokens` (native)
-- Tree-sitter: external scanner
 
 ### 6.7 Feature Support Matrix
 
-| Grammar Feature | Chevrotain | Lezer | Tree-sitter |
-|----------------|-----------|-------|-------------|
-| Existing Langium grammars | ✅ Full | ✅ Full | ✅ Full |
-| `infix` (Langium 4) | ✅ Native | ✅ Translated | ✅ Translated |
-| `@precMarker=tag` | ⚠️ Desugared | ✅ Native | ✅ Native |
-| `external tokens` | ⚠️ Custom matchers | ✅ Native | ✅ Native (C) |
-| `conflicts` / GLR | ❌ Error | ✅ Native | ✅ Native |
-| `specialize` / `extend` | ⚠️ Partial | ✅ Native | ⚠️ Partial |
-| `local tokens` | ⚠️ Lexer modes | ✅ Native | ⚠️ Ext. scanner |
-| Incremental parsing | ❌ | ✅ | ✅ |
-| Error recovery | ✅ | ✅ | ✅ |
-| Browser support | ✅ Pure JS | ✅ Pure JS | ⚠️ WASM |
+| Grammar Feature | Chevrotain | Lezer |
+|----------------|-----------|-------|
+| Existing Langium grammars | ✅ Full | ✅ Full |
+| `infix` (Langium 4) | ✅ Native | ✅ Translated |
+| `@precMarker=tag` | ⚠️ Desugared | ✅ Native |
+| `external tokens` | ⚠️ Custom matchers | ✅ Native |
+| `conflicts` / GLR | ❌ Error | ✅ Native |
+| `specialize` / `extend` | ⚠️ Partial | ✅ Native |
+| `local tokens` | ⚠️ Lexer modes | ✅ Native |
+| Incremental parsing | ❌ | ✅ |
+| Error recovery | ✅ | ✅ |
+| Browser support | ✅ Pure JS | ✅ Pure JS |
 
 ---
 
@@ -870,7 +794,7 @@ This is populated once from the Grammar AST at startup. O(1) lookups by type nam
 
 Currently: `cstNode.astNode` back-pointer (O(1) per node, but doubles memory).
 
-New approach: Walk the `SyntaxNode` tree from root, using offsets to narrow down, then look up the corresponding AST node. Both Lezer and Tree-sitter support fast positional queries natively.
+New approach: Walk the `SyntaxNode` tree from root, using offsets to narrow down, then look up the corresponding AST node. Lezer supports fast positional queries natively.
 
 ```typescript
 /**
@@ -905,7 +829,6 @@ The formatter is the hardest service to adapt because it walks every token (incl
 **Approach**: `SyntaxNode.children` includes hidden tokens when the backend retains them:
 - Chevrotain: already includes hidden tokens in CST `content`
 - Lezer: hidden tokens are in the tree (as `@skip` matched nodes)
-- Tree-sitter: `extras` (whitespace, comments) are in the tree as extra nodes
 
 The formatter iterates `SyntaxNode` leaves instead of `CstNode` leaves. Same algorithm, different types.
 
@@ -954,7 +877,7 @@ textDocument/didChange (from editor)
 // langium-config.json
 {
   "projectName": "MyLanguage",
-  "parserBackend": "lezer",          // "chevrotain" | "lezer" | "tree-sitter"
+  "parserBackend": "lezer",          // "chevrotain" | "lezer"
   "languages": [{
     "id": "my-language",
     "grammar": "src/language/my-language.langium",
@@ -963,8 +886,7 @@ textDocument/didChange (from editor)
   "out": "src/language/generated",
   "backendConfig": {
     "chevrotain": { "recoveryEnabled": true, "maxLookahead": 3 },
-    "lezer": { "strict": false },
-    "tree-sitter": { "wasmOutput": "parsers/my-language.wasm" }
+    "lezer": { "strict": false }
   }
 }
 ```
@@ -977,7 +899,6 @@ langium generate
 
 # Explicit backend override
 langium generate --backend=lezer
-langium generate --backend=tree-sitter
 
 # What langium generate does per backend:
 
@@ -992,14 +913,6 @@ langium generate --backend=tree-sitter
 #   3. Translate Grammar AST → .grammar file
 #   4. Run @lezer/generator → parse-tables.js
 #   5. Bundle parse tables with LezerAdapter
-
-# Tree-sitter:
-#   1. Parse .langium → Grammar AST
-#   2. Generate ast.ts, module.ts
-#   3. Translate Grammar AST → grammar.js
-#   4. Run tree-sitter generate → parser.c + src/
-#   5. Compile to WASM via emscripten
-#   6. Bundle .wasm with TreeSitterAdapter
 ```
 
 ---
@@ -1042,22 +955,7 @@ langium generate --backend=tree-sitter
 5. Implement completion for Lezer (parse state analysis)
 6. Run full test suite against Lezer backend
 
-### Phase 3: Tree-sitter Adapter (Weeks 8–11)
-
-**Goal**: Working Tree-sitter backend with incremental parsing.
-
-1. Implement `TreeSitterGrammarTranslator`:
-   - Map parser rules → Tree-sitter rule functions
-   - Map `infix` rules → `prec.left()` / `prec.right()` chains
-   - Map terminal rules → `token()` / regex definitions
-   - Map `hidden terminal` → `extras` array
-   - Map keywords → string literals in rules
-2. CLI integration: `langium generate --backend=tree-sitter` runs `tree-sitter generate` + emscripten
-3. Implement `TreeSitterSyntaxNode` (wraps `web-tree-sitter` nodes)
-4. Implement `TreeSitterAdapter` with full and incremental parsing
-5. Run full test suite against Tree-sitter backend
-
-### Phase 4: Grammar Extensions (Weeks 12–15)
+### Phase 3: Grammar Extensions (Weeks 8–11)
 
 **Goal**: New grammar syntax, implemented per backend.
 
@@ -1072,19 +970,17 @@ langium generate --backend=tree-sitter
 3. Implement translation for each feature × each backend (per support matrix)
 4. Emit clear diagnostics for unsupported feature × backend combinations
 
-### Phase 5: Polish (Weeks 16–18)
+### Phase 4: Polish (Weeks 12–14)
 
 1. Performance benchmarks: parse time, memory, incremental re-parse time
 2. Migration guide: existing Langium project → Langium-X
-3. Backend selection guide: when to use which
-4. Example project: one DSL with all three backends
+3. Backend selection guide: when to use Chevrotain vs Lezer
+4. Example project: one DSL with both backends
 5. Documentation for new grammar syntax
 
 ---
 
-## 10. Grammar Translation Reference
-
-### 10.1 Langium → Lezer Translation Table
+## 10. Grammar Translation Reference: Langium → Lezer
 
 | Langium Grammar | Lezer Grammar |
 |----------------|---------------|
@@ -1105,25 +1001,6 @@ langium generate --backend=tree-sitter
 | `infix BinaryExpr on PrimaryExpr: '*' > '+';` | `@precedence { times @left, plus @left }` + `BinaryExpression { expr !times "*" expr \| expr !plus "+" expr }` |
 | `[Ref:ID]` (cross-ref) | `Name` (cross-ref handled at AST level, not parser level) |
 
-### 10.2 Langium → Tree-sitter Translation Table
-
-| Langium Grammar | Tree-sitter grammar.js |
-|----------------|----------------------|
-| `entry Model: ...;` | `rules: { source_file: $ => ... }` |
-| `Person: 'person' name=ID;` | `person: $ => seq('person', field('name', $.identifier))` |
-| `items+=Item*` | `field('items', repeat($.item))` |
-| `terminal ID: /[a-zA-Z_]\w*/;` | `identifier: $ => /[a-zA-Z_]\w*/` |
-| `hidden terminal WS: /\s+/;` | `extras: $ => [/\s+/]` |
-| `hidden terminal ML_COMMENT: ...;` | `extras: $ => [/\s+/, $.comment], comment: $ => ...` |
-| `'keyword'` | `'keyword'` |
-| `A \| B` | `choice($.a, $.b)` |
-| `A?` | `optional($.a)` |
-| `A*` | `repeat($.a)` |
-| `A+` | `repeat1($.a)` |
-| `(A B)` | `seq($.a, $.b)` |
-| `infix BinaryExpr on P: '*' > '+';` | `binary_expr: $ => choice(prec.left(2, seq($.expr, '*', $.expr)), prec.left(1, seq($.expr, '+', $.expr)))` |
-| `[Ref:ID]` | `$.identifier` (cross-ref at AST level) |
-
 ---
 
 ## 11. Testing Strategy
@@ -1135,8 +1012,7 @@ tests/
   core/                    # SyntaxNode interface tests, AST builder tests
   chevrotain/              # Chevrotain adapter tests (should mirror existing Langium tests)
   lezer/                   # Lezer adapter tests
-  tree-sitter/             # Tree-sitter adapter tests
-  cross-backend/           # Same grammar, same input, all 3 backends → assert same AST
+  cross-backend/           # Same grammar, same input, both backends → assert same AST
   grammar-extensions/      # New syntax features
   incremental/             # Incremental parsing correctness + performance
   lsp/                     # LSP services work with all backends
@@ -1144,7 +1020,7 @@ tests/
 
 ### 11.2 Cross-Backend Conformance Tests
 
-For every grammar in the test suite, parse the same input with all three backends and assert:
+For every grammar in the test suite, parse the same input with both backends and assert:
 - Same AST structure (same `$type`, same property values)
 - Same diagnostics (same error messages, same positions)
 - Same completion results at same cursor positions
@@ -1153,7 +1029,7 @@ This is the primary quality gate. If a backend produces a different AST for the 
 
 ### 11.3 Incremental Parsing Tests
 
-For Lezer and Tree-sitter:
+For Lezer:
 1. Parse a document fully
 2. Apply a small edit (insert a character, delete a line, etc.)
 3. Parse incrementally

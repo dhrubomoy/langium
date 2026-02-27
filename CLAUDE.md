@@ -1,7 +1,7 @@
 # Langium-X: Parser-Agnostic Langium Fork
 
 Langium-X decouples Langium (TypeScript DSL framework with LSP support) from its Chevrotain parser,
-enabling Lezer and Tree-sitter backends with incremental parsing. Full design: [DESIGN.md](DESIGN.md).
+enabling a Lezer backend with incremental parsing. Full design: [DESIGN.md](DESIGN.md).
 Branch: `parser-agnostic-langium`.
 
 ## Monorepo Structure
@@ -24,7 +24,7 @@ examples/
   statemachine/            # Example: state machine DSL
 ```
 
-Future packages (not yet created): `langium-lezer`, `langium-tree-sitter`.
+Future packages (not yet created): `langium-lezer`.
 
 ## Key Interfaces
 
@@ -46,8 +46,8 @@ by node type name, replacing grammarSource back-pointers. `getRuleByName(type)`,
 ## Key Design Decisions
 
 - CST eliminated for new backends; SyntaxNode wraps each backend's native tree (zero copy)
-- Build-time grammar compilation for all backends (no runtime grammar interpretation for Lezer/TS)
-- External tokenizer modules are platform-specific (TS for Chevrotain/Lezer, C for Tree-sitter)
+- Build-time grammar compilation for all backends (no runtime grammar interpretation for Lezer)
+- External tokenizer modules are TypeScript for both Chevrotain and Lezer
 - `$syntaxNode` replaces `$cstNode` on AstNode (with backward-compat alias)
 - GrammarRegistry replaces per-node grammarSource pointers (O(1) lookup by type string)
 - Infix rules (Langium 4) handle binary operator precedence — no changes needed
@@ -93,23 +93,16 @@ Phase file: [docs/phases/PHASE-1.md](docs/phases/PHASE-1.md)
 - [ ] Implement Lezer completion (parse state analysis)
 - [ ] Cross-backend conformance tests
 
-### Phase 3: Tree-sitter Adapter
-- [ ] Implement TreeSitterGrammarTranslator
-- [ ] CLI integration: langium generate --backend=tree-sitter
-- [ ] Implement TreeSitterSyntaxNode
-- [ ] Implement TreeSitterAdapter (full + incremental)
-- [ ] Cross-backend conformance tests
-
-### Phase 4: Grammar Extensions
+### Phase 3: Grammar Extensions
 - [ ] Extend grammar parser (precedence blocks, external tokens, conflicts, specialize/extend, local tokens)
 - [ ] Extend Grammar AST types
 - [ ] Implement translation per feature per backend
 - [ ] Diagnostics for unsupported feature+backend combos
 
-### Phase 5: Polish
+### Phase 4: Polish
 - [ ] Performance benchmarks
 - [ ] Migration guide
-- [ ] Example project with all three backends
+- [ ] Example project with both backends
 - [ ] Documentation
 
 ## Conventions
@@ -143,5 +136,4 @@ Single-package test: `npx vitest run packages/langium/test/parser/chevrotain-syn
 - [docs/phases/PHASE-1.md](docs/phases/PHASE-1.md) — Phase 1 implementation details
 - [Langium upstream](https://github.com/eclipse-langium/langium)
 - [Lezer](https://lezer.codemirror.net/) / [Lezer guide](https://lezer.codemirror.net/docs/guide/)
-- [Tree-sitter](https://tree-sitter.github.io/tree-sitter/)
 - [Chevrotain](https://chevrotain.io/docs/)
