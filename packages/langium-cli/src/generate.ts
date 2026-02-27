@@ -105,6 +105,7 @@ export interface GenerateOptions {
     file?: string;
     mode?: 'development' | 'production';
     watch?: boolean;
+    backend?: 'chevrotain' | 'lezer';
 }
 
 export interface ExtractTypesOptions {
@@ -351,6 +352,47 @@ export async function runGenerator(config: LangiumConfig, options: GenerateOptio
     // module.ts
     const genModule = generateModule(embeddedGrammars, config, configMap);
     await writeWithFail(path.resolve(output, 'module.ts'), genModule, options);
+
+    // Lezer backend: generate Lezer grammar and parse tables
+    const backend = options.backend ?? config.parserBackend ?? 'chevrotain';
+    if (backend === 'lezer') {
+        try {
+            const { LezerGrammarTranslator } = await import('langium-lezer');
+            const translator = new LezerGrammarTranslator();
+            for (const grammar of embeddedGrammars) {
+                const lezerDiags = translator.validate(grammar);
+                const hasLezerErrors = lezerDiags.some(d => d.severity === 'error');
+                for (const diag of lezerDiags) {
+                    if (diag.severity === 'error') {
+                        log('error', options, chalk.red(`[lezer] ${diag.message}`));
+                    } else if (diag.severity === 'warning') {
+                        log('warn', options, chalk.yellow(`[lezer] ${diag.message}`));
+                    } else {
+                        log('log', options, `[lezer] ${diag.message}`);
+                    }
+                }
+                if (hasLezerErrors) {
+                    return buildResult(false);
+                }
+                const lezerResult = await translator.translate(grammar, output);
+                for (const diag of lezerResult.diagnostics) {
+                    if (diag.severity === 'error') {
+                        log('error', options, chalk.red(`[lezer] ${diag.message}`));
+                    } else if (diag.severity === 'warning') {
+                        log('warn', options, chalk.yellow(`[lezer] ${diag.message}`));
+                    }
+                }
+                if (lezerResult.diagnostics.some(d => d.severity === 'error')) {
+                    return buildResult(false);
+                }
+                log('log', options, `Generated Lezer parse tables for ${chalk.white.bold(grammar.name ?? 'language')}`);
+            }
+        } catch (e) {
+            log('error', options, chalk.red(`Failed to load langium-lezer package. Install it with: npm install langium-lezer`));
+            log('error', options, chalk.red(String(e)));
+            return buildResult(false);
+        }
+    }
 
     // additional artifacts
     for (const grammar of embeddedGrammars) {

@@ -700,7 +700,34 @@ Expression:
 - Chevrotain: ❌ not supported (emit clear error: "conflicts require Lezer backend")
 - Lezer: maps to `~ambiguity` markers + `@dynamicPrecedence`
 
-### 6.5 Token Specialization
+### 6.5 Backend-Native Terminal Syntax
+
+Terminal rules support two body formats:
+
+```langium
+// Regex body — portable. Chevrotain native, Lezer best-effort conversion for simple patterns.
+terminal ID: /[a-zA-Z_]\w*/;
+terminal INT: /[0-9]+/;
+
+// String body — backend-native. Passed verbatim to the target backend.
+// Use when regex can't express what you need, or for precise control.
+terminal ID: '$[a-zA-Z_] $[a-zA-Z0-9_]*';
+terminal INT: '@digit+';
+```
+
+**Regex bodies** (`/pattern/`) work with Chevrotain natively. For Lezer, the translator does best-effort conversion of simple patterns (`\s` → `@whitespace`, `\d` → `@digit`, `\w` → `$[a-zA-Z0-9_]`, `.` → `_`). Complex regex features (backreferences, lookahead/lookbehind) produce an error diagnostic suggesting a rewrite with string body syntax.
+
+**String bodies** (`'lezer syntax'`) are interpreted by the target backend as its native token syntax. The grammar parser already handles string literals — no parser changes needed.
+
+**Backend validation:**
+- Chevrotain + string body → error: "Terminal 'X' uses backend-native token syntax; not supported by Chevrotain. Use regex `/pattern/` instead."
+- Lezer + regex with unsupported features → error: "Terminal 'X' uses regex features unsupported by Lezer. Rewrite using string body syntax: `terminal X: 'lezer_syntax';`"
+- Lezer + string body → pass through verbatim into `@tokens` block
+- Lezer + simple regex → best-effort conversion (no error)
+
+This is consistent with `external tokens`, `conflicts`, and `local tokens` — some grammar features are backend-specific. The feature support matrix reflects this.
+
+### 6.6 Token Specialization
 
 ```langium
 terminal ID: /[a-zA-Z_]\w*/;
@@ -723,7 +750,7 @@ extend ID {
 - Chevrotain: `specialize` → keyword config / `LONGER_ALT`; `extend` → limited (warning)
 - Lezer: `specialize` → `@specialize`; `extend` → `@extend`
 
-### 6.6 Local Token Groups
+### 6.7 Local Token Groups
 
 ```langium
 StringLiteral: '"' content=StringContent* '"';
@@ -741,7 +768,7 @@ Tokens only active when parsing `StringContent`. Prevents interference with main
 - Chevrotain: lexer modes
 - Lezer: `@local tokens` (native)
 
-### 6.7 Feature Support Matrix
+### 6.8 Feature Support Matrix
 
 | Grammar Feature | Chevrotain | Lezer |
 |----------------|-----------|-------|
@@ -749,6 +776,8 @@ Tokens only active when parsing `StringContent`. Prevents interference with main
 | `infix` (Langium 4) | ✅ Native | ✅ Translated |
 | `@precMarker=tag` | ⚠️ Desugared | ✅ Native |
 | `external tokens` | ⚠️ Custom matchers | ✅ Native |
+| Terminal regex body (`/pattern/`) | ✅ Native | ⚠️ Best-effort conversion |
+| Terminal string body (`'native'`) | ❌ Error | ✅ Verbatim passthrough |
 | `conflicts` / GLR | ❌ Error | ✅ Native |
 | `specialize` / `extend` | ⚠️ Partial | ✅ Native |
 | `local tokens` | ⚠️ Lexer modes | ✅ Native |
@@ -988,7 +1017,8 @@ langium generate --backend=lezer
 | `Person: 'person' name=ID;` | `Person { "person" Name }` (Name is token) |
 | `items+=Item*` | `Item*` (field tracked externally) |
 | `name=ID` | `Name` (field tracked externally) |
-| `terminal ID: /[a-zA-Z_]\w*/;` | `@tokens { Name { @asciiLetter (@asciiLetter | @digit | "_")* } }` |
+| `terminal ID: /[a-zA-Z_]\w*/;` | `@tokens { Name { @asciiLetter (@asciiLetter | @digit | "_")* } }` (best-effort regex conversion) |
+| `terminal ID: '$[a-zA-Z_] $[a-zA-Z0-9_]*';` | `@tokens { Name { $[a-zA-Z_] $[a-zA-Z0-9_]* } }` (verbatim passthrough) |
 | `hidden terminal WS: /\s+/;` | `@skip { space } @tokens { space { @whitespace+ } }` |
 | `hidden terminal ML_COMMENT: ...;` | `@skip { ... Comment } @tokens { Comment { "/*" ... "*/" } }` |
 | `fragment X: ...;` | `x { ... }` (lowercase = hidden in tree) |

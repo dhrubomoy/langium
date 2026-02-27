@@ -58,6 +58,7 @@
   "workspaces": [
     "packages/langium-core",
     "packages/langium-chevrotain",
+    "packages/langium-lezer",
     "packages/langium-lsp",
     "packages/langium",
     "packages/langium-railroad",

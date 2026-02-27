@@ -16,6 +16,7 @@ packages/
   langium-vscode/          # VS Code extension
   langium-railroad/        # Railroad diagram generator
   langium-sprotty/         # Sprotty visualization integration
+  langium-lezer/           # Lezer parser backend (incremental parsing, zero-copy SyntaxNode)
   generator-langium/       # Yeoman project generator
 examples/
   arithmetics/             # Example: arithmetic expressions DSL
@@ -23,8 +24,6 @@ examples/
   requirements/            # Example: requirements DSL
   statemachine/            # Example: state machine DSL
 ```
-
-Future packages (not yet created): `langium-lezer`.
 
 ## Key Interfaces
 
@@ -52,11 +51,12 @@ by node type name, replacing grammarSource back-pointers. `getRuleByName(type)`,
 - GrammarRegistry replaces per-node grammarSource pointers (O(1) lookup by type string)
 - Infix rules (Langium 4) handle binary operator precedence — no changes needed
 - New grammar syntax: `@precMarker`, `external tokens`, `conflicts`, `specialize`/`extend`, `local tokens`
+- Terminal rules support regex body (`/pattern/` — portable) and string body (`'native'` — backend-specific verbatim passthrough)
 
 ## Current Phase
 
-**Phase 1: Foundation — SyntaxNode + Chevrotain Adapter**
-Phase file: [docs/phases/PHASE-1.md](docs/phases/PHASE-1.md)
+**Phase 2: Lezer Adapter + Incremental Parsing**
+Phase file: [docs/phases/PHASE-2.md](docs/phases/PHASE-2.md)
 
 ## Implementation Progress
 
@@ -86,12 +86,18 @@ Phase file: [docs/phases/PHASE-1.md](docs/phases/PHASE-1.md)
 - [x] Run full test suite — 1264 passed, 2 pre-existing failures (fs.rmdirSync deprecation)
 
 ### Phase 2: Lezer Adapter + Incremental Parsing
-- [ ] Implement LezerGrammarTranslator
-- [ ] CLI integration: langium generate --backend=lezer
-- [ ] Implement LezerSyntaxNode (cursor-based, zero-copy)
-- [ ] Implement LezerAdapter (full + incremental parsing)
-- [ ] Implement Lezer completion (parse state analysis)
+- [x] Create langium-lezer package (package.json, tsconfig, workspace wiring)
+- [x] Implement FieldMap data structure (field-map.ts)
+- [x] Implement regex-to-lezer converter (regex-to-lezer.ts)
+- [x] Implement LezerGrammarTranslator (Grammar AST → .grammar → parse tables)
+- [x] Implement LezerSyntaxNode (cursor-based, zero-copy, WeakMap cached)
+- [x] Implement LezerAdapter (full + incremental parsing via TreeFragment)
+- [x] Implement Lezer completion (parse state analysis)
+- [x] Create DI module (LezerModule) and service types (LangiumLezerServices)
+- [x] CLI integration: langium generate --backend=lezer (config + CLI flag)
+- [x] Wire into root workspace/tsconfig.build.json — full build passes
 - [ ] Cross-backend conformance tests
+- [ ] Incremental parsing correctness + performance tests
 
 ### Phase 3: Grammar Extensions
 - [ ] Extend grammar parser (precedence blocks, external tokens, conflicts, specialize/extend, local tokens)
