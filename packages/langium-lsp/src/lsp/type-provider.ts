@@ -7,7 +7,7 @@
 import type { LocationLink, TypeDefinitionParams } from 'vscode-languageserver';
 import type { References, AstNode, MaybePromise, LangiumDocument } from 'langium-core';
 import type { LangiumServices } from './lsp-services.js';
-import { Cancellation, CstUtils, SyntaxNodeUtils } from 'langium-core';
+import { Cancellation, SyntaxNodeUtils } from 'langium-core';
 
 /**
  * Language-specific service for handling go to type requests.
@@ -33,18 +33,18 @@ export abstract class AbstractTypeDefinitionProvider implements TypeDefinitionPr
         if (rootSyntaxNode) {
             const sourceSyntaxNode = SyntaxNodeUtils.findDeclarationSyntaxNodeAtOffset(rootSyntaxNode, document.textDocument.offsetAt(params.position));
             if (sourceSyntaxNode) {
-                // Bridge: references.findDeclarations still requires CstNode
                 const astNode = SyntaxNodeUtils.findAstNodeForSyntaxNode(sourceSyntaxNode);
-                if (!astNode?.$cstNode) return undefined;
-                const sourceCstNode = CstUtils.findDeclarationNodeAtOffset(astNode.$cstNode, document.textDocument.offsetAt(params.position));
-                if (!sourceCstNode) return undefined;
-                const nodeDeclarations = this.references.findDeclarations(sourceCstNode);
+                if (!astNode) return undefined;
+                const nodeDeclarations = this.references.findDeclarationsSN(astNode, sourceSyntaxNode);
                 const links: LocationLink[] = [];
                 for (const node of nodeDeclarations) {
                     const location = await this.collectGoToTypeLocationLinks(node, cancelToken);
                     if (location) {
                         links.push(...location);
                     }
+                }
+                if (links.length > 0) {
+                    return links;
                 }
             }
         }

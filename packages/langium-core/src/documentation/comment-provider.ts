@@ -9,6 +9,7 @@ import { isAstNodeWithComment } from '../serializer/json-serializer.js';
 import type { LangiumCoreServices } from '../services.js';
 import type { AstNode } from '../syntax-tree.js';
 import { findCommentNode } from '../utils/cst-utils.js';
+import { findCommentSyntaxNode } from '../utils/syntax-node-utils.js';
 
 /**
  * Provides comments for AST nodes.
@@ -31,6 +32,9 @@ export class DefaultCommentProvider implements CommentProvider {
         if(isAstNodeWithComment(node)) {
             return node.$comment;
         }
-        return findCommentNode(node.$cstNode, this.grammarConfig().multilineCommentRules)?.text;
+        const commentRules = this.grammarConfig().multilineCommentRules;
+        // Prefer SyntaxNode path; fall back to CstNode for backward compat
+        return findCommentSyntaxNode(node.$syntaxNode, commentRules)?.text
+            ?? findCommentNode(node.$cstNode, commentRules)?.text;
     }
 }

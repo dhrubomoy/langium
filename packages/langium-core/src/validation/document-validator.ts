@@ -13,6 +13,7 @@ import type { LangiumDocument } from '../workspace/documents.js';
 import type { DiagnosticData, DiagnosticInfo, ValidationAcceptor, ValidationCategory, ValidationRegistry, ValidationSeverity } from './validation-registry.js';
 import { CancellationToken } from '../utils/cancellation.js';
 import { findNodeForKeyword, findNodeForProperty } from '../utils/grammar-utils.js';
+import { findNodeForKeywordSN, findNodeForPropertySN } from '../utils/syntax-node-utils.js';
 import { streamAst } from '../utils/ast-utils.js';
 import { interruptAndCheck, isOperationCancelled } from '../utils/promise-utils.js';
 import { diagnosticData } from './validation-registry.js';
@@ -291,6 +292,17 @@ export class DefaultDocumentValidator implements DocumentValidator {
 export function getDiagnosticRange<N extends AstNode>(info: DiagnosticInfo<N, string>): Range {
     if (info.range) {
         return info.range;
+    }
+    // Prefer SyntaxNode path; fall back to CstNode for backward compat
+    const syntaxNode = info.node.$syntaxNode;
+    if (syntaxNode) {
+        let targetNode = syntaxNode;
+        if (typeof info.property === 'string') {
+            targetNode = findNodeForPropertySN(syntaxNode, info.property, info.index) ?? syntaxNode;
+        } else if (typeof info.keyword === 'string') {
+            targetNode = findNodeForKeywordSN(syntaxNode, info.keyword, info.index) ?? syntaxNode;
+        }
+        return targetNode.range;
     }
     let cstNode: CstNode | undefined;
     if (typeof info.property === 'string') {

@@ -14,7 +14,7 @@ import type {
 import { SymbolKind } from 'vscode-languageserver';
 import type { GrammarConfig, NameProvider, References, AstNode, LangiumDocument, LangiumDocuments, MaybePromise } from 'langium-core';
 import type { LangiumServices } from './lsp-services.js';
-import { CstUtils, SyntaxNodeUtils, URI } from 'langium-core';
+import { SyntaxNodeUtils, URI } from 'langium-core';
 
 /**
  * Language-specific service for handling type hierarchy requests.
@@ -52,23 +52,14 @@ export abstract class AbstractTypeHierarchyProvider implements TypeHierarchyProv
             return undefined;
         }
 
-        // Bridge to CstNode for references.findDeclarationNodes()
         const astNode = SyntaxNodeUtils.findAstNodeForSyntaxNode(targetNode);
-        if (!astNode?.$cstNode) {
+        if (!astNode) {
             return undefined;
         }
-        const cstNode = CstUtils.findDeclarationNodeAtOffset(
-            astNode.$cstNode,
-            document.textDocument.offsetAt(params.position),
-            this.grammarConfig.nameRegexp,
-        );
-        if (!cstNode) {
-            return undefined;
-        }
-        const declarationNodes = this.references.findDeclarationNodes(cstNode);
+        const declarationNodes = this.references.findDeclarationsSN(astNode, targetNode);
         const items: TypeHierarchyItem[] = [];
         for (const declarationNode of declarationNodes) {
-            items.push(...(this.getTypeHierarchyItems(declarationNode.astNode, document) ?? []));
+            items.push(...(this.getTypeHierarchyItems(declarationNode, document) ?? []));
         }
         return items;
     }

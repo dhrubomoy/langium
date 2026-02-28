@@ -9,6 +9,7 @@ import type { ChevrotainSyntaxNode } from '../parser/chevrotain-syntax-node.js';
 import type { SyntaxNode } from '../parser/syntax-node.js';
 import type { AstNode } from '../syntax-tree.js';
 import type { Stream, TreeStream } from './stream.js';
+import type { DocumentSegment } from '../workspace/documents.js';
 import { wrapCstNode } from '../parser/chevrotain-syntax-node.js';
 import { TreeStreamImpl } from './stream.js';
 import { findNodeForProperty, findNodesForProperty, findNodesForKeyword, findAssignment as findAssignmentCst } from './grammar-utils.js';
@@ -318,6 +319,44 @@ export function getInteriorSyntaxNodes(start: SyntaxNode, end: SyntaxNode): Synt
     }
     const [lo, hi] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
     return siblings.slice(lo + 1, hi) as SyntaxNode[];
+}
+
+// --- Document segment ---
+
+/**
+ * Converts a SyntaxNode to a DocumentSegment for use in LSP responses.
+ * SyntaxNode already carries all required positional information.
+ */
+export function toDocumentSegmentSN(node: SyntaxNode): DocumentSegment;
+export function toDocumentSegmentSN(node?: SyntaxNode): DocumentSegment | undefined;
+export function toDocumentSegmentSN(node?: SyntaxNode): DocumentSegment | undefined {
+    if (!node) {
+        return undefined;
+    }
+    const { offset, end, range } = node;
+    return {
+        range,
+        offset,
+        end,
+        length: end - offset
+    };
+}
+
+// --- Containment check ---
+
+/**
+ * Checks whether `child` is a descendant of `parent` by walking up the parent chain.
+ * Mirrors `isChildNode` from cst-utils.ts.
+ */
+export function isChildSyntaxNode(child: SyntaxNode, parent: SyntaxNode): boolean {
+    let current: SyntaxNode | null = child;
+    while (current?.parent) {
+        current = current.parent;
+        if (current === parent) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // --- AST mapping ---

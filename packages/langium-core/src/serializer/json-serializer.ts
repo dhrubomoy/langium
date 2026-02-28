@@ -8,10 +8,12 @@ import { URI } from 'vscode-uri';
 import type { CommentProvider } from '../documentation/comment-provider.js';
 import type { NameProvider } from '../references/name-provider.js';
 import type { LangiumCoreServices } from '../services.js';
+import type { SyntaxNode } from '../parser/syntax-node.js';
 import type { AstNode, CstNode, GenericAstNode, MultiReference, MultiReferenceItem, Mutable, Reference } from '../syntax-tree.js';
 import { isAstNode, isMultiReference, isReference } from '../syntax-tree.js';
 import { getDocument } from '../utils/ast-utils.js';
 import { findNodesForProperty } from '../utils/grammar-utils.js';
+import { findNodesForPropertySN } from '../utils/syntax-node-utils.js';
 import type { AstNodeLocator } from '../workspace/ast-node-locator.js';
 import type { DocumentSegment, LangiumDocument, LangiumDocuments } from '../workspace/documents.js';
 
@@ -208,7 +210,7 @@ export class DefaultJsonSerializer implements JsonSerializer {
             }
             if (sourceText && !key) {
                 astNode ??= { ...value };
-                astNode.$sourceText = value.$cstNode?.text;
+                astNode.$sourceText = (value.$syntaxNode ?? value.$cstNode)?.text;
             }
             if (comments) {
                 astNode ??= { ...value };
@@ -224,19 +226,33 @@ export class DefaultJsonSerializer implements JsonSerializer {
     }
 
     protected addAstNodeRegionWithAssignmentsTo(node: AstNodeWithTextRegion) {
-        const createDocumentSegment: (cstNode: CstNode) => AstNodeRegionWithAssignments = cstNode => <DocumentSegment>{
-            offset: cstNode.offset,
-            end: cstNode.end,
-            length: cstNode.length,
-            range: cstNode.range,
-        };
+        const createSegment = (n: SyntaxNode | CstNode): AstNodeRegionWithAssignments => (<DocumentSegment>{
+            offset: n.offset,
+            end: n.end,
+            length: n.length,
+            range: n.range,
+        });
 
-        if (node.$cstNode) {
-            const textRegion = node.$textRegion = createDocumentSegment(node.$cstNode);
+        // Prefer SyntaxNode path; fall back to CstNode for backward compat
+        const syntaxNode = node.$syntaxNode;
+        if (syntaxNode) {
+            const textRegion = node.$textRegion = createSegment(syntaxNode);
             const assignments: Record<string, DocumentSegment[]> = textRegion.assignments = {};
 
             Object.keys(node).filter(key => !key.startsWith('$')).forEach(key => {
-                const propertyAssignments = findNodesForProperty(node.$cstNode, key).map(createDocumentSegment);
+                const propertyAssignments = findNodesForPropertySN(syntaxNode, key).map(createSegment);
+                if (propertyAssignments.length !== 0) {
+                    assignments[key] = propertyAssignments;
+                }
+            });
+
+            return node;
+        } else if (node.$cstNode) {
+            const textRegion = node.$textRegion = createSegment(node.$cstNode);
+            const assignments: Record<string, DocumentSegment[]> = textRegion.assignments = {};
+
+            Object.keys(node).filter(key => !key.startsWith('$')).forEach(key => {
+                const propertyAssignments = findNodesForProperty(node.$cstNode, key).map(createSegment);
                 if (propertyAssignments.length !== 0) {
                     assignments[key] = propertyAssignments;
                 }

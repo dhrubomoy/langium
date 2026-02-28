@@ -6,16 +6,19 @@
 
 import type { LangiumCoreServices } from '../services.js';
 import type { AstNode, CstNode, GenericAstNode } from '../syntax-tree.js';
+import type { SyntaxNode } from '../parser/syntax-node.js';
 import type { Stream } from '../utils/stream.js';
 import type { ReferenceDescription } from '../workspace/ast-descriptions.js';
 import type { AstNodeLocator } from '../workspace/ast-node-locator.js';
 import type { IndexManager } from '../workspace/index-manager.js';
+import type { GrammarRegistry } from '../grammar/grammar-registry.js';
 import type { NameProvider } from './name-provider.js';
 import type { URI } from '../utils/uri-utils.js';
 import { findAssignment } from '../utils/grammar-utils.js';
 import { isMultiReference, isReference } from '../syntax-tree.js';
 import { getDocument, getReferenceNodes, streamAst, streamReferences } from '../utils/ast-utils.js';
 import { isChildNode, toDocumentSegment } from '../utils/cst-utils.js';
+import { findAssignmentSN, isChildSyntaxNode, toDocumentSegmentSN } from '../utils/syntax-node-utils.js';
 import { stream } from '../utils/stream.js';
 import { UriUtils } from '../utils/uri-utils.js';
 import { isCrossReference } from '../languages/generated/ast.js';
@@ -43,6 +46,24 @@ export interface References {
     findDeclarationNodes(sourceCstNode: CstNode): CstNode[];
 
     /**
+     * SyntaxNode-based variant of {@link findDeclarations}.
+     * Works with any parser backend (Chevrotain, Lezer, etc.).
+     *
+     * @param sourceAstNode The AstNode containing the source syntax node.
+     * @param sourceSyntaxNode The leaf SyntaxNode at the cursor position.
+     */
+    findDeclarationsSN(sourceAstNode: AstNode, sourceSyntaxNode: SyntaxNode): AstNode[];
+
+    /**
+     * SyntaxNode-based variant of {@link findDeclarationNodes}.
+     * Returns target SyntaxNodes instead of CstNodes.
+     *
+     * @param sourceAstNode The AstNode containing the source syntax node.
+     * @param sourceSyntaxNode The leaf SyntaxNode at the cursor position.
+     */
+    findDeclarationNodesSN(sourceAstNode: AstNode, sourceSyntaxNode: SyntaxNode): SyntaxNode[];
+
+    /**
      * Finds all references to the target node as references (local references) or reference descriptions.
      *
      * @param targetNode Specified target node whose references should be returned
@@ -66,6 +87,7 @@ export class DefaultReferences implements References {
     protected readonly index: IndexManager;
     protected readonly nodeLocator: AstNodeLocator;
     protected readonly documents: LangiumDocuments;
+    protected readonly grammarRegistry: GrammarRegistry;
     protected hasMultiReference: boolean;
 
     constructor(services: LangiumCoreServices) {
@@ -73,6 +95,7 @@ export class DefaultReferences implements References {
         this.index = services.shared.workspace.IndexManager;
         this.nodeLocator = services.workspace.AstNodeLocator;
         this.documents = services.shared.workspace.LangiumDocuments;
+        this.grammarRegistry = services.grammar.GrammarRegistry;
         this.hasMultiReference = streamAst(services.Grammar).some(node => isCrossReference(node) && node.isMulti);
     }
 
@@ -157,6 +180,45 @@ export class DefaultReferences implements References {
         return cstNodes;
     }
 
+    findDeclarationsSN(sourceAstNode: AstNode, sourceSyntaxNode: SyntaxNode): AstNode[] {
+        // Use findAssignmentSN to find the grammar Assignment for the syntax node
+        // (bridges to CstNode-based findAssignment for Chevrotain)
+        const assignment = findAssignmentSN(sourceSyntaxNode);
+        if (assignment) {
+            const reference = (sourceAstNode as GenericAstNode)[assignment.feature];
+
+            if (isReference(reference) || isMultiReference(reference)) {
+                return getReferenceNodes(reference);
+            } else if (Array.isArray(reference)) {
+                for (const ref of reference) {
+                    if ((isReference(ref) || isMultiReference(ref)) && ref.$refNode
+                        && ref.$refNode.offset <= sourceSyntaxNode.offset
+                        && ref.$refNode.end >= sourceSyntaxNode.end) {
+                        return getReferenceNodes(ref);
+                    }
+                }
+            }
+        }
+        // Check if source syntax node is the name node (or part of it)
+        const nameSyntaxNode = this.nameProvider.getNameSyntaxNode(sourceAstNode);
+        if (nameSyntaxNode && (nameSyntaxNode === sourceSyntaxNode || isChildSyntaxNode(sourceSyntaxNode, nameSyntaxNode))) {
+            return this.getSelfNodes(sourceAstNode);
+        }
+        return [];
+    }
+
+    findDeclarationNodesSN(sourceAstNode: AstNode, sourceSyntaxNode: SyntaxNode): SyntaxNode[] {
+        const astNodes = this.findDeclarationsSN(sourceAstNode, sourceSyntaxNode);
+        const syntaxNodes: SyntaxNode[] = [];
+        for (const astNode of astNodes) {
+            const sn = this.nameProvider.getNameSyntaxNode(astNode) ?? astNode.$syntaxNode;
+            if (sn) {
+                syntaxNodes.push(sn);
+            }
+        }
+        return syntaxNodes;
+    }
+
     findReferences(targetNode: AstNode, options: FindReferencesOptions): Stream<ReferenceDescription> {
         const refs: ReferenceDescription[] = [];
         if (options.includeDeclaration) {
@@ -174,8 +236,10 @@ export class DefaultReferences implements References {
         const selfNodes = this.getSelfNodes(targetNode);
         const references: ReferenceDescription[] = [];
         for (const selfNode of selfNodes) {
-            const nameNode = this.nameProvider.getNameNode(selfNode);
-            if (nameNode) {
+            // Prefer SyntaxNode path; fall back to CstNode for backward compat
+            const segment = toDocumentSegmentSN(this.nameProvider.getNameSyntaxNode(selfNode))
+                ?? toDocumentSegment(this.nameProvider.getNameNode(selfNode));
+            if (segment) {
                 const doc = getDocument(selfNode);
                 const path = this.nodeLocator.getAstNodePath(selfNode);
                 references.push({
@@ -183,7 +247,7 @@ export class DefaultReferences implements References {
                     sourcePath: path,
                     targetUri: doc.uri,
                     targetPath: path,
-                    segment: toDocumentSegment(nameNode),
+                    segment,
                     local: true
                 });
             }

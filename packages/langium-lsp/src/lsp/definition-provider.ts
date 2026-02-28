@@ -8,7 +8,7 @@ import type { DefinitionParams } from 'vscode-languageserver';
 import type { GrammarConfig, NameProvider, References, SyntaxNode, MaybePromise, LangiumDocument } from 'langium-core';
 import type { LangiumServices } from './lsp-services.js';
 import { LocationLink } from 'vscode-languageserver';
-import { AstUtils, Cancellation, CstUtils, SyntaxNodeUtils, wrapCstNode } from 'langium-core';
+import { AstUtils, Cancellation, SyntaxNodeUtils } from 'langium-core';
 
 /**
  * Language-specific service for handling go to definition requests.
@@ -78,25 +78,23 @@ export class DefaultDefinitionProvider implements DefinitionProvider {
 
     protected findLinks(source: SyntaxNode): GoToLink[] {
         const datatypeSourceNode = SyntaxNodeUtils.getDatatypeSyntaxNode(source) ?? source;
-        // Bridge: references.findDeclarationNodes still requires CstNode
         const astNode = SyntaxNodeUtils.findAstNodeForSyntaxNode(source);
-        if (!astNode?.$cstNode) {
+        if (!astNode) {
             return [];
         }
-        const sourceCstNode = CstUtils.findDeclarationNodeAtOffset(astNode.$cstNode, source.offset, this.grammarConfig.nameRegexp);
-        if (!sourceCstNode) {
-            return [];
-        }
-        const targets = this.references.findDeclarationNodes(sourceCstNode);
+        const targets = this.references.findDeclarationNodesSN(astNode, source);
         const links: GoToLink[] = [];
         for (const target of targets) {
-            const targetDocument = AstUtils.getDocument(target.astNode);
-            if (targets && targetDocument) {
-                links.push({
-                    source: datatypeSourceNode,
-                    target: wrapCstNode(target),
-                    targetDocument
-                });
+            const targetAstNode = SyntaxNodeUtils.findAstNodeForSyntaxNode(target);
+            if (targetAstNode) {
+                const targetDocument = AstUtils.getDocument(targetAstNode);
+                if (targetDocument) {
+                    links.push({
+                        source: datatypeSourceNode,
+                        target,
+                        targetDocument
+                    });
+                }
             }
         }
         return links;

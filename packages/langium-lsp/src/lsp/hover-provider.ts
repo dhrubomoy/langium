@@ -5,9 +5,9 @@
  ******************************************************************************/
 
 import type { Hover, HoverParams } from 'vscode-languageserver';
-import type { GrammarConfig, References, AstNode, MaybePromise, LangiumDocument, DocumentationProvider } from 'langium-core';
+import type { GrammarConfig, GrammarRegistry, References, AstNode, MaybePromise, LangiumDocument, DocumentationProvider } from 'langium-core';
 import type { LangiumServices } from './lsp-services.js';
-import { Cancellation, CstUtils, SyntaxNodeUtils, isJSDoc, parseJSDoc, isAstNodeWithComment } from 'langium-core';
+import { Cancellation, SyntaxNodeUtils, isJSDoc, parseJSDoc, isAstNodeWithComment, CstUtils, isLeafCstNode } from 'langium-core';
 
 /**
  * Language-specific service for handling hover requests.
@@ -26,25 +26,25 @@ export abstract class AstNodeHoverProvider implements HoverProvider {
 
     protected readonly references: References;
     protected readonly grammarConfig: GrammarConfig;
+    protected readonly grammarRegistry: GrammarRegistry;
 
     constructor(services: LangiumServices) {
         this.references = services.references.References;
         this.grammarConfig = services.parser.GrammarConfig;
+        this.grammarRegistry = services.grammar.GrammarRegistry;
     }
 
     async getHoverContent(document: LangiumDocument, params: HoverParams): Promise<Hover | undefined> {
         const rootSyntaxNode = document.parseResult?.value?.$syntaxNode;
-        const rootNode = document.parseResult?.value?.$cstNode;
         if (rootSyntaxNode) {
             const offset = document.textDocument.offsetAt(params.position);
             const syntaxNode = SyntaxNodeUtils.findDeclarationSyntaxNodeAtOffset(rootSyntaxNode, offset, this.grammarConfig.nameRegexp);
             if (syntaxNode && syntaxNode.offset + syntaxNode.length > offset) {
-                // Use CstNode-based findDeclarations for backward compatibility
-                // (references.findDeclarations still expects CstNode)
-                const cstNode = rootNode ? CstUtils.findDeclarationNodeAtOffset(rootNode, offset, this.grammarConfig.nameRegexp) : undefined;
-                if (cstNode) {
+                // Use SyntaxNode-based findDeclarationsSN
+                const astNode = SyntaxNodeUtils.findAstNodeForSyntaxNode(syntaxNode);
+                if (astNode) {
                     const contents: string[] = [];
-                    const targetNodes = this.references.findDeclarations(cstNode);
+                    const targetNodes = this.references.findDeclarationsSN(astNode, syntaxNode);
                     for (const targetNode of targetNodes) {
                         const content = await this.getAstNodeHoverContent(targetNode);
                         if (typeof content === 'string') {
@@ -61,11 +61,28 @@ export abstract class AstNodeHoverProvider implements HoverProvider {
                     }
                 }
 
-                // Add support for documentation on keywords
-                // Use SyntaxNode.isKeyword instead of grammarSource check
-                // But pass the grammar Keyword element (via CstNode bridge) for comment lookup
-                if (syntaxNode.isKeyword && cstNode) {
-                    return this.getKeywordHoverContent(cstNode.grammarSource as AstNode);
+                // Keyword hover: identify the exact grammar Keyword element
+                if (syntaxNode.isKeyword) {
+                    // CstNode path: grammarSource identifies the exact keyword instance
+                    const parentAstNode = SyntaxNodeUtils.findAstNodeForSyntaxNode(syntaxNode);
+                    const parentCstNode = parentAstNode?.$cstNode;
+                    if (parentCstNode) {
+                        const leafCstNode = CstUtils.findDeclarationNodeAtOffset(parentCstNode, offset, this.grammarConfig.nameRegexp);
+                        if (leafCstNode && isLeafCstNode(leafCstNode) && leafCstNode.grammarSource) {
+                            const result = this.getKeywordHoverContent(leafCstNode.grammarSource);
+                            if (result) {
+                                return result;
+                            }
+                        }
+                    }
+                    // Fallback for non-CstNode backends: try all matching keyword elements
+                    const keywordElements = this.grammarRegistry.getKeywordElements(syntaxNode.text);
+                    for (const keywordElement of keywordElements) {
+                        const result = this.getKeywordHoverContent(keywordElement);
+                        if (result) {
+                            return result;
+                        }
+                    }
                 }
             }
         }

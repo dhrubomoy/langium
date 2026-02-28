@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 import type { LangiumCoreServices } from '../services.js';
-import type { AbstractElement, AbstractRule, Assignment, Grammar } from '../languages/generated/ast.js';
+import type { AbstractElement, AbstractRule, Assignment, Grammar, Keyword } from '../languages/generated/ast.js';
 import { isAssignment, isKeyword, isParserRule, isTerminalRule } from '../languages/generated/ast.js';
 import { streamAllContents } from '../utils/ast-utils.js';
 
@@ -36,6 +36,12 @@ export interface GrammarRegistry {
      * @param ruleName The name of the parser rule.
      */
     getAssignments(ruleName: string): Assignment[];
+
+    /**
+     * Get all grammar Keyword AST nodes that have the given keyword value.
+     * Useful for looking up JSDoc comments attached to keyword definitions.
+     */
+    getKeywordElements(value: string): Keyword[];
 }
 
 /**
@@ -58,6 +64,9 @@ export class DefaultGrammarRegistry implements GrammarRegistry {
 
     /** Rule name → all Assignments in that rule */
     private readonly ruleAssignments = new Map<string, Assignment[]>();
+
+    /** Keyword value → all Keyword grammar nodes with that value */
+    private readonly keywordElements = new Map<string, Keyword[]>();
 
     constructor(services: LangiumCoreServices) {
         this.indexGrammar(services.Grammar);
@@ -83,6 +92,12 @@ export class DefaultGrammarRegistry implements GrammarRegistry {
                         }
                     } else if (isKeyword(node)) {
                         this.keywordSet.add(node.value);
+                        let elements = this.keywordElements.get(node.value);
+                        if (!elements) {
+                            elements = [];
+                            this.keywordElements.set(node.value, elements);
+                        }
+                        elements.push(node);
                     }
                 }
                 this.ruleAssignments.set(rule.name, assignments);
@@ -110,5 +125,9 @@ export class DefaultGrammarRegistry implements GrammarRegistry {
 
     getAssignments(ruleName: string): Assignment[] {
         return this.ruleAssignments.get(ruleName) ?? [];
+    }
+
+    getKeywordElements(value: string): Keyword[] {
+        return this.keywordElements.get(value) ?? [];
     }
 }

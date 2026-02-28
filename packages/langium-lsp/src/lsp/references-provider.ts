@@ -5,10 +5,10 @@
  ******************************************************************************/
 
 import type { ReferenceParams } from 'vscode-languageserver';
-import type { NameProvider, References, LeafCstNode, MaybePromise, LangiumDocument, GrammarConfig } from 'langium-core';
+import type { NameProvider, References, AstNode, SyntaxNode, MaybePromise, LangiumDocument, GrammarConfig } from 'langium-core';
 import type { LangiumServices } from './lsp-services.js';
 import { Location } from 'vscode-languageserver';
-import { Cancellation, CstUtils, SyntaxNodeUtils } from 'langium-core';
+import { Cancellation, SyntaxNodeUtils } from 'langium-core';
 
 /**
  * Language-specific service for handling find references requests.
@@ -50,22 +50,17 @@ export class DefaultReferencesProvider implements ReferencesProvider {
         if (!selectedSyntaxNode) {
             return [];
         }
-        // Bridge: references.findDeclarations still requires CstNode
         const astNode = SyntaxNodeUtils.findAstNodeForSyntaxNode(selectedSyntaxNode);
-        if (!astNode?.$cstNode) {
+        if (!astNode) {
             return [];
         }
-        const selectedCstNode = CstUtils.findDeclarationNodeAtOffset(astNode.$cstNode, offset, this.grammarConfig.nameRegexp);
-        if (!selectedCstNode) {
-            return [];
-        }
-        return this.getReferences(selectedCstNode, params, document);
+        return this.getReferences(astNode, selectedSyntaxNode, params);
     }
 
-    protected getReferences(selectedNode: LeafCstNode, params: ReferenceParams, _document: LangiumDocument): Location[] {
+    protected getReferences(astNode: AstNode, syntaxNode: SyntaxNode, params: ReferenceParams): Location[] {
         const locations: Location[] = [];
-        const targetAstNode = this.references.findDeclarations(selectedNode);
-        for (const target of targetAstNode) {
+        const targetAstNodes = this.references.findDeclarationsSN(astNode, syntaxNode);
+        for (const target of targetAstNodes) {
             const options = { includeDeclaration: params.context.includeDeclaration };
             this.references.findReferences(target, options).forEach(reference => {
                 locations.push(Location.create(reference.sourceUri.toString(), reference.segment.range));

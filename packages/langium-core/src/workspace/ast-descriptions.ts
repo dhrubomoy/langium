@@ -14,6 +14,7 @@ import { CancellationToken } from '../utils/cancellation.js';
 import { isMultiReference, isReference } from '../syntax-tree.js';
 import { getDocument, streamAst, streamReferences } from '../utils/ast-utils.js';
 import { toDocumentSegment } from '../utils/cst-utils.js';
+import { toDocumentSegmentSN } from '../utils/syntax-node-utils.js';
 import { interruptAndCheck } from '../utils/promise-utils.js';
 import { UriUtils } from '../utils/uri-utils.js';
 
@@ -54,14 +55,16 @@ export class DefaultAstNodeDescriptionProvider implements AstNodeDescriptionProv
             throw new Error(`Node at path ${path} has no name.`);
         }
         let nameNodeSegment: DocumentSegment | undefined;
-        const nameSegmentGetter = () => nameNodeSegment ??= toDocumentSegment(this.nameProvider.getNameNode(node) ?? node.$cstNode);
+        const nameSegmentGetter = () => nameNodeSegment ??=
+            toDocumentSegmentSN(this.nameProvider.getNameSyntaxNode(node) ?? node.$syntaxNode)
+            ?? toDocumentSegment(this.nameProvider.getNameNode(node) ?? node.$cstNode);
         return {
             node,
             name,
             get nameSegment() {
                 return nameSegmentGetter();
             },
-            selectionSegment: toDocumentSegment(node.$cstNode),
+            selectionSegment: toDocumentSegmentSN(node.$syntaxNode) ?? toDocumentSegment(node.$cstNode),
             type: node.$type,
             documentUri: doc.uri,
             path

@@ -5,6 +5,7 @@
 ******************************************************************************/
 
 import type { AstNode, CstNode } from '../../syntax-tree.js';
+import type { SyntaxNode } from '../../parser/syntax-node.js';
 import type { Stream } from '../../utils/stream.js';
 import type { ReferenceDescription } from '../../workspace/ast-descriptions.js';
 import type { AbstractParserRule, Action, Assignment, Interface, Type, TypeAttribute } from '../../languages/generated/ast.js';
@@ -13,6 +14,7 @@ import { DefaultReferences } from '../../references/references.js';
 import { getContainerOfType, getDocument } from '../../utils/ast-utils.js';
 import { toDocumentSegment } from '../../utils/cst-utils.js';
 import { findAssignment, findNodeForKeyword, findNodeForProperty, getActionAtElement } from '../../utils/grammar-utils.js';
+import { findAssignmentSN } from '../../utils/syntax-node-utils.js';
 import { stream } from '../../utils/stream.js';
 import { UriUtils } from '../../utils/uri-utils.js';
 import { isAbstractParserRule, isAction, isAssignment, isInfixRule, isInterface, isParserRule, isType, isTypeAttribute } from '../../languages/generated/ast.js';
@@ -36,6 +38,21 @@ export class LangiumGrammarReferences extends DefaultReferences {
             }
         }
         return super.findDeclarations(sourceCstNode);
+    }
+
+    override findDeclarationsSN(sourceAstNode: AstNode, sourceSyntaxNode: SyntaxNode): AstNode[] {
+        const assignment = findAssignmentSN(sourceSyntaxNode);
+        if (assignment && assignment.feature === 'feature') {
+            // Only search for a special declaration if the syntax node is the feature property of the action/assignment
+            if (isAssignment(sourceAstNode)) {
+                const decl = this.findAssignmentDeclaration(sourceAstNode);
+                return decl ? [decl] : [];
+            } else if (isAction(sourceAstNode)) {
+                const decl = this.findActionDeclaration(sourceAstNode);
+                return decl ? [decl] : [];
+            }
+        }
+        return super.findDeclarationsSN(sourceAstNode, sourceSyntaxNode);
     }
 
     override findReferences(targetNode: AstNode, options: FindReferencesOptions): Stream<ReferenceDescription> {

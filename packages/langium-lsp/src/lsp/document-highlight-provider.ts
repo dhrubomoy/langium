@@ -8,7 +8,7 @@ import type { DocumentHighlightParams } from 'vscode-languageserver';
 import type { GrammarConfig, NameProvider, FindReferencesOptions, References, AstNode, MaybePromise, ReferenceDescription, LangiumDocument } from 'langium-core';
 import type { LangiumServices } from './lsp-services.js';
 import { DocumentHighlight } from 'vscode-languageserver';
-import { AstUtils, Cancellation, CstUtils, SyntaxNodeUtils, UriUtils } from 'langium-core';
+import { AstUtils, Cancellation, SyntaxNodeUtils, UriUtils } from 'langium-core';
 
 /**
  * Language-specific service for handling document highlight requests.
@@ -40,31 +40,19 @@ export class DefaultDocumentHighlightProvider implements DocumentHighlightProvid
 
     getDocumentHighlight(document: LangiumDocument, params: DocumentHighlightParams, _cancelToken?: Cancellation.CancellationToken): MaybePromise<DocumentHighlight[] | undefined> {
         const rootSyntaxNode = document.parseResult.value.$syntaxNode;
+        if (!rootSyntaxNode) {
+            return undefined;
+        }
         const offset = document.textDocument.offsetAt(params.position);
-        // Use SyntaxNode-based lookup with CstNode fallback for findDeclarations
         const selectedSyntaxNode = SyntaxNodeUtils.findDeclarationSyntaxNodeAtOffset(rootSyntaxNode, offset, this.grammarConfig.nameRegexp);
         if (!selectedSyntaxNode) {
-            // Fallback to CstNode path
-            const rootNode = document.parseResult.value.$cstNode;
-            if (!rootNode) {
-                return undefined;
-            }
-            const selectedNode = CstUtils.findDeclarationNodeAtOffset(rootNode, offset, this.grammarConfig.nameRegexp);
-            if (!selectedNode) {
-                return undefined;
-            }
-            return this.collectHighlights(document, this.references.findDeclarations(selectedNode));
+            return undefined;
         }
-        // findDeclarations still requires CstNode, so map SyntaxNode → AstNode → CstNode
         const astNode = SyntaxNodeUtils.findAstNodeForSyntaxNode(selectedSyntaxNode);
-        if (!astNode?.$cstNode) {
+        if (!astNode) {
             return undefined;
         }
-        const selectedCstNode = CstUtils.findDeclarationNodeAtOffset(astNode.$cstNode, offset, this.grammarConfig.nameRegexp);
-        if (!selectedCstNode) {
-            return undefined;
-        }
-        return this.collectHighlights(document, this.references.findDeclarations(selectedCstNode));
+        return this.collectHighlights(document, this.references.findDeclarationsSN(astNode, selectedSyntaxNode));
     }
 
     protected collectHighlights(document: LangiumDocument, targets: Iterable<AstNode>): DocumentHighlight[] {

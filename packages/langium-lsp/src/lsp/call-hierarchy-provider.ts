@@ -8,7 +8,7 @@ import type { CallHierarchyIncomingCall, CallHierarchyIncomingCallsParams, CallH
 import type { GrammarConfig, NameProvider, References, AstNode, Stream, ReferenceDescription, LangiumDocument, LangiumDocuments, MaybePromise } from 'langium-core';
 import type { LangiumServices } from './lsp-services.js';
 import { SymbolKind } from 'vscode-languageserver';
-import { Cancellation, CstUtils, SyntaxNodeUtils, URI } from 'langium-core';
+import { Cancellation, SyntaxNodeUtils, URI } from 'langium-core';
 
 /**
  * Language-specific service for handling call hierarchy requests.
@@ -45,27 +45,18 @@ export abstract class AbstractCallHierarchyProvider implements CallHierarchyProv
             return undefined;
         }
 
-        // Bridge to CstNode for references.findDeclarationNodes()
         const astNode = SyntaxNodeUtils.findAstNodeForSyntaxNode(targetNode);
-        if (!astNode?.$cstNode) {
+        if (!astNode) {
             return undefined;
         }
-        const cstNode = CstUtils.findDeclarationNodeAtOffset(
-            astNode.$cstNode,
-            document.textDocument.offsetAt(params.position),
-            this.grammarConfig.nameRegexp
-        );
-        if (!cstNode) {
-            return undefined;
-        }
-        const declarationNodes = this.references.findDeclarationNodes(cstNode);
-        if (!declarationNodes) {
+        const declarationNodes = this.references.findDeclarationsSN(astNode, targetNode);
+        if (declarationNodes.length === 0) {
             return undefined;
         }
 
         const items: CallHierarchyItem[] = [];
         for (const declarationNode of declarationNodes) {
-            items.push(...(this.getCallHierarchyItems(declarationNode.astNode, document) ?? []));
+            items.push(...(this.getCallHierarchyItems(declarationNode, document) ?? []));
         }
         return items;
     }

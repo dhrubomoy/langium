@@ -8,7 +8,7 @@ import type { Position, Range, RenameParams, TextDocumentPositionParams, Workspa
 import type { GrammarConfig, NameProvider, References, SyntaxNode, MaybePromise, LangiumDocument } from 'langium-core';
 import type { LangiumServices } from './lsp-services.js';
 import { TextEdit } from 'vscode-languageserver-types';
-import { Cancellation, CstUtils, SyntaxNodeUtils, isNamed } from 'langium-core';
+import { Cancellation, SyntaxNodeUtils, isNamed } from 'langium-core';
 
 /**
  * Language-specific service for handling rename requests and prepare rename requests.
@@ -64,16 +64,11 @@ export class DefaultRenameProvider implements RenameProvider {
         if (!leafSyntaxNode) {
             return undefined;
         }
-        // Bridge: references.findDeclarations still requires CstNode
         const astNode = SyntaxNodeUtils.findAstNodeForSyntaxNode(leafSyntaxNode);
-        if (!astNode?.$cstNode) {
+        if (!astNode) {
             return undefined;
         }
-        const leafCstNode = CstUtils.findDeclarationNodeAtOffset(astNode.$cstNode, offset, this.grammarConfig.nameRegexp);
-        if (!leafCstNode) {
-            return undefined;
-        }
-        const targetNodes = this.references.findDeclarations(leafCstNode);
+        const targetNodes = this.references.findDeclarationsSN(astNode, leafSyntaxNode);
         if (targetNodes.length === 0) {
             return undefined;
         }
@@ -106,16 +101,11 @@ export class DefaultRenameProvider implements RenameProvider {
             if (!leafSyntaxNode) {
                 return undefined;
             }
-            // Bridge: references.findDeclarations still requires CstNode
             const astNode = SyntaxNodeUtils.findAstNodeForSyntaxNode(leafSyntaxNode);
-            if (!astNode?.$cstNode) {
+            if (!astNode) {
                 return undefined;
             }
-            const leafCstNode = CstUtils.findDeclarationNodeAtOffset(astNode.$cstNode, offset, this.grammarConfig.nameRegexp);
-            if (!leafCstNode) {
-                return undefined;
-            }
-            const isCrossRef = this.references.findDeclarations(leafCstNode).length > 0;
+            const isCrossRef = this.references.findDeclarationsSN(astNode, leafSyntaxNode).length > 0;
             // return range if selected SyntaxNode is the name node or it is a crosslink which points to a declaration
             if (isCrossRef || this.isNameNode(leafSyntaxNode)) {
                 return leafSyntaxNode.range;
