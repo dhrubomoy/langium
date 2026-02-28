@@ -1033,9 +1033,135 @@ langium generate --backend=lezer
 
 ---
 
-## 11. Testing Strategy
+## 11. Lezer Backend Gaps — Incomplete Work
 
-### 11.1 Test Structure
+> **Status**: These items were planned for Phase 1/2 but were not implemented. The Lezer backend currently only works at the parser level (producing SyntaxNode trees). It **cannot** produce ASTs, run LSP services, or integrate with the full Langium document pipeline. All items below must be completed before the Lezer backend is functional for end users.
+
+### 11.1 Critical Infrastructure Gaps
+
+#### Gap 1: No SyntaxNode → AST Builder for Lezer
+
+**File**: `packages/langium-core/src/workspace/documents.ts:318-325`
+
+`DefaultLangiumDocumentFactory.parse()` calls `services.parser.LangiumParser.parse()`, which is Chevrotain-specific. `LangiumParser` simultaneously builds both the CST and AST during parsing using Chevrotain grammar callbacks. There is **no equivalent AST builder for the Lezer backend**.
+
+The Lezer adapter returns a `SyntaxNode` tree, but nothing walks that tree to construct typed AST nodes (`AstNode` with `$type`, `$container`, properties, cross-references, etc.).
+
+**Required**: Implement a generic `AstBuilder` service that takes a `SyntaxNode` tree (from any backend) and produces a `ParseResult<AstNode>`. This should use `GrammarRegistry` for grammar introspection. The `DefaultLangiumDocumentFactory.parse()` method should be updated to use `ParserAdapter.parse()` → `AstBuilder.build()` instead of `LangiumParser.parse()`.
+
+**Also affected**: `DefaultAsyncParser` (`packages/langium-core/src/parser/async-parser.ts:48-50`) — directly accesses `services.parser.LangiumParser`.
+
+#### Gap 2: SyntaxNode → AstNode Mapping Returns `undefined` for Lezer
+
+**File**: `packages/langium-core/src/utils/syntax-node-utils.ts:330-338`
+
+`findAstNodeForSyntaxNode()` only supports `ChevrotainSyntaxNode` (checks `isChevrotainSyntaxNode()` and delegates to `underlyingCstNode.astNode`). For Lezer `SyntaxNode`s, it always returns `undefined`.
+
+This function is used by LSP services to map a position in the document to the AST node at that position — a fundamental operation for hover, go-to-definition, rename, references, etc.
+
+**Required**: Implement positional AST lookup for generic SyntaxNode trees, as described in §7.2 of this document. Walk the AST children using `$syntaxNode` offset ranges to find the deepest match.
+
+#### Gap 3: `References.findDeclarations()` API Requires CstNode
+
+**File**: `packages/langium-core/src/references/references.ts:35,43,79-104,148-155`
+
+The `References` service interface has `findDeclarations(sourceCstNode: CstNode)` and `findDeclarationNodes(sourceCstNode: CstNode)`. These are CstNode-typed APIs. The implementation uses `cstNode.astNode`, `findAssignment(cstNode)` (which uses `cstNode.grammarSource`), and CstNode offset comparison.
+
+Every LSP service that finds declarations goes through this CstNode API: hover, definition, references, rename, document-highlight, call-hierarchy, type-hierarchy, type-provider, implementation-provider.
+
+**Required**: Add `SyntaxNode`-based overloads or replace the `CstNode` parameter with `SyntaxNode`, using `GrammarRegistry` instead of `grammarSource` and `findAstNodeForSyntaxNode()` instead of `cstNode.astNode`.
+
+### 11.2 LSP Services Still Using `$cstNode` (10 files in langium-lsp)
+
+All of these services check `if (!astNode?.$cstNode)` as a guard and return empty/undefined when `$cstNode` is absent. With the Lezer backend, `$cstNode` is always `undefined`, so **every LSP feature silently returns nothing**.
+
+| LSP Service | File | CstNode Usage |
+|-------------|------|---------------|
+| Hover | `lsp/hover-provider.ts:37,44,80` | `CstUtils.findDeclarationNodeAtOffset(rootNode)`, `CstUtils.findCommentNode(node.$cstNode)` |
+| Definition | `lsp/definition-provider.ts:83,86,90` | `CstUtils.findDeclarationNodeAtOffset(astNode.$cstNode)`, `references.findDeclarationNodes(sourceCstNode)` |
+| References | `lsp/references-provider.ts:55,58,62` | `CstUtils.findDeclarationNodeAtOffset(astNode.$cstNode)`, `this.getReferences(selectedCstNode)` |
+| Rename | `lsp/rename-provider.ts:69,72,111,114` | `CstUtils.findDeclarationNodeAtOffset(astNode.$cstNode)` (2 places) |
+| Document Highlight | `lsp/document-highlight-provider.ts:48,60,63` | `CstUtils.findDeclarationNodeAtOffset(rootNode)`, `references.findDeclarations(selectedCstNode)` |
+| Call Hierarchy | `lsp/call-hierarchy-provider.ts:50,53` | `CstUtils.findDeclarationNodeAtOffset(astNode.$cstNode)` |
+| Type Hierarchy | `lsp/type-hierarchy-provider.ts:57,60` | `CstUtils.findDeclarationNodeAtOffset(astNode.$cstNode)` |
+| Type Provider | `lsp/type-provider.ts:38,39` | `CstUtils.findDeclarationNodeAtOffset(astNode.$cstNode)` |
+| Implementation | `lsp/implementation-provider.ts:39,40` | `CstUtils.findDeclarationNodeAtOffset(astNode.$cstNode)` |
+| Formatter | `lsp/formatter.ts:185,484,585,591-592` | `node.$cstNode`, `root.$cstNode`, iterates CstNode tree for formatting |
+
+**Required**: Complete the `$cstNode` → `$syntaxNode` migration in all 10 files. Use `SyntaxNodeUtils` functions instead of `CstUtils`, and update `References` service to accept `SyntaxNode`.
+
+### 11.3 Core Services Using `$cstNode` (8 files in langium-core)
+
+These core services also depend on `$cstNode` and will not work correctly with Lezer:
+
+| Core Service | File | CstNode Usage |
+|-------------|------|---------------|
+| CommentProvider | `documentation/comment-provider.ts:34` | `findCommentNode(node.$cstNode, ...)` — comment extraction fails |
+| NameProvider | `references/name-provider.ts:50-51` | `findNodeForProperty(node.$cstNode, 'name')` — name node lookup fails |
+| AstDescriptions | `workspace/ast-descriptions.ts:57,64` | `nameProvider.getNameNode(node) ?? node.$cstNode` — description segments fail |
+| DocumentValidator | `validation/document-validator.ts:297-301` | `findNodeForProperty(info.node.$cstNode, ...)` — diagnostic ranges default to 0:0 |
+| JsonSerializer | `serializer/json-serializer.ts:211,234-239` | `value.$cstNode?.text`, `node.$cstNode` — serialization loses text regions |
+| GrammarValidator | `grammar/validation/validator.ts:441-488,643-654,1318` | Multiple `findNodeForKeyword(rule.$cstNode, ...)` calls |
+| GrammarNaming | `grammar/references/grammar-naming.ts:26` | `findNodeForProperty(node.$cstNode, 'feature')` |
+| GrammarScope | `grammar/references/grammar-scope.ts:182,189` | `nameProvider.getNameNode(node) ?? node.$cstNode` |
+
+**Note**: The grammar-specific services (GrammarValidator, GrammarNaming, GrammarScope) are only used for the Langium grammar language itself, which is always parsed by Chevrotain. These do NOT need Lezer migration. The first 5 services (CommentProvider through JsonSerializer) are used by all DSLs and DO need migration.
+
+### 11.4 Linker and Reference Resolution
+
+**File**: `packages/langium-core/src/references/linker.ts:76,78,215,260`
+
+The `Linker.buildReference()` and `buildMultiReference()` methods take a `CstNode | undefined` parameter for the reference node (`$refNode`). With Lezer, there is no CstNode, so `$refNode` on all `Reference` objects will be `undefined`. This means:
+
+- `Reference.$refNode` is always `undefined` with Lezer backend
+- Code that checks `ref.$refNode.offset` / `ref.$refNode.end` (like in `References.findDeclarations`) will fail
+- Cross-reference navigation relies on `$refNode` for positional matching
+
+**Required**: The linker needs to accept SyntaxNode-based reference nodes, or `Reference.$refNode` needs a SyntaxNode equivalent.
+
+### 11.5 Code Generation / Tracing
+
+**Files**: `generate/generator-node.ts`, `generate/generator-tracing.ts`, `generate/template-node.ts`, `generate/node-joiner.ts`
+
+These files contain extensive `$cstNode` references in JSDoc examples and in runtime code (e.g., `generator-tracing.ts:95,119-121,132` uses `astNode.$cstNode` for tracing). Code generation tracing will produce incomplete source maps with the Lezer backend.
+
+**Required**: Update tracing to use `$syntaxNode` when `$cstNode` is not available.
+
+### 11.6 Test Infrastructure
+
+**File**: `packages/langium-lsp/src/test/langium-test.ts:623`
+
+The test helper `expectValidation` accesses `options.node.$cstNode`. This means validation test helpers will not work for Lezer-based tests.
+
+### 11.7 Summary of What Works vs What Doesn't with Lezer
+
+| Feature | Works with Lezer? | Notes |
+|---------|-------------------|-------|
+| Parsing to SyntaxNode tree | Yes | `LezerAdapter.parse()` returns `SyntaxNode` tree |
+| Incremental parsing | Yes | `LezerAdapter.parseIncremental()` works |
+| Grammar translation | Yes | `LezerGrammarTranslator` generates Lezer grammar |
+| AST construction | **No** | No SyntaxNode → AST builder exists |
+| Document pipeline | **No** | `DocumentFactory.parse()` requires `LangiumParser` |
+| Linking / cross-references | **No** | Depends on AST construction + CstNode `$refNode` |
+| Validation | **No** | Depends on AST construction + `$cstNode` for diagnostic ranges |
+| Hover | **No** | Requires `$cstNode` for declaration lookup + comment extraction |
+| Go-to-definition | **No** | Requires `$cstNode` for `findDeclarationNodes` |
+| Find references | **No** | Requires `$cstNode` for `findDeclarations` |
+| Rename | **No** | Requires `$cstNode` for `findDeclarations` |
+| Document highlight | **No** | Requires `$cstNode` for `findDeclarations` |
+| Completion | **Partial** | `LezerAdapter.getExpectedTokens()` works, but full completion requires AST |
+| Formatting | **No** | Iterates CstNode tree directly |
+| Semantic tokens | **Partial** | Entry point uses SyntaxNode, but may fall back to CstUtils |
+| Code generation tracing | **No** | Uses `$cstNode` for source mapping |
+| JSON serialization | **Partial** | Falls back gracefully when `$cstNode` is undefined, but loses text regions |
+| Call/Type hierarchy | **No** | Requires `$cstNode` for `findDeclarationNodes` |
+| Workspace symbols | **No** | Depends on AST construction |
+
+---
+
+## 12. Testing Strategy
+
+### 12.1 Test Structure
 
 ```
 tests/
@@ -1048,7 +1174,7 @@ tests/
   lsp/                     # LSP services work with all backends
 ```
 
-### 11.2 Cross-Backend Conformance Tests
+### 12.2 Cross-Backend Conformance Tests
 
 For every grammar in the test suite, parse the same input with both backends and assert:
 - Same AST structure (same `$type`, same property values)
@@ -1057,7 +1183,7 @@ For every grammar in the test suite, parse the same input with both backends and
 
 This is the primary quality gate. If a backend produces a different AST for the same input, that's a bug.
 
-### 11.3 Incremental Parsing Tests
+### 12.3 Incremental Parsing Tests
 
 For Lezer:
 1. Parse a document fully

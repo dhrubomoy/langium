@@ -55,7 +55,11 @@ by node type name, replacing grammarSource back-pointers. `getRuleByName(type)`,
 
 ## Current Phase
 
-**Phase 2: Lezer Adapter + Incremental Parsing**
+**Blocked: Lezer backend integration gaps (Phase 1/2 incomplete items)**
+
+The Lezer backend works at the parser level (SyntaxNode trees, incremental parsing) but
+**cannot produce ASTs or run LSP services**. See DESIGN.md §11 for full gap analysis.
+
 Phase file: [docs/phases/PHASE-2.md](docs/phases/PHASE-2.md)
 
 ## Implementation Progress
@@ -68,20 +72,17 @@ Phase file: [docs/phases/PHASE-2.md](docs/phases/PHASE-2.md)
 - [x] Migrate DocumentBuilder/DocumentFactory to use $syntaxNode
 - [x] Add $syntaxNode to AstNode, deprecate $cstNode
 - [x] AST builder sets $syntaxNode via lazy getter (cst-node-builder.ts)
-- [x] Migrate LSP services from CstNode to SyntaxNode:
-  - [x] Hover provider
-  - [x] Document highlight provider
-  - [x] Completion provider
-  - [x] Formatter (minimal Phase 1 — entry points + DefaultNodeFormatter use SyntaxNode)
-  - [x] Definition/GoTo provider
-  - [x] References provider
-  - [x] Rename provider
-  - [x] Semantic token provider
-  - [x] Folding range provider
-  - [x] Document symbol provider
-  - [x] Signature help provider
-  - [x] Call hierarchy provider
-  - [x] Type hierarchy/provider/implementation providers
+- [ ] **INCOMPLETE: Migrate LSP services from CstNode to SyntaxNode** — all 10 LSP service files
+  in langium-lsp still use `$cstNode` and `CstUtils` as primary path, with SyntaxNode only at
+  entry points. With Lezer backend, `$cstNode` is always undefined so all LSP features return
+  empty results. Files: hover-provider, definition-provider, references-provider, rename-provider,
+  document-highlight-provider, call-hierarchy-provider, type-hierarchy-provider, type-provider,
+  implementation-provider, formatter.
+- [ ] **INCOMPLETE: Migrate core services from CstNode to SyntaxNode** — CommentProvider,
+  NameProvider.getNameNode(), AstDescriptions, DocumentValidator.getDiagnosticRange(),
+  JsonSerializer all use `$cstNode` directly.
+- [ ] **INCOMPLETE: References service API still CstNode-typed** — `findDeclarations(CstNode)`
+  and `findDeclarationNodes(CstNode)` need SyntaxNode overloads.
 - [x] Set up monorepo split (langium-core, langium-chevrotain, langium-lsp)
 - [x] Run full test suite — 1264 passed, 2 pre-existing failures (fs.rmdirSync deprecation)
 
@@ -96,8 +97,19 @@ Phase file: [docs/phases/PHASE-2.md](docs/phases/PHASE-2.md)
 - [x] Create DI module (LezerModule) and service types (LangiumLezerServices)
 - [x] CLI integration: langium generate --backend=lezer (config + CLI flag)
 - [x] Wire into root workspace/tsconfig.build.json — full build passes
-- [x] Cross-backend conformance tests
+- [x] Cross-backend conformance tests (parser-level only)
 - [x] Incremental parsing correctness + performance tests
+- [ ] **INCOMPLETE: SyntaxNode → AST builder** — No generic AST builder exists. `DocumentFactory.parse()`
+  calls `LangiumParser.parse()` (Chevrotain-specific). Need a backend-agnostic AST builder that walks
+  a SyntaxNode tree and constructs typed AstNodes. (See DESIGN.md §11.1 Gap 1)
+- [ ] **INCOMPLETE: SyntaxNode → AstNode positional mapping** — `findAstNodeForSyntaxNode()` in
+  syntax-node-utils.ts returns `undefined` for Lezer SyntaxNodes. (See DESIGN.md §11.1 Gap 2)
+- [ ] **INCOMPLETE: Linker $refNode** — `Linker.buildReference()` takes CstNode for `$refNode`.
+  With Lezer, all Reference.$refNode will be undefined. (See DESIGN.md §11.4)
+- [ ] **INCOMPLETE: DefaultAsyncParser** — Directly accesses `services.parser.LangiumParser`.
+- [ ] **INCOMPLETE: Dual-backend LSP tests** — LSP tests only run against Chevrotain. Test helper
+  `lezer-test-helper.ts` exists in `packages/langium/test/` but tests fail because Lezer cannot
+  produce ASTs through the document pipeline.
 
 ### Phase 3: Grammar Extensions
 - [x] Extend grammar parser (precedence blocks, external tokens, conflicts, specialize/extend, local tokens)
@@ -109,7 +121,7 @@ Phase file: [docs/phases/PHASE-2.md](docs/phases/PHASE-2.md)
 ### Phase 4: Polish
 - [x] Performance benchmarks (packages/langium-lezer/test/benchmark/parse-benchmark.test.ts)
 - [x] Migration guide (docs/MIGRATION.md)
-- [x] Example project with both backends (examples/dual-backend/)
+- [x] Example project with both backends (examples/dual-backend/) — parser-level only
 - [x] Documentation (docs/ARCHITECTURE.md, docs/GRAMMAR-EXTENSIONS.md)
 
 ## Conventions
