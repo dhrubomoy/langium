@@ -107,10 +107,10 @@ Phase file: [docs/phases/PHASE-2.md](docs/phases/PHASE-2.md)
 - [x] Chevrotain backend diagnostics for unsupported features
 
 ### Phase 4: Polish
-- [ ] Performance benchmarks
-- [ ] Migration guide
-- [ ] Example project with both backends
-- [ ] Documentation
+- [x] Performance benchmarks (packages/langium-lezer/test/benchmark/parse-benchmark.test.ts)
+- [x] Migration guide (docs/MIGRATION.md)
+- [x] Example project with both backends (examples/dual-backend/)
+- [x] Documentation (docs/ARCHITECTURE.md, docs/GRAMMAR-EXTENSIONS.md)
 
 ## Conventions
 
