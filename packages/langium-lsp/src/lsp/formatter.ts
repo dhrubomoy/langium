@@ -6,21 +6,7 @@
 
 import type { DocumentFormattingParams, DocumentOnTypeFormattingOptions, DocumentOnTypeFormattingParams, DocumentRangeFormattingParams, FormattingOptions, Range, TextEdit } from 'vscode-languageserver-protocol';
 import type { AstNode, CstNode, Properties, SyntaxNode, MaybePromise, Stream, LangiumDocument, TextDocument } from 'langium-core';
-import { AstUtils, Cancellation, CstUtils, SyntaxNodeUtils, isCompositeCstNode, isLeafCstNode, DONE_RESULT, EMPTY_STREAM, StreamImpl, TreeStreamImpl } from 'langium-core';
-
-/**
- * Bridge a SyntaxNode back to its underlying CstNode.
- * During Phase 1 (Chevrotain only), all SyntaxNodes are ChevrotainSyntaxNodes,
- * so this always succeeds. Returns undefined for future non-Chevrotain backends.
- * @internal
- */
-function toCstNode(syntaxNode: SyntaxNode): CstNode | undefined {
-    if ('underlyingCstNode' in syntaxNode) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return (syntaxNode as any).underlyingCstNode;
-    }
-    return undefined;
-}
+import { AstUtils, Cancellation, SyntaxNodeUtils, wrapCstNode, DONE_RESULT, EMPTY_STREAM, StreamImpl, TreeStreamImpl } from 'langium-core';
 
 /**
  * Language specific service for handling formatting related LSP requests.
@@ -194,7 +180,7 @@ export abstract class AbstractFormatter implements Formatter {
 
     protected abstract format(node: AstNode): void;
 
-    protected nodeModeToKey(node: CstNode, mode: 'prepend' | 'append'): string {
+    protected nodeModeToKey(node: SyntaxNode, mode: 'prepend' | 'append'): string {
         return `${node.offset}:${node.end}:${mode}`;
     }
 
@@ -221,15 +207,14 @@ export abstract class AbstractFormatter implements Formatter {
             document: document.textDocument
         };
         const edits: TextEdit[] = [];
-        const cstTreeStream = this.iterateCstTree(document, context);
-        const iterator = cstTreeStream.iterator();
-        let lastNode: CstNode | undefined;
-        let result: IteratorResult<CstNode>;
+        const treeStream = this.iterateCstTree(document, context);
+        const iterator = treeStream.iterator();
+        let lastNode: SyntaxNode | undefined;
+        let result: IteratorResult<SyntaxNode>;
         do {
             result = iterator.next();
             if (!result.done) {
                 const node = result.value;
-                const isLeaf = isLeafCstNode(node);
                 const prependKey = this.nodeModeToKey(node, 'prepend');
                 const prependFormatting = formattings.get(prependKey);
                 formattings.delete(prependKey);
@@ -245,7 +230,7 @@ export abstract class AbstractFormatter implements Formatter {
                 const appendFormatting = formattings.get(appendKey);
                 formattings.delete(appendKey);
                 if (appendFormatting) {
-                    const nextNode = CstUtils.getNextNode(node);
+                    const nextNode = SyntaxNodeUtils.getNextSyntaxNode(node);
                     if (nextNode) {
                         const nodeEdits = this.createTextEdit(node, nextNode, appendFormatting, context);
                         for (const edit of nodeEdits) {
@@ -256,7 +241,7 @@ export abstract class AbstractFormatter implements Formatter {
                     }
                 }
 
-                if (!prependFormatting && node.hidden) {
+                if (!prependFormatting && node.isHidden) {
                     const hiddenEdits = this.createHiddenTextEdits(lastNode, node, undefined, context);
                     for (const edit of hiddenEdits) {
                         if (edit && this.insideRange(edit.range, range)) {
@@ -264,7 +249,7 @@ export abstract class AbstractFormatter implements Formatter {
                         }
                     }
                 }
-                if (isLeaf) {
+                if (node.isLeaf) {
                     lastNode = node;
                 }
             }
@@ -273,7 +258,7 @@ export abstract class AbstractFormatter implements Formatter {
         return edits;
     }
 
-    protected createHiddenTextEdits(previous: CstNode | undefined, hidden: CstNode, formatting: FormattingAction | undefined, context: FormattingContext): TextEdit[] {
+    protected createHiddenTextEdits(previous: SyntaxNode | undefined, hidden: SyntaxNode, formatting: FormattingAction | undefined, context: FormattingContext): TextEdit[] {
         // Don't format the hidden node if it is on the same line as its previous node
         const startLine = hidden.range.start.line;
         if (previous && previous.range.end.line === startLine) {
@@ -371,8 +356,8 @@ export abstract class AbstractFormatter implements Formatter {
         return (context.options.insertSpaces ? context.options.tabSize : 1) * indentation;
     }
 
-    protected createTextEdit(a: CstNode | undefined, b: CstNode, formatting: FormattingAction, context: FormattingContext): TextEdit[] {
-        if (b.hidden) {
+    protected createTextEdit(a: SyntaxNode | undefined, b: SyntaxNode, formatting: FormattingAction, context: FormattingContext): TextEdit[] {
+        if (b.isHidden) {
             return this.createHiddenTextEdits(a, b, formatting, context);
         }
         // Ignore the edit if the previous node ends after the current node starts
@@ -399,7 +384,7 @@ export abstract class AbstractFormatter implements Formatter {
         const edits: TextEdit[] = [];
         if (chars !== undefined) {
             // Do not apply formatting on the same line if preceding node is hidden
-            if (!a?.hidden) {
+            if (!a?.isHidden) {
                 edits.push(this.createSpaceTextEdit(betweenRange, chars, formatting.options));
             }
         } else if (lines !== undefined) {
@@ -407,7 +392,7 @@ export abstract class AbstractFormatter implements Formatter {
         } else if (tabs !== undefined) {
             edits.push(this.createTabTextEdit(betweenRange, Boolean(a), context));
         }
-        if (isLeafCstNode(b)) {
+        if (b.isLeaf) {
             context.indentation = existingIndentation;
         }
         return edits;
@@ -479,25 +464,26 @@ export abstract class AbstractFormatter implements Formatter {
         return moves[moves.length - 1];
     }
 
-    protected iterateCstTree(document: LangiumDocument, context: FormattingContext): Stream<CstNode> {
+    protected iterateCstTree(document: LangiumDocument, context: FormattingContext): Stream<SyntaxNode> {
         const root = document.parseResult.value;
-        const rootCst = root.$cstNode;
-        if (!rootCst) {
+        const rootSyntaxNode = root.$syntaxNode;
+        if (!rootSyntaxNode) {
             return EMPTY_STREAM;
         }
-        return new TreeStreamImpl(rootCst, node => this.iterateCst(node, context));
+        return new TreeStreamImpl(rootSyntaxNode, node => this.iterateCst(node, context));
     }
 
-    protected iterateCst(node: CstNode, context: FormattingContext): Stream<CstNode> {
-        if (!isCompositeCstNode(node)) {
+    protected iterateCst(node: SyntaxNode, context: FormattingContext): Stream<SyntaxNode> {
+        if (node.isLeaf) {
             return EMPTY_STREAM;
         }
         const initial = context.indentation;
-        return new StreamImpl<{ index: number }, CstNode>(
+        const children = node.children;
+        return new StreamImpl<{ index: number }, SyntaxNode>(
             () => ({ index: 0 }),
             (state) => {
-                if (state.index < node.content.length) {
-                    return { done: false, value: node.content[state.index++] };
+                if (state.index < children.length) {
+                    return { done: false, value: children[state.index++] };
                 } else {
                     // Reset the indentation to the level when we entered the node
                     context.indentation = initial;
@@ -582,61 +568,48 @@ export class DefaultNodeFormatter<T extends AstNode> implements NodeFormatter<T>
     }
 
     node(node: AstNode): FormattingRegion {
-        return new FormattingRegion(node.$cstNode ? [node.$cstNode] : [], this.collector);
+        return new FormattingRegion(node.$syntaxNode ? [node.$syntaxNode] : [], this.collector);
     }
 
     nodes(...nodes: AstNode[]): FormattingRegion {
-        const cstNodes: CstNode[] = [];
+        const syntaxNodes: SyntaxNode[] = [];
         for (const node of nodes) {
-            if (node.$cstNode) {
-                cstNodes.push(node.$cstNode);
+            if (node.$syntaxNode) {
+                syntaxNodes.push(node.$syntaxNode);
             }
         }
-        return new FormattingRegion(cstNodes, this.collector);
+        return new FormattingRegion(syntaxNodes, this.collector);
     }
 
     property(feature: Properties<T>, index?: number): FormattingRegion {
         const syntaxNode = SyntaxNodeUtils.findNodeForPropertySN(this.astNode.$syntaxNode, feature, index);
-        const cstNode = syntaxNode ? toCstNode(syntaxNode) : undefined;
-        return new FormattingRegion(cstNode ? [cstNode] : [], this.collector);
+        return new FormattingRegion(syntaxNode ? [syntaxNode] : [], this.collector);
     }
 
     properties(...features: Array<Properties<T>>): FormattingRegion {
-        const nodes: CstNode[] = [];
+        const nodes: SyntaxNode[] = [];
         for (const feature of features) {
-            const syntaxNodes = SyntaxNodeUtils.findNodesForPropertySN(this.astNode.$syntaxNode, feature);
-            for (const sn of syntaxNodes) {
-                const cst = toCstNode(sn);
-                if (cst) {
-                    nodes.push(cst);
-                }
-            }
+            nodes.push(...SyntaxNodeUtils.findNodesForPropertySN(this.astNode.$syntaxNode, feature));
         }
         return new FormattingRegion(nodes, this.collector);
     }
 
     keyword(keyword: string, index?: number): FormattingRegion {
         const syntaxNode = SyntaxNodeUtils.findNodeForKeywordSN(this.astNode.$syntaxNode, keyword, index);
-        const cstNode = syntaxNode ? toCstNode(syntaxNode) : undefined;
-        return new FormattingRegion(cstNode ? [cstNode] : [], this.collector);
+        return new FormattingRegion(syntaxNode ? [syntaxNode] : [], this.collector);
     }
 
     keywords(...keywords: string[]): FormattingRegion {
-        const nodes: CstNode[] = [];
+        const nodes: SyntaxNode[] = [];
         for (const keyword of keywords) {
-            const syntaxNodes = SyntaxNodeUtils.findNodesForKeywordSN(this.astNode.$syntaxNode, keyword);
-            for (const sn of syntaxNodes) {
-                const cst = toCstNode(sn);
-                if (cst) {
-                    nodes.push(cst);
-                }
-            }
+            nodes.push(...SyntaxNodeUtils.findNodesForKeywordSN(this.astNode.$syntaxNode, keyword));
         }
         return new FormattingRegion(nodes, this.collector);
     }
 
+    /** @deprecated Use node()/nodes() instead. Retained for backward compatibility. */
     cst(nodes: CstNode[]): FormattingRegion {
-        return new FormattingRegion([...nodes], this.collector);
+        return new FormattingRegion(nodes.map(wrapCstNode), this.collector);
     }
 
     interior(start: FormattingRegion, end: FormattingRegion): FormattingRegion {
@@ -654,7 +627,7 @@ export class DefaultNodeFormatter<T extends AstNode> implements NodeFormatter<T>
             endNode = intermediate;
         }
 
-        return new FormattingRegion(CstUtils.getInteriorNodes(startNode, endNode), this.collector);
+        return new FormattingRegion(SyntaxNodeUtils.getInteriorSyntaxNodes(startNode, endNode), this.collector);
     }
 }
 
@@ -666,10 +639,10 @@ export interface FormattingContext {
 
 export class FormattingRegion {
 
-    readonly nodes: CstNode[];
+    readonly nodes: SyntaxNode[];
     protected readonly collector: FormattingCollector;
 
-    constructor(nodes: CstNode[], collector: FormattingCollector) {
+    constructor(nodes: SyntaxNode[], collector: FormattingCollector) {
         this.nodes = nodes;
         this.collector = collector;
     }
@@ -858,4 +831,4 @@ export namespace Formatting {
     }
 }
 
-export type FormattingCollector = (node: CstNode, mode: 'prepend' | 'append', formatting: FormattingAction) => void;
+export type FormattingCollector = (node: SyntaxNode, mode: 'prepend' | 'append', formatting: FormattingAction) => void;

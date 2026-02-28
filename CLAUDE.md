@@ -55,10 +55,12 @@ by node type name, replacing grammarSource back-pointers. `getRuleByName(type)`,
 
 ## Current Phase
 
-**Blocked: Lezer backend integration gaps (Phase 1/2 incomplete items)**
+**Blocked: Lezer backend integration gaps (Phase 2 incomplete items)**
 
+Phase 1 service migration is complete — all LSP and core services use SyntaxNode as primary path.
 The Lezer backend works at the parser level (SyntaxNode trees, incremental parsing) but
-**cannot produce ASTs or run LSP services**. See DESIGN.md §11 for full gap analysis.
+**cannot produce ASTs or run LSP services** due to missing AST builder and linker support.
+See DESIGN.md §11 for full gap analysis.
 
 Phase file: [docs/phases/PHASE-2.md](docs/phases/PHASE-2.md)
 
@@ -72,19 +74,17 @@ Phase file: [docs/phases/PHASE-2.md](docs/phases/PHASE-2.md)
 - [x] Migrate DocumentBuilder/DocumentFactory to use $syntaxNode
 - [x] Add $syntaxNode to AstNode, deprecate $cstNode
 - [x] AST builder sets $syntaxNode via lazy getter (cst-node-builder.ts)
-- [ ] **INCOMPLETE: Migrate LSP services from CstNode to SyntaxNode** — all 10 LSP service files
-  in langium-lsp still use `$cstNode` and `CstUtils` as primary path, with SyntaxNode only at
-  entry points. With Lezer backend, `$cstNode` is always undefined so all LSP features return
-  empty results. Files: hover-provider, definition-provider, references-provider, rename-provider,
-  document-highlight-provider, call-hierarchy-provider, type-hierarchy-provider, type-provider,
-  implementation-provider, formatter.
-- [ ] **INCOMPLETE: Migrate core services from CstNode to SyntaxNode** — CommentProvider,
-  NameProvider.getNameNode(), AstDescriptions, DocumentValidator.getDiagnosticRange(),
-  JsonSerializer all use `$cstNode` directly.
-- [ ] **INCOMPLETE: References service API still CstNode-typed** — `findDeclarations(CstNode)`
-  and `findDeclarationNodes(CstNode)` need SyntaxNode overloads.
+- [x] Migrate LSP services from CstNode to SyntaxNode (all 10 files use SyntaxNode as primary path
+  with CstNode fallback for backward compat): hover-provider, definition-provider,
+  references-provider, rename-provider, document-highlight-provider, call-hierarchy-provider,
+  type-hierarchy-provider, type-provider, implementation-provider, formatter
+- [x] Migrate core services from CstNode to SyntaxNode (SyntaxNode-first with CstNode fallback):
+  CommentProvider, AstDescriptions, DocumentValidator.getDiagnosticRange(), JsonSerializer
+- [x] References service SyntaxNode API — added `findDeclarationsSN(AstNode, SyntaxNode)` and
+  `findDeclarationNodesSN(AstNode, SyntaxNode)` to References interface and DefaultReferences,
+  plus override in LangiumGrammarReferences for grammar-specific TypeAttribute navigation
 - [x] Set up monorepo split (langium-core, langium-chevrotain, langium-lsp)
-- [x] Run full test suite — 1264 passed, 2 pre-existing failures (fs.rmdirSync deprecation)
+- [x] Run full test suite — 1470+ passed, 2 pre-existing failures (fs.rmdirSync deprecation)
 
 ### Phase 2: Lezer Adapter + Incremental Parsing
 - [x] Create langium-lezer package (package.json, tsconfig, workspace wiring)
