@@ -97,6 +97,7 @@ interface Grammar {
     extendBlocks: ExtendBlock[];
     conflictBlocks: ConflictBlock[];
     localTokenBlocks: LocalTokenBlock[];
+    tokenPrecedenceBlocks: TokenPrecedenceBlock[];
 }
 
 interface GrammarImport {
@@ -312,5 +313,14 @@ interface ConflictSet {
 interface LocalTokenBlock {
     rule: @ParserRule;
     terminals: TerminalRule[];
+}
+
+interface TokenPrecedenceBlock {
+    entries: TokenPrecedenceEntry[];
+}
+
+interface TokenPrecedenceEntry {
+    terminal?: @TerminalRule;
+    literal?: string;
 }
 

@@ -1,0 +1,38 @@
+-- Simple SQL example demonstrating the Lezer-backed parser
+-- This file exercises all statement types and expression operators
+
+-- CREATE TABLE: uses @precMarker=TypeAnnotation on column type position
+create table users (
+    id int,
+    name text,
+    age int,
+    score float
+);
+
+create table orders (
+    id int,
+    user_id int,
+    amount float,
+    status text
+);
+
+-- INSERT: provides literal values
+insert into users values (1, 'Alice', 30, 95.5);
+insert into users values (2, 'Bob', 25, 82.0);
+insert into orders values (1, 1, 49.99, 'shipped');
+
+-- SELECT with infix WHERE expressions (operator precedence via infix rule)
+select * from users where age > 25 and score >= 90.0;
+
+-- SELECT with function call: uses @dynamicPrecedence + conflicts for
+-- FunctionCall vs ColumnRef disambiguation
+select name, count(score) from users where age > 18;
+
+-- Complex expression: tests precedence across multiple levels
+select * from users where age + 5 > 30 and score * 2 != 100 or name = 'admin';
+
+-- Parenthesized expression + NOT
+select * from users where not (age < 18) and (score > 80 or name = 'special');
+
+-- Column alias
+select name as user_name, age as user_age from users;

@@ -1,0 +1,91 @@
+{
+  "Program": {
+    "statements": [
+      "ProgramStatements"
+    ]
+  },
+  "SelectStmt": {
+    "star": [
+      "SelectStmtStar"
+    ],
+    "columns": [
+      "SelectStmtColumns"
+    ],
+    "table": [
+      "SelectStmtTable"
+    ],
+    "condition": [
+      "SelectStmtCondition"
+    ]
+  },
+  "ColumnExpr": {
+    "expression": [
+      "ColumnExprExpression"
+    ],
+    "alias": [
+      "ColumnExprAlias"
+    ]
+  },
+  "CreateTableStmt": {
+    "name": [
+      "CreateTableStmtName"
+    ],
+    "columns": [
+      "CreateTableStmtColumns"
+    ]
+  },
+  "ColumnDef": {
+    "name": [
+      "ColumnDefName"
+    ],
+    "type": [
+      "ColumnDefType"
+    ]
+  },
+  "InsertStmt": {
+    "table": [
+      "InsertStmtTable"
+    ],
+    "values": [
+      "InsertStmtValues"
+    ]
+  },
+  "ParenExpr": {
+    "inner": [
+      "ParenExprInner"
+    ]
+  },
+  "NotExpr": {
+    "operand": [
+      "NotExprOperand"
+    ]
+  },
+  "FunctionCall": {
+    "name": [
+      "FunctionCallName"
+    ],
+    "args": [
+      "FunctionCallArgs"
+    ]
+  },
+  "ColumnRef": {
+    "name": [
+      "ColumnRefName"
+    ]
+  },
+  "NumberLit": {
+    "value": [
+      "NumberLitValue"
+    ]
+  },
+  "StringLit": {
+    "value": [
+      "StringLitValue"
+    ]
+  },
+  "BoolLit": {
+    "value": [
+      "BoolLitValue"
+    ]
+  }
+}

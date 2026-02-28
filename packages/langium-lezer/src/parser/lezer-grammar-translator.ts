@@ -272,6 +272,13 @@ export class LezerGrammarTranslator implements GrammarTranslator {
 
         // 13. Emit @tokens block (excluding external and local token names)
         lines.push('@tokens {');
+
+        // Emit @precedence inside @tokens if token precedence blocks are present
+        const tokenPrecEntries = this.collectTokenPrecedenceEntries(grammar);
+        if (tokenPrecEntries.length > 0) {
+            lines.push(`  @precedence { ${tokenPrecEntries.join(', ')} }`);
+        }
+
         for (const terminal of visibleTerminals) {
             if (excludedTokenNames.has(terminal.name)) continue;
             const tokenBody = this.translateTerminalBody(terminal);
@@ -322,6 +329,22 @@ export class LezerGrammarTranslator implements GrammarTranslator {
         }
 
         return levels;
+    }
+
+    // ---- Phase 3: Token precedence ----
+
+    private collectTokenPrecedenceEntries(grammar: Grammar): string[] {
+        const entries: string[] = [];
+        for (const block of grammar.tokenPrecedenceBlocks ?? []) {
+            for (const entry of block.entries) {
+                if (entry.terminal?.ref) {
+                    entries.push(this.getLezerTerminalName(entry.terminal.ref));
+                } else if (entry.literal) {
+                    entries.push(`"${this.escapeLezerString(entry.literal)}"`);
+                }
+            }
+        }
+        return entries;
     }
 
     // ---- Phase 3: External tokens + context ----
@@ -721,6 +744,11 @@ export class LezerGrammarTranslator implements GrammarTranslator {
             const assoc = precLevel.associativity ?? 'left';
             const ops = precLevel.operators.map(op => {
                 keywords.add(op.value);
+                // Use kw<> template for identifier-like operators (e.g. "and", "or")
+                // to avoid Lezer token conflicts with the Identifier terminal.
+                if (/^[_a-zA-Z]\w*$/.test(op.value)) {
+                    return `kw<"${this.escapeLezerString(op.value)}">`;
+                }
                 return `"${this.escapeLezerString(op.value)}"`;
             });
 

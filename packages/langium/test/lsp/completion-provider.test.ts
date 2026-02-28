@@ -47,7 +47,8 @@ describe('Langium completion provider', () => {
                 'specialize',
                 'extend',
                 'conflicts',
-                'local'
+                'local',
+                'token'
             ]
         });
     });

@@ -141,6 +141,11 @@
                 "chevrotainParserConfig": {
                     "$ref": "#/$defs/chevrotainParserConfig"
                 },
+                "parserBackend": {
+                    "description": "Per-language parser backend override",
+                    "type": "string",
+                    "enum": ["chevrotain", "lezer"]
+                },
                 "bnf": {
                     "description": "An object to describe bnf generator properties.",
                     "type": "object",
@@ -223,6 +228,11 @@
         },
         "chevrotainParserConfig": {
             "$ref": "#/$defs/chevrotainParserConfig"
+        },
+        "parserBackend": {
+            "description": "Default parser backend for all languages",
+            "type": "string",
+            "enum": ["chevrotain", "lezer"]
         },
         "langiumInternal": {
             "description": "A flag to determine whether langium uses itself to bootstrap",

@@ -69,6 +69,7 @@
     "examples/arithmetics",
     "examples/domainmodel",
     "examples/requirements",
-    "examples/statemachine"
+    "examples/statemachine",
+    "examples/simple-sql"
   ]
 }

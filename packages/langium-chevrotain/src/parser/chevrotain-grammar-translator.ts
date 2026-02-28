@@ -44,6 +44,7 @@ export class ChevrotainGrammarTranslator implements GrammarTranslator {
         this.validateExtendBlocks(grammar, diagnostics);
         this.validateExternalTokens(grammar, diagnostics);
         this.validateLocalTokens(grammar, diagnostics);
+        this.validateTokenPrecedence(grammar, diagnostics);
 
         // Also run the shared validations (same as Lezer)
         this.validatePrecedenceLevels(grammar, diagnostics);
@@ -152,6 +153,17 @@ export class ChevrotainGrammarTranslator implements GrammarTranslator {
                 message: 'Local token groups are mapped to Chevrotain lexer modes. Verify that your lexer mode configuration is correct.',
                 severity: 'warning',
                 source: 'local tokens'
+            });
+        }
+    }
+
+    private validateTokenPrecedence(grammar: Grammar, diagnostics: TranslationDiagnostic[]): void {
+        if ((grammar.tokenPrecedenceBlocks ?? []).length > 0) {
+            diagnostics.push({
+                message: 'Token precedence declarations require the Lezer backend. Chevrotain uses longest-match tokenization by default.',
+                severity: 'error',
+                source: 'token precedence',
+                suggestion: 'Use --backend=lezer or remove the token precedence block.'
             });
         }
     }

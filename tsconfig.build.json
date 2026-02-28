@@ -25,6 +25,7 @@
         { "path": "./examples/requirements/tsconfig.src.json" },
         { "path": "./examples/requirements/tsconfig.test.json" },
         { "path": "./examples/statemachine/tsconfig.src.json" },
-        { "path": "./examples/statemachine/tsconfig.test.json" }
+        { "path": "./examples/statemachine/tsconfig.test.json" },
+        { "path": "./examples/simple-sql/tsconfig.src.json" }
     ]
  }

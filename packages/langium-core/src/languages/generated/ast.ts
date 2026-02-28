@@ -79,6 +79,7 @@ export type LangiumGrammarKeywordNames =
     | "specialize"
     | "string"
     | "terminal"
+    | "token"
     | "tokens"
     | "true"
     | "type"
@@ -462,6 +463,7 @@ export interface Grammar extends langium.AstNode {
     precedenceBlocks: Array<PrecedenceBlock>;
     rules: Array<AbstractRule>;
     specializeBlocks: Array<SpecializeBlock>;
+    tokenPrecedenceBlocks: Array<TokenPrecedenceBlock>;
     types: Array<Type>;
 }
 
@@ -479,6 +481,7 @@ export const Grammar = {
     precedenceBlocks: 'precedenceBlocks',
     rules: 'rules',
     specializeBlocks: 'specializeBlocks',
+    tokenPrecedenceBlocks: 'tokenPrecedenceBlocks',
     types: 'types'
 } as const;
 
@@ -1053,6 +1056,38 @@ export function isTokenMapping(item: unknown): item is TokenMapping {
     return reflection.isInstance(item, TokenMapping.$type);
 }
 
+export interface TokenPrecedenceBlock extends langium.AstNode {
+    readonly $container: Grammar;
+    readonly $type: 'TokenPrecedenceBlock';
+    entries: Array<TokenPrecedenceEntry>;
+}
+
+export const TokenPrecedenceBlock = {
+    $type: 'TokenPrecedenceBlock',
+    entries: 'entries'
+} as const;
+
+export function isTokenPrecedenceBlock(item: unknown): item is TokenPrecedenceBlock {
+    return reflection.isInstance(item, TokenPrecedenceBlock.$type);
+}
+
+export interface TokenPrecedenceEntry extends langium.AstNode {
+    readonly $container: TokenPrecedenceBlock;
+    readonly $type: 'TokenPrecedenceEntry';
+    literal?: string;
+    terminal?: langium.Reference<TerminalRule>;
+}
+
+export const TokenPrecedenceEntry = {
+    $type: 'TokenPrecedenceEntry',
+    literal: 'literal',
+    terminal: 'terminal'
+} as const;
+
+export function isTokenPrecedenceEntry(item: unknown): item is TokenPrecedenceEntry {
+    return reflection.isInstance(item, TokenPrecedenceEntry.$type);
+}
+
 export interface Type extends langium.AstNode {
     readonly $container: Grammar;
     readonly $type: 'Type';
@@ -1234,6 +1269,8 @@ export type LangiumGrammarAstType = {
     TerminalRule: TerminalRule
     TerminalRuleCall: TerminalRuleCall
     TokenMapping: TokenMapping
+    TokenPrecedenceBlock: TokenPrecedenceBlock
+    TokenPrecedenceEntry: TokenPrecedenceEntry
     Type: Type
     TypeAttribute: TypeAttribute
     TypeDefinition: TypeDefinition
@@ -1602,6 +1639,10 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                 },
                 specializeBlocks: {
                     name: Grammar.specializeBlocks,
+                    defaultValue: []
+                },
+                tokenPrecedenceBlocks: {
+                    name: Grammar.tokenPrecedenceBlocks,
                     defaultValue: []
                 },
                 types: {
@@ -2137,6 +2178,29 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                 },
                 target: {
                     name: TokenMapping.target
+                }
+            },
+            superTypes: []
+        },
+        TokenPrecedenceBlock: {
+            name: TokenPrecedenceBlock.$type,
+            properties: {
+                entries: {
+                    name: TokenPrecedenceBlock.entries,
+                    defaultValue: []
+                }
+            },
+            superTypes: []
+        },
+        TokenPrecedenceEntry: {
+            name: TokenPrecedenceEntry.$type,
+            properties: {
+                literal: {
+                    name: TokenPrecedenceEntry.literal
+                },
+                terminal: {
+                    name: TokenPrecedenceEntry.terminal,
+                    referenceType: TerminalRule.$type
                 }
             },
             superTypes: []

@@ -22,6 +22,7 @@ entry Grammar returns Grammar:
       | extendBlocks+=ExtendBlock
       | conflictBlocks+=ConflictBlock
       | localTokenBlocks+=LocalTokenBlock
+      | tokenPrecedenceBlocks+=TokenPrecedenceBlock
     )*;
 
 Interface returns Interface:
@@ -137,6 +138,12 @@ LocalTokenBlock returns LocalTokenBlock:
     'local' 'tokens' 'in' rule=[ParserRule:ID] '{'
         terminals+=TerminalRule+
     '}' ';'?;
+
+TokenPrecedenceBlock returns TokenPrecedenceBlock:
+    'token' 'precedence' '{' entries+=TokenPrecedenceEntry (',' entries+=TokenPrecedenceEntry)* '}' ';'?;
+
+TokenPrecedenceEntry returns TokenPrecedenceEntry:
+    terminal=[TerminalRule:ID] | literal=STRING;
 
 // --- End Phase 3 Rules ---
 
@@ -285,7 +292,7 @@ CharacterRange returns TerminalElement:
     {CharacterRange} left=Keyword ('..' right=Keyword)?;
 
 FeatureName returns string:
-    'conflicts' | 'context' | 'extend' | 'external' | 'from' | 'local' | 'precedence' | 'specialize' | 'tokens' |
+    'conflicts' | 'context' | 'extend' | 'external' | 'from' | 'local' | 'precedence' | 'specialize' | 'token' | 'tokens' |
     'infix' | 'on' | 'right' | 'left' | 'assoc' | 'current' | 'entry' | 'extends' | 'false' | 'fragment' | 'grammar' | 'hidden' | 'import' | 'interface' | 'returns' | 'terminal' | 'true' | 'type' | 'infer' | 'infers' | 'with' | PrimitiveType | ID;
 
 terminal ID: /\^?[_a-zA-Z][\w_]*/;
