@@ -13,7 +13,6 @@ import type { RootSyntaxNode, SyntaxNode } from './syntax-node.js';
 import type { ParseResult, ParseError, LexError } from './parse-result.js';
 import { isAstNode } from '../syntax-tree.js';
 import { assignMandatoryProperties, linkContentToContainer } from '../utils/ast-utils.js';
-import { registerSyntaxNodeAstMapping } from '../utils/syntax-node-utils.js';
 
 /**
  * Builds an AstNode tree from a SyntaxNode parse tree.
@@ -27,6 +26,12 @@ export interface SyntaxNodeAstBuilder {
      * @returns ParseResult with the root AstNode.
      */
     buildAst<T extends AstNode = AstNode>(root: RootSyntaxNode): ParseResult<T>;
+
+    /**
+     * Find the AstNode corresponding to a SyntaxNode.
+     * Walks up the parent chain to find the nearest mapped AstNode.
+     */
+    findAstNode(node: SyntaxNode): AstNode | undefined;
 }
 
 export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
@@ -34,6 +39,9 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
     protected readonly linker: Linker;
     protected readonly valueConverter: ValueConverter;
     protected readonly reflection: AstReflection;
+
+    /** Per-service-instance reverse mapping from SyntaxNode to AstNode. */
+    protected readonly syntaxNodeToAstNode = new WeakMap<SyntaxNode, AstNode>();
 
     constructor(services: LangiumCoreServices) {
         this.grammarRegistry = services.grammar.GrammarRegistry;
@@ -52,6 +60,18 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
             parserErrors: this.convertParserErrors(root),
             lexerErrors: this.convertLexerErrors(root)
         };
+    }
+
+    findAstNode(node: SyntaxNode): AstNode | undefined {
+        let current: SyntaxNode | null = node;
+        while (current) {
+            const astNode = this.syntaxNodeToAstNode.get(current);
+            if (astNode) {
+                return astNode;
+            }
+            current = current.parent;
+        }
+        return undefined;
     }
 
     protected buildNode(syntaxNode: SyntaxNode): unknown {
@@ -82,7 +102,7 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
 
         // Associate SyntaxNode with AstNode
         this.defineSyntaxNodeProperty(node, syntaxNode);
-        registerSyntaxNodeAstMapping(syntaxNode, node);
+        this.syntaxNodeToAstNode.set(syntaxNode, node);
 
         return node;
     }

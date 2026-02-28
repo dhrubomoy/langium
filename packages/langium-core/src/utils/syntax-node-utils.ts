@@ -362,24 +362,10 @@ export function isChildSyntaxNode(child: SyntaxNode, parent: SyntaxNode): boolea
 // --- AST mapping ---
 
 /**
- * WeakMap for SyntaxNode → AstNode reverse lookup.
- * Populated by SyntaxNodeAstBuilder during AST construction.
- * For Chevrotain, the CstNode.astNode property is used instead.
- */
-const syntaxNodeToAstNode = new WeakMap<SyntaxNode, AstNode>();
-
-/**
- * Register a SyntaxNode → AstNode mapping for reverse lookup.
- * Called by SyntaxNodeAstBuilder during AST construction.
- */
-export function registerSyntaxNodeAstMapping(syntaxNode: SyntaxNode, astNode: AstNode): void {
-    syntaxNodeToAstNode.set(syntaxNode, astNode);
-}
-
-/**
  * Maps a SyntaxNode back to its corresponding AstNode.
  * For ChevrotainSyntaxNode: accesses the underlying CstNode's astNode.
- * For other backends: uses the WeakMap populated by SyntaxNodeAstBuilder.
+ * For other backends: use {@link SyntaxNodeAstBuilder.findAstNode} instead,
+ * which is accessible via `services.parser.SyntaxNodeAstBuilder`.
  */
 export function findAstNodeForSyntaxNode(node: SyntaxNode): AstNode | undefined {
     if (isChevrotainSyntaxNode(node)) {
@@ -388,16 +374,6 @@ export function findAstNodeForSyntaxNode(node: SyntaxNode): AstNode | undefined 
         } catch {
             return undefined;
         }
-    }
-    // Generic path: use WeakMap populated by SyntaxNodeAstBuilder
-    // Walk up the parent chain to find the nearest mapped AstNode
-    let current: SyntaxNode | null = node;
-    while (current) {
-        const astNode = syntaxNodeToAstNode.get(current);
-        if (astNode) {
-            return astNode;
-        }
-        current = current.parent;
     }
     return undefined;
 }
