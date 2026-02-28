@@ -179,7 +179,7 @@ export function isFunctionCall(item: unknown): item is FunctionCall {
 export interface InsertStmt extends langium.AstNode {
     readonly $container: Program;
     readonly $type: 'InsertStmt';
-    table: string;
+    table: langium.Reference<CreateTableStmt>;
     values: Array<Expr>;
 }
 
@@ -281,7 +281,7 @@ export interface SelectStmt extends langium.AstNode {
     columns: Array<ColumnExpr>;
     condition?: Expr;
     star: boolean;
-    table: string;
+    table: langium.Reference<CreateTableStmt>;
 }
 
 export const SelectStmt = {
@@ -430,7 +430,8 @@ export class SimpleSQLAstReflection extends langium.AbstractAstReflection {
             name: InsertStmt.$type,
             properties: {
                 table: {
-                    name: InsertStmt.table
+                    name: InsertStmt.table,
+                    referenceType: CreateTableStmt.$type
                 },
                 values: {
                     name: InsertStmt.values,
@@ -503,7 +504,8 @@ export class SimpleSQLAstReflection extends langium.AbstractAstReflection {
                     defaultValue: false
                 },
                 table: {
-                    name: SelectStmt.table
+                    name: SelectStmt.table,
+                    referenceType: CreateTableStmt.$type
                 }
             },
             superTypes: [Statement.$type]

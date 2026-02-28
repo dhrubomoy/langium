@@ -137,11 +137,19 @@ export const SimpleSQLGrammar = (): Grammar => loadedSimpleSQLGrammar ?? (loaded
             "feature": "table",
             "operator": "=",
             "terminal": {
-              "$type": "RuleCall",
-              "rule": {
-                "$ref": "#/rules@20"
+              "$type": "CrossReference",
+              "type": {
+                "$ref": "#/rules@4"
               },
-              "arguments": []
+              "terminal": {
+                "$type": "RuleCall",
+                "rule": {
+                  "$ref": "#/rules@20"
+                },
+                "arguments": []
+              },
+              "deprecatedSyntax": false,
+              "isMulti": false
             }
           },
           {
@@ -385,11 +393,19 @@ export const SimpleSQLGrammar = (): Grammar => loadedSimpleSQLGrammar ?? (loaded
             "feature": "table",
             "operator": "=",
             "terminal": {
-              "$type": "RuleCall",
-              "rule": {
-                "$ref": "#/rules@20"
+              "$type": "CrossReference",
+              "type": {
+                "$ref": "#/rules@4"
               },
-              "arguments": []
+              "terminal": {
+                "$type": "RuleCall",
+                "rule": {
+                  "$ref": "#/rules@20"
+                },
+                "arguments": []
+              },
+              "deprecatedSyntax": false,
+              "isMulti": false
             }
           },
           {

@@ -19,7 +19,7 @@ Statement: SelectStmt | CreateTableStmt | InsertStmt;
 
 SelectStmt:
     'select' (star?='*' | columns+=ColumnExpr (',' columns+=ColumnExpr)*)
-    'from' table=ID
+    'from' table=[CreateTableStmt:ID]
     ('where' condition=Expr)?
     ';';
 
@@ -42,7 +42,7 @@ DataType returns string: 'int' | 'text' | 'float' | 'bool';
 // ── INSERT ──────────────────────────────────────────────────────────────────
 
 InsertStmt:
-    'insert' 'into' table=ID
+    'insert' 'into' table=[CreateTableStmt:ID]
     'values' '(' values+=Expr (',' values+=Expr)* ')'
     ';';
 
