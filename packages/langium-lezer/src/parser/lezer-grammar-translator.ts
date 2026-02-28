@@ -624,8 +624,12 @@ export class LezerGrammarTranslator implements GrammarTranslator {
             parentFields[fieldName].push(wrapperName);
         }
 
-        // Emit wrapper rule
-        wrapperRules.push(`${wrapperName} { ${inner} }`);
+        // Emit wrapper rule (deduplicate — same field name may appear multiple times,
+        // e.g. `params+=Param (',' params+=Param)*`)
+        const wrapperDef = `${wrapperName} { ${inner} }`;
+        if (!wrapperRules.includes(wrapperDef)) {
+            wrapperRules.push(wrapperDef);
+        }
 
         return wrapperName;
     }
@@ -720,10 +724,12 @@ export class LezerGrammarTranslator implements GrammarTranslator {
                 return `"${this.escapeLezerString(op.value)}"`;
             });
 
-            // Each operator at this precedence level becomes an alternative
+            // Each operator at this precedence level becomes an alternative.
+            // Use the rule's own name (self-reference) for left-recursive Lezer expressions.
+            // Lezer (LR) requires `BinExpr !prec op BinExpr | AtomicExpr` to parse chained
+            // binary operators like `1 + 2 * 3`. The `on <Operand>` rule is only the fallback.
             for (const op of ops) {
-                const operandRef = rule.call.rule.ref?.name ?? 'expr';
-                ruleAlternatives.push(`${operandRef} !${precName} ${op} ${operandRef}`);
+                ruleAlternatives.push(`${rule.name} !${precName} ${op} ${rule.name}`);
             }
 
             lines.push(`// precedence ${i}: ${precLevel.operators.map(o => o.value).join(', ')} (${assoc})`);
