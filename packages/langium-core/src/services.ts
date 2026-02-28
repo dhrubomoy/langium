@@ -14,6 +14,7 @@ import type { GrammarRegistry } from './grammar/grammar-registry.js';
 import type { AsyncParser } from './parser/async-parser.js';
 import type { ParserConfig } from './parser/parse-result.js';
 import type { ParserAdapter } from './parser/parser-adapter.js';
+import type { SyntaxNodeAstBuilder } from './parser/syntax-node-ast-builder.js';
 import type { ValueConverter } from './parser/value-converter.js';
 import type { Linker } from './references/linker.js';
 import type { NameProvider } from './references/name-provider.js';
@@ -61,6 +62,7 @@ export type LangiumDefaultCoreServices = {
         readonly GrammarConfig: GrammarConfig
         readonly ValueConverter: ValueConverter
         readonly ParserAdapter: ParserAdapter
+        readonly SyntaxNodeAstBuilder: SyntaxNodeAstBuilder
     }
     readonly documentation: {
         readonly CommentProvider: CommentProvider

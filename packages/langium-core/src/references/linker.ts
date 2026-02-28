@@ -4,6 +4,7 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
+import type { SyntaxNode } from '../parser/syntax-node.js';
 import type { LangiumCoreServices } from '../services.js';
 import type { AstNode, AstNodeDescription, AstReflection, CstNode, LinkingError, MultiReference, MultiReferenceItem, Reference, ReferenceInfo } from '../syntax-tree.js';
 import type { AstNodeLocator } from '../workspace/ast-node-locator.js';
@@ -76,6 +77,17 @@ export interface Linker {
     buildReference(node: AstNode, property: string, refNode: CstNode | undefined, refText: string): Reference;
 
     buildMultiReference(node: AstNode, property: string, refNode: CstNode | undefined, refText: string): MultiReference;
+
+    /**
+     * Creates a cross-reference using a SyntaxNode instead of a CstNode (backend-agnostic).
+     * Used by the SyntaxNodeAstBuilder for non-Chevrotain backends.
+     */
+    buildReferenceSN(node: AstNode, property: string, refSyntaxNode: SyntaxNode | undefined, refText: string): Reference;
+
+    /**
+     * Creates a multi-reference using a SyntaxNode instead of a CstNode (backend-agnostic).
+     */
+    buildMultiReferenceSN(node: AstNode, property: string, refSyntaxNode: SyntaxNode | undefined, refText: string): MultiReference;
 
 }
 
@@ -263,6 +275,100 @@ export class DefaultLinker implements Linker {
         const linker = this;
         const reference: DefaultMultiReference = {
             $refNode: refNode,
+            $refText: refText,
+            _items: undefined,
+
+            get items() {
+                if (Array.isArray(this._items)) {
+                    return this._items;
+                } else if (this._items === undefined) {
+                    this._items = RefResolving;
+                    const document = findRootNode(node).$document;
+                    const descriptions = linker.getCandidates({
+                        reference,
+                        container: node,
+                        property
+                    });
+                    const items: MultiReferenceItem[] = [];
+                    if (isLinkingError(descriptions)) {
+                        this._linkingError = descriptions;
+                    } else {
+                        for (const description of descriptions) {
+                            const linkedNode = linker.loadAstNode(description);
+                            if (linkedNode) {
+                                items.push({ ref: linkedNode, $nodeDescription: description });
+                            }
+                        }
+                    }
+                    this._items = items;
+                    document?.references.push(this);
+                } else if (this._items === RefResolving) {
+                    linker.throwCyclicReferenceError(node, property, refText);
+                }
+                return Array.isArray(this._items) ? this._items : [];
+            },
+            get error() {
+                if (this._linkingError) {
+                    return this._linkingError;
+                }
+                const refs = this.items;
+                if (refs.length > 0) {
+                    return undefined;
+                } else {
+                    return (this._linkingError = linker.createLinkingError({ reference, container: node, property }));
+                }
+            }
+        };
+        return reference;
+    }
+
+    buildReferenceSN(node: AstNode, property: string, refSyntaxNode: SyntaxNode | undefined, refText: string): Reference {
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
+        const linker = this;
+        const reference: DefaultReference = {
+            $refNode: undefined,
+            $refSyntaxNode: refSyntaxNode,
+            $refText: refText,
+            _ref: undefined,
+
+            get ref() {
+                if (isAstNode(this._ref)) {
+                    return this._ref;
+                } else if (isAstNodeDescription(this._nodeDescription)) {
+                    const linkedNode = linker.loadAstNode(this._nodeDescription);
+                    this._ref = linkedNode ??
+                        linker.createLinkingError({ reference, container: node, property }, this._nodeDescription);
+                } else if (this._ref === undefined) {
+                    this._ref = RefResolving;
+                    const document = findRootNode(node).$document;
+                    const refData = linker.getLinkedNode({ reference, container: node, property });
+                    if (refData.error && document && document.state < DocumentState.ComputedScopes) {
+                        return this._ref = undefined;
+                    }
+                    this._ref = refData.node ?? refData.error;
+                    this._nodeDescription = refData.descr;
+                    document?.references.push(this);
+                } else if (this._ref === RefResolving) {
+                    linker.throwCyclicReferenceError(node, property, refText);
+                }
+                return isAstNode(this._ref) ? this._ref : undefined;
+            },
+            get $nodeDescription() {
+                return this._nodeDescription;
+            },
+            get error() {
+                return isLinkingError(this._ref) ? this._ref : undefined;
+            }
+        };
+        return reference;
+    }
+
+    buildMultiReferenceSN(node: AstNode, property: string, refSyntaxNode: SyntaxNode | undefined, refText: string): MultiReference {
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
+        const linker = this;
+        const reference: DefaultMultiReference = {
+            $refNode: undefined,
+            $refSyntaxNode: refSyntaxNode,
             $refText: refText,
             _items: undefined,
 

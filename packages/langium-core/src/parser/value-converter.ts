@@ -17,6 +17,12 @@ export interface ValueConverter {
      * Converts a string value from the source text format into a value to be held in the AST.
      */
     convert(input: string, cstNode: CstNode): ValueType;
+
+    /**
+     * Converts a string value using the terminal rule name directly (backend-agnostic).
+     * Used by the SyntaxNodeAstBuilder for non-Chevrotain backends.
+     */
+    convertByRuleName?(input: string, ruleName: string): ValueType;
 }
 
 export type ValueType = string | number | boolean | bigint | Date;
@@ -50,6 +56,19 @@ export class DefaultValueConverter implements ValueConverter {
             case 'boolean': return ValueConverter.convertBoolean(input);
             case 'bigint': return ValueConverter.convertBigint(input);
             case 'date': return ValueConverter.convertDate(input);
+            default: return input;
+        }
+    }
+
+    convertByRuleName(input: string, ruleName: string): ValueType {
+        switch (ruleName.toUpperCase()) {
+            case 'INT': return ValueConverter.convertInt(input);
+            case 'STRING': return ValueConverter.convertString(input);
+            case 'ID': return ValueConverter.convertID(input);
+            case 'NUMBER': return ValueConverter.convertNumber(input);
+            case 'BOOLEAN': return ValueConverter.convertBoolean(input);
+            case 'BIGINT': return ValueConverter.convertBigint(input);
+            case 'DATE': return ValueConverter.convertDate(input);
             default: return input;
         }
     }

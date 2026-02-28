@@ -5,8 +5,10 @@
  ******************************************************************************/
 
 import { buildParser } from '@lezer/generator';
-import type { ParserAdapter, SyntaxNode, RootSyntaxNode, ParseDiagnostic, Grammar } from 'langium-core';
-import { EmptyFileSystem, URI } from 'langium-core';
+import type { ParserAdapter, SyntaxNode, RootSyntaxNode, ParseDiagnostic, Grammar, LangiumCoreServices, LangiumSharedCoreServices, LangiumGeneratedCoreServices, LangiumGeneratedSharedCoreServices } from 'langium-core';
+import type { Module } from 'langium-core';
+import { EmptyFileSystem, URI, createDefaultCoreModule, createDefaultSharedCoreModule, inject } from 'langium-core';
+import { interpretAstReflection } from 'langium-core/grammar';
 import { createLangiumGrammarServices, createServicesForGrammar } from 'langium-lsp';
 import { LezerAdapter, LezerGrammarTranslator, DefaultFieldMap } from 'langium-lezer';
 
@@ -242,4 +244,60 @@ export async function generateLezerGrammarText(grammarString: string): Promise<{
 export function generateLargeDocument(itemCount: number): string {
     const items = Array.from({ length: itemCount }, (_, i) => `item item_${i}`).join('\n');
     return `model TestModel\n${items}`;
+}
+
+// ---- Full Lezer service creation (for AST builder integration tests) ----
+
+/**
+ * Create full Langium services using the Lezer parser backend.
+ * This enables DocumentFactory.parse() to use the
+ * ParserAdapter → SyntaxNodeAstBuilder pipeline.
+ */
+export async function createLezerServicesForGrammar(grammarString: string): Promise<{
+    shared: LangiumSharedCoreServices;
+    parser: LangiumCoreServices;
+}> {
+    // 1. Parse the grammar
+    const grammar = await parseGrammarString(grammarString);
+
+    // 2. Generate Lezer parse tables
+    const translator = new LezerGrammarTranslator();
+    const { grammarText, fieldMapData, keywords } = translator.generateGrammarInMemory(grammar);
+    const parser = buildParser(grammarText);
+    const fieldMap = new DefaultFieldMap(fieldMapData);
+
+    // 3. Create a Lezer adapter loaded with parse tables
+    const lezerAdapter = new LezerAdapter();
+    lezerAdapter.loadParseTables(parser, fieldMap, keywords);
+
+    // 4. Build DI services: core module + Lezer parser override (no Chevrotain)
+    const languageMetaData = {
+        caseInsensitive: false,
+        fileExtensions: ['.txt'],
+        languageId: grammar.name ?? 'test',
+        mode: 'development' as const
+    };
+
+    const generatedSharedModule: Module<LangiumSharedCoreServices, LangiumGeneratedSharedCoreServices> = {
+        AstReflection: () => interpretAstReflection(grammar),
+    };
+    const generatedModule: Module<LangiumCoreServices, LangiumGeneratedCoreServices> = {
+        Grammar: () => grammar,
+        LanguageMetaData: () => languageMetaData,
+        parser: {
+            ParserConfig: () => ({})
+        }
+    };
+    // Override parser services with Lezer (no LangiumParser → DocumentFactory uses generic path)
+    const lezerModule: Module<LangiumCoreServices, { parser: { ParserAdapter: ParserAdapter } }> = {
+        parser: {
+            ParserAdapter: () => lezerAdapter
+        }
+    };
+
+    const shared = inject(createDefaultSharedCoreModule({ fileSystemProvider: () => EmptyFileSystem.fileSystemProvider() }), generatedSharedModule);
+    const services = inject(createDefaultCoreModule({ shared }), generatedModule, lezerModule);
+    shared.ServiceRegistry.register(services);
+
+    return { shared, parser: services };
 }

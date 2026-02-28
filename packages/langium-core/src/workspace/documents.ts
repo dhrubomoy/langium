@@ -315,13 +315,17 @@ export class DefaultLangiumDocumentFactory implements LangiumDocumentFactory {
         return document;
     }
 
-    // TODO(Phase 2+): Replace with ParserAdapter.parse() → SyntaxNode → AST builder pipeline.
-    // For Phase 1 (Chevrotain only), LangiumParser builds both CST and AST during parsing,
-    // and $syntaxNode is available as a lazy wrapper on each AstNode.
     protected parse<T extends AstNode>(uri: URI, text: string, options?: ParserOptions): ParseResult<T> {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const services = this.serviceRegistry.getServices(uri) as any;
-        return services.parser.LangiumParser.parse(text, options);
+        // Chevrotain path: AST is built during parsing (optimized, no regression)
+        if (services.parser.LangiumParser) {
+            return services.parser.LangiumParser.parse(text, options);
+        }
+        // Generic path: ParserAdapter → SyntaxNode → AST builder
+        const adapter = services.parser.ParserAdapter;
+        const adapterResult = adapter.parse(text, options?.rule);
+        return services.parser.SyntaxNodeAstBuilder.buildAst(adapterResult.root) as ParseResult<T>;
     }
 
     protected parseAsync<T extends AstNode>(uri: URI, text: string, cancellationToken: CancellationToken): Promise<ParseResult<T>> {

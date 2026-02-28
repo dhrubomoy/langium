@@ -73,6 +73,8 @@ export interface Reference<T extends AstNode = AstNode> {
     readonly error?: LinkingError;
     /** The CST node from which the reference was parsed */
     readonly $refNode?: CstNode;
+    /** The SyntaxNode from which the reference was parsed (backend-agnostic). */
+    readonly $refSyntaxNode?: SyntaxNode;
     /** The actual text used to look up in the surrounding scope */
     readonly $refText: string;
     /** The node description for the AstNode returned by `ref`  */
@@ -82,6 +84,8 @@ export interface Reference<T extends AstNode = AstNode> {
 export interface MultiReference<T extends AstNode = AstNode> {
     /** The CST node from which the reference was parsed */
     readonly $refNode?: CstNode;
+    /** The SyntaxNode from which the reference was parsed (backend-agnostic). */
+    readonly $refSyntaxNode?: SyntaxNode;
     /** The actual text used to look up in the surrounding scope */
     readonly $refText: string;
     /**

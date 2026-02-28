@@ -10,4 +10,5 @@ export * from './grammar-translator.js';
 export * from './parse-result.js';
 export * from './parser-adapter.js';
 export * from './syntax-node.js';
+export * from './syntax-node-ast-builder.js';
 export * from './value-converter.js';

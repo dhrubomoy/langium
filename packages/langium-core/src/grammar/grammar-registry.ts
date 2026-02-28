@@ -6,8 +6,28 @@
 
 import type { LangiumCoreServices } from '../services.js';
 import type { AbstractElement, AbstractRule, Assignment, Grammar, Keyword } from '../languages/generated/ast.js';
-import { isAssignment, isKeyword, isParserRule, isTerminalRule } from '../languages/generated/ast.js';
+import { isCrossReference, isAssignment, isKeyword, isParserRule, isRuleCall, isTerminalRule } from '../languages/generated/ast.js';
 import { streamAllContents } from '../utils/ast-utils.js';
+import { isDataTypeRule } from '../utils/grammar-utils.js';
+
+/**
+ * Enriched assignment metadata for the AST builder.
+ * Provides all information needed to map a SyntaxNode child to an AST property.
+ */
+export interface AssignmentInfo {
+    /** The property/feature name (e.g., "name", "items"). */
+    property: string;
+    /** The assignment operator. */
+    operator: '=' | '?=' | '+=';
+    /** Whether this assignment is a cross-reference. */
+    isCrossReference: boolean;
+    /** Whether this is a multi-reference (CrossReference.isMulti). */
+    isMultiReference: boolean;
+    /** Terminal rule name for value conversion (e.g., "ID", "STRING", "INT"). */
+    terminalRuleName?: string;
+    /** The original grammar Assignment AST node. */
+    assignment: Assignment;
+}
 
 /**
  * Provides grammar introspection by node type name.
@@ -42,6 +62,18 @@ export interface GrammarRegistry {
      * Useful for looking up JSDoc comments attached to keyword definitions.
      */
     getKeywordElements(value: string): Keyword[];
+
+    /**
+     * Get enriched assignment info for all assignments within a parser rule.
+     * Includes cross-reference detection, operator, and terminal rule name.
+     * Used by the SyntaxNodeAstBuilder.
+     */
+    getAssignmentInfos(ruleName: string): AssignmentInfo[];
+
+    /**
+     * Check if a parser rule is a data type rule (returns a primitive value like string, number).
+     */
+    isDataTypeRule(ruleName: string): boolean;
 }
 
 /**
@@ -68,6 +100,12 @@ export class DefaultGrammarRegistry implements GrammarRegistry {
     /** Keyword value → all Keyword grammar nodes with that value */
     private readonly keywordElements = new Map<string, Keyword[]>();
 
+    /** Rule name → enriched AssignmentInfo[] */
+    private readonly ruleAssignmentInfos = new Map<string, AssignmentInfo[]>();
+
+    /** Set of data type rule names */
+    private readonly dataTypeRules = new Set<string>();
+
     constructor(services: LangiumCoreServices) {
         this.indexGrammar(services.Grammar);
     }
@@ -80,9 +118,19 @@ export class DefaultGrammarRegistry implements GrammarRegistry {
                 // Index the top-level definition as the alternatives list
                 this.alternativesMap.set(rule.name, [rule.definition]);
 
-                // Walk the rule's definition to find all assignments and keywords
+                // Track data type rules
+                if (isDataTypeRule(rule)) {
+                    this.dataTypeRules.add(rule.name);
+                }
+
+                // Walk the rule's definition to find all assignments and keywords.
+                // Note: streamAllContents does NOT include the root node itself,
+                // so we must also check rule.definition directly. This matters when
+                // a rule has only a single element (e.g., `Model: entities+=Entity*;`)
+                // where the definition IS the Assignment node.
                 const assignments: Assignment[] = [];
-                for (const node of streamAllContents(rule.definition)) {
+                const assignmentInfos: AssignmentInfo[] = [];
+                const processNode = (node: AbstractElement): void => {
                     if (isAssignment(node)) {
                         assignments.push(node);
                         const key = `${rule.name}:${node.feature}`;
@@ -90,6 +138,8 @@ export class DefaultGrammarRegistry implements GrammarRegistry {
                         if (!this.assignmentMap.has(key)) {
                             this.assignmentMap.set(key, node);
                         }
+                        // Build enriched AssignmentInfo
+                        assignmentInfos.push(this.buildAssignmentInfo(node));
                     } else if (isKeyword(node)) {
                         this.keywordSet.add(node.value);
                         let elements = this.keywordElements.get(node.value);
@@ -99,8 +149,15 @@ export class DefaultGrammarRegistry implements GrammarRegistry {
                         }
                         elements.push(node);
                     }
+                };
+                // Check the definition node itself
+                processNode(rule.definition);
+                // Then walk all descendants
+                for (const node of streamAllContents(rule.definition)) {
+                    processNode(node as AbstractElement);
                 }
                 this.ruleAssignments.set(rule.name, assignments);
+                this.ruleAssignmentInfos.set(rule.name, assignmentInfos);
             } else if (isTerminalRule(rule)) {
                 // Terminal rules don't have assignments or keywords to index
             }
@@ -129,5 +186,39 @@ export class DefaultGrammarRegistry implements GrammarRegistry {
 
     getKeywordElements(value: string): Keyword[] {
         return this.keywordElements.get(value) ?? [];
+    }
+
+    getAssignmentInfos(ruleName: string): AssignmentInfo[] {
+        return this.ruleAssignmentInfos.get(ruleName) ?? [];
+    }
+
+    isDataTypeRule(ruleName: string): boolean {
+        return this.dataTypeRules.has(ruleName);
+    }
+
+    private buildAssignmentInfo(assignment: Assignment): AssignmentInfo {
+        const terminal = assignment.terminal;
+        let terminalRuleName: string | undefined;
+        let crossRef = false;
+        let isMulti = false;
+
+        if (isCrossReference(terminal)) {
+            crossRef = true;
+            isMulti = terminal.isMulti;
+        } else {
+            // Find the terminal rule name for value conversion
+            if (isRuleCall(terminal) && terminal.rule.ref) {
+                terminalRuleName = terminal.rule.ref.name;
+            }
+        }
+
+        return {
+            property: assignment.feature,
+            operator: assignment.operator,
+            isCrossReference: crossRef,
+            isMultiReference: isMulti,
+            terminalRuleName,
+            assignment
+        };
     }
 }

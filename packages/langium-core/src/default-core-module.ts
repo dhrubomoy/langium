@@ -9,6 +9,7 @@ import type { LangiumDefaultCoreServices, LangiumDefaultSharedCoreServices, Lang
 import type { FileSystemProvider } from './workspace/file-system-provider.js';
 import { DefaultGrammarRegistry } from './grammar/grammar-registry.js';
 import { createGrammarConfig } from './languages/grammar-config.js';
+import { DefaultSyntaxNodeAstBuilder } from './parser/syntax-node-ast-builder.js';
 import { DefaultValueConverter } from './parser/value-converter.js';
 import { DefaultLinker } from './references/linker.js';
 import { DefaultNameProvider } from './references/name-provider.js';
@@ -55,6 +56,7 @@ export function createDefaultCoreModule(context: DefaultCoreModuleContext): Modu
         parser: {
             GrammarConfig: (services: LangiumCoreServices) => createGrammarConfig(services),
             ValueConverter: () => new DefaultValueConverter(),
+            SyntaxNodeAstBuilder: (services: LangiumCoreServices) => new DefaultSyntaxNodeAstBuilder(services),
             // ParserAdapter and AsyncParser must be provided by a backend-specific module
             // (e.g., langium-chevrotain's createChevrotainParserModule)
         } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
