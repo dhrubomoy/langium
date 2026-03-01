@@ -132,7 +132,7 @@ export class DefaultReferenceDescriptionProvider implements ReferenceDescription
 
     protected createInfoDescriptions(refInfo: ReferenceInfo): ReferenceDescription[] {
         const reference = refInfo.reference;
-        if (reference.error || !reference.$refNode) {
+        if (reference.error || (!reference.$refNode && !reference.$refSyntaxNode)) {
             return [];
         }
         let items: AstNodeDescription[] = [];
@@ -144,7 +144,12 @@ export class DefaultReferenceDescriptionProvider implements ReferenceDescription
         const sourceUri = getDocument(refInfo.container).uri;
         const sourcePath = this.nodeLocator.getAstNodePath(refInfo.container);
         const descriptions: ReferenceDescription[] = [];
-        const segment = toDocumentSegment(reference.$refNode);
+        // Prefer SyntaxNode path; fall back to CstNode for backward compat
+        const segment = toDocumentSegmentSN(reference.$refSyntaxNode)
+            ?? toDocumentSegment(reference.$refNode);
+        if (!segment) {
+            return [];
+        }
         for (const item of items) {
             descriptions.push({
                 sourceUri,

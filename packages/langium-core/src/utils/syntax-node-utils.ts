@@ -364,8 +364,8 @@ export function isChildSyntaxNode(child: SyntaxNode, parent: SyntaxNode): boolea
 /**
  * Maps a SyntaxNode back to its corresponding AstNode.
  * For ChevrotainSyntaxNode: accesses the underlying CstNode's astNode.
- * For other backends: use {@link SyntaxNodeAstBuilder.findAstNode} instead,
- * which is accessible via `services.parser.SyntaxNodeAstBuilder`.
+ * For other backends (e.g. Lezer): walks up the SyntaxNode parent chain
+ * looking for the `$astNode` back-reference set by SyntaxNodeAstBuilder.
  */
 export function findAstNodeForSyntaxNode(node: SyntaxNode): AstNode | undefined {
     if (isChevrotainSyntaxNode(node)) {
@@ -374,6 +374,15 @@ export function findAstNodeForSyntaxNode(node: SyntaxNode): AstNode | undefined 
         } catch {
             return undefined;
         }
+    }
+    // For non-Chevrotain backends, walk up parent chain looking for $astNode
+    // back-reference set by SyntaxNodeAstBuilder during AST construction
+    let current: SyntaxNode | null = node;
+    while (current) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const astNode = (current as any).$astNode as AstNode | undefined;
+        if (astNode) return astNode;
+        current = current.parent;
     }
     return undefined;
 }

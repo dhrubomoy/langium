@@ -75,7 +75,9 @@
     "vscode-uri": "~3.1.0"
   },
   "devDependencies": {
+    "@lezer/generator": "^1.7.0",
     "langium-cli": "~4.2.0",
+    "langium-lezer": "~4.2.0",
     "typedoc": "~0.28.2"
   },
   "repository": {

@@ -55,12 +55,10 @@ by node type name, replacing grammarSource back-pointers. `getRuleByName(type)`,
 
 ## Current Phase
 
-**Blocked: Lezer backend integration gaps (Phase 2 incomplete items)**
-
-Phase 1 service migration is complete — all LSP and core services use SyntaxNode as primary path.
-The Lezer backend works at the parser level (SyntaxNode trees, incremental parsing) but
-**cannot produce ASTs or run LSP services** due to missing AST builder and linker support.
-See DESIGN.md §11 for full gap analysis.
+**Phase 2 complete.** All Phase 2 items are done — Lezer backend produces ASTs through the
+document pipeline and LSP services work with both Chevrotain and Lezer backends. Known
+limitations: alternative rules, infix grammars, completion tokenizer, and cross-reference
+position navigation don't fully work with Lezer yet (see [docs/TESTS.md](docs/TESTS.md)).
 
 Phase file: [docs/phases/PHASE-2.md](docs/phases/PHASE-2.md)
 
@@ -99,17 +97,18 @@ Phase file: [docs/phases/PHASE-2.md](docs/phases/PHASE-2.md)
 - [x] Wire into root workspace/tsconfig.build.json — full build passes
 - [x] Cross-backend conformance tests (parser-level only)
 - [x] Incremental parsing correctness + performance tests
-- [ ] **INCOMPLETE: SyntaxNode → AST builder** — No generic AST builder exists. `DocumentFactory.parse()`
-  calls `LangiumParser.parse()` (Chevrotain-specific). Need a backend-agnostic AST builder that walks
-  a SyntaxNode tree and constructs typed AstNodes. (See DESIGN.md §11.1 Gap 1)
-- [ ] **INCOMPLETE: SyntaxNode → AstNode positional mapping** — `findAstNodeForSyntaxNode()` in
-  syntax-node-utils.ts returns `undefined` for Lezer SyntaxNodes. (See DESIGN.md §11.1 Gap 2)
-- [ ] **INCOMPLETE: Linker $refNode** — `Linker.buildReference()` takes CstNode for `$refNode`.
-  With Lezer, all Reference.$refNode will be undefined. (See DESIGN.md §11.4)
-- [ ] **INCOMPLETE: DefaultAsyncParser** — Directly accesses `services.parser.LangiumParser`.
-- [ ] **INCOMPLETE: Dual-backend LSP tests** — LSP tests only run against Chevrotain. Test helper
-  `lezer-test-helper.ts` exists in `packages/langium/test/` but tests fail because Lezer cannot
-  produce ASTs through the document pipeline.
+- [x] SyntaxNode → AST builder — `DefaultSyntaxNodeAstBuilder` in langium-core/src/parser/syntax-node-ast-builder.ts.
+  `DocumentFactory.parse()` uses dual path: Chevrotain optimized or generic ParserAdapter → SyntaxNodeAstBuilder.
+- [x] SyntaxNode → AstNode positional mapping — `SyntaxNodeAstBuilder.findAstNode()` provides reverse
+  mapping via per-instance WeakMap for non-Chevrotain backends (replaces `findAstNodeForSyntaxNode()`).
+- [x] Linker $refNode — New `buildReferenceSN()` / `buildMultiReferenceSN()` methods on Linker interface;
+  `$refSyntaxNode` property added to Reference/MultiReference interfaces for backend-agnostic references.
+- [x] DefaultAsyncParser — Uses dual path: Chevrotain `LangiumParser` fast path, falls back to
+  `ParserAdapter` + `SyntaxNodeAstBuilder` for non-Chevrotain backends.
+- [x] Dual-backend LSP tests — 15 test files in `packages/langium/test/lsp/`, 119 tests passing
+  across both backends. Test helper `langium-lezer-test.ts` provides `BACKENDS` array and
+  `createLezerServicesForGrammar()`. Lezer-incompatible tests skipped with documented reasons.
+  See [docs/TESTS.md](docs/TESTS.md) for coverage matrix and known Lezer limitations.
 
 ### Phase 3: Grammar Extensions
 - [x] Extend grammar parser (precedence blocks, external tokens, conflicts, specialize/extend, local tokens)

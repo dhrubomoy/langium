@@ -100,9 +100,16 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
         // Set mandatory default values (empty arrays, default booleans, etc.)
         assignMandatoryProperties(this.reflection, node);
 
-        // Associate SyntaxNode with AstNode
+        // Associate SyntaxNode with AstNode (bidirectional)
         this.defineSyntaxNodeProperty(node, syntaxNode);
         this.syntaxNodeToAstNode.set(syntaxNode, node);
+        // Store back-reference on SyntaxNode for findAstNodeForSyntaxNode()
+        Object.defineProperty(syntaxNode, '$astNode', {
+            value: node,
+            configurable: true,
+            enumerable: false,
+            writable: true
+        });
 
         return node;
     }

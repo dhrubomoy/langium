@@ -41,17 +41,25 @@ export interface AsyncParser {
  */
 export class DefaultAsyncParser implements AsyncParser {
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    protected readonly syncParser: any;
+    protected readonly services: LangiumCoreServices;
 
     constructor(services: LangiumCoreServices) {
-        // Accesses parser.LangiumParser which is registered by the Chevrotain module.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        this.syncParser = (services as any).parser.LangiumParser;
+        this.services = services;
     }
 
     parse<T extends AstNode>(text: string, _cancelToken: CancellationToken): Promise<ParseResult<T>> {
-        return Promise.resolve(this.syncParser.parse(text));
+        // Chevrotain path: AST is built during parsing (optimized, no regression)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const langiumParser = (this.services as any).parser.LangiumParser;
+        if (langiumParser) {
+            return Promise.resolve(langiumParser.parse(text));
+        }
+        // Generic path: ParserAdapter → SyntaxNode → AST builder
+        const adapter = this.services.parser.ParserAdapter;
+        const adapterResult = adapter.parse(text);
+        return Promise.resolve(
+            this.services.parser.SyntaxNodeAstBuilder.buildAst(adapterResult.root) as ParseResult<T>
+        );
     }
 }
 
