@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 import type { CompletionItem, CompletionParams, TextEdit } from 'vscode-languageserver-protocol';
-import type { NameProvider, ScopeProvider, AstNode, AstNodeDescription, AstReflection, MultiReference, Mutable, Reference, ReferenceInfo, SyntaxNode, MaybePromise, LangiumDocument, TextDocument, GrammarConfig, DocumentationProvider, Stream } from 'langium-core';
+import type { NameProvider, ScopeProvider, AstNode, AstNodeDescription, AstReflection, MultiReference, Mutable, Reference, ReferenceInfo, SyntaxNode, MaybePromise, LangiumDocument, TextDocument, GrammarConfig, DocumentationProvider, Stream , Cancellation} from 'langium-core';
 import type { LangiumCompletionParser, LangiumChevrotainServices, Lexer } from 'langium-chevrotain';
 import type { NextFeature } from './follow-element-computation.js';
 import type { NodeKindProvider } from '../node-kind-provider.js';
@@ -15,7 +15,7 @@ import type { LangiumServices } from '../lsp-services.js';
 interface CompletionToken { startOffset: number; endOffset?: number }
 import type { MarkupContent } from 'vscode-languageserver';
 import { CompletionItemKind, CompletionList, Position } from 'vscode-languageserver';
-import { GrammarAST, AstUtils, SyntaxNodeUtils, GrammarUtils, Cancellation, stream } from 'langium-core';
+import { GrammarAST, AstUtils, SyntaxNodeUtils, GrammarUtils, stream } from 'langium-core';
 import { findFirstFeatures, findNextFeatures } from './follow-element-computation.js';
 
 export type CompletionAcceptor = (context: CompletionContext, value: CompletionValueItem) => void
@@ -112,14 +112,20 @@ export interface CompletionProvider {
     readonly completionOptions?: CompletionProviderOptions;
 }
 
-export class DefaultCompletionProvider implements CompletionProvider {
+/**
+ * Abstract base class for completion providers.
+ * Contains all parser-agnostic completion logic shared between backends.
+ * Subclasses implement 3 abstract methods for backend-specific behavior:
+ * - `findFeaturesAt` — compute expected grammar features at an offset
+ * - `findTokenBoundaries` — find token start/end positions around the cursor
+ * - `findDataTypeRuleStart` — detect if cursor is inside a data type rule
+ */
+export abstract class AbstractCompletionProvider implements CompletionProvider {
 
-    protected readonly completionParser: LangiumCompletionParser;
     protected readonly documentationProvider: DocumentationProvider;
     protected readonly scopeProvider: ScopeProvider;
     protected readonly grammar: GrammarAST.Grammar;
     protected readonly nameProvider: NameProvider;
-    protected readonly lexer: Lexer;
     protected readonly nodeKindProvider: NodeKindProvider;
     protected readonly fuzzyMatcher: FuzzyMatcher;
     protected readonly grammarConfig: GrammarConfig;
@@ -127,18 +133,37 @@ export class DefaultCompletionProvider implements CompletionProvider {
     readonly completionOptions?: CompletionProviderOptions;
 
     constructor(services: LangiumServices) {
-        const chevrotainServices = services as unknown as LangiumChevrotainServices;
         this.scopeProvider = services.references.ScopeProvider;
         this.grammar = services.Grammar;
-        this.completionParser = chevrotainServices.parser.CompletionParser;
         this.nameProvider = services.references.NameProvider;
-        this.lexer = chevrotainServices.parser.Lexer;
         this.nodeKindProvider = services.shared.lsp.NodeKindProvider;
         this.fuzzyMatcher = services.shared.lsp.FuzzyMatcher;
         this.grammarConfig = services.parser.GrammarConfig;
         this.astReflection = services.shared.AstReflection;
         this.documentationProvider = services.documentation.DocumentationProvider;
     }
+
+    // ---- Abstract methods (backend-specific) ----
+
+    /**
+     * Compute grammar features expected at a given offset.
+     * Chevrotain uses its CompletionParser; Lezer collects leaf tokens from the parse tree.
+     */
+    protected abstract findFeaturesAt(rootSyntaxNode: SyntaxNode, textDocument: TextDocument, offset: number): NextFeature[];
+
+    /**
+     * Find token boundary information around the cursor offset.
+     * Chevrotain uses its Lexer; Lezer walks parse tree leaves.
+     */
+    protected abstract findTokenBoundaries(rootSyntaxNode: SyntaxNode, text: string, offset: number): CompletionBacktrackingInformation;
+
+    /**
+     * Detect if the cursor is inside a data type rule and return its span.
+     * Returns `[startOffset, endOffset]` if inside a data type rule, `undefined` otherwise.
+     */
+    protected abstract findDataTypeRuleStart(rootSyntaxNode: SyntaxNode, offset: number): [number, number] | undefined;
+
+    // ---- Shared implementation ----
 
     async getCompletion(document: LangiumDocument, params: CompletionParams, _cancelToken?: Cancellation.CancellationToken): Promise<CompletionList | undefined> {
         const items: CompletionItem[] = [];
@@ -186,25 +211,6 @@ export class DefaultCompletionProvider implements CompletionProvider {
      */
     protected deduplicateItems(items: CompletionItem[]): CompletionItem[] {
         return stream(items).distinct(item => `${item.kind}_${item.label}_${item.detail}`).toArray();
-    }
-
-    protected findFeaturesAt(document: TextDocument, offset: number): NextFeature[] {
-        const text = document.getText({
-            start: Position.create(0, 0),
-            end: document.positionAt(offset)
-        });
-        const parserResult = this.completionParser.parse(text);
-        const tokens = parserResult.tokens;
-        // If the parser didn't parse any tokens, return the next features of the entry rule
-        if (parserResult.tokenIndex === 0) {
-            const parserRule = GrammarUtils.getEntryRule(this.grammar)!;
-            // Generate a synthetic RuleCall to the entry rule
-            const syntheticEntryRuleCall = this.buildSyntheticEntryRuleCall(parserRule);
-            return findNextFeatures([[syntheticEntryRuleCall]], tokens);
-        }
-        const leftoverTokens = [...tokens].splice(parserResult.tokenIndex);
-        const features = findNextFeatures([parserResult.elementStack.map(feature => ({ feature }))], leftoverTokens);
-        return features;
     }
 
     protected buildSyntheticEntryRuleCall(rule: GrammarAST.ParserRule): NextFeature {
@@ -266,11 +272,11 @@ export class DefaultCompletionProvider implements CompletionProvider {
                 node: parentNode,
                 tokenOffset: ruleStart,
                 tokenEndOffset: ruleEnd,
-                features: this.findFeaturesAt(textDocument, ruleStart),
+                features: this.findFeaturesAt(rootSyntaxNode, textDocument, ruleStart),
             };
         }
         // For all other purposes, it's enough to jump to the start of the current/previous token
-        const { nextTokenStart, nextTokenEnd, previousTokenStart, previousTokenEnd } = this.backtrackToAnyToken(text, offset);
+        const { nextTokenStart, nextTokenEnd, previousTokenStart, previousTokenEnd } = this.findTokenBoundaries(rootSyntaxNode, text, offset);
         let astNodeOffset = nextTokenStart;
         if (offset <= nextTokenStart && previousTokenStart !== undefined) {
             // This check indicates that the cursor is still before the next token, so we should use the previous AST node (if it exists)
@@ -286,7 +292,7 @@ export class DefaultCompletionProvider implements CompletionProvider {
                 node: astNode,
                 tokenOffset: previousTokenStart,
                 tokenEndOffset: previousTokenEnd,
-                features: this.findFeaturesAt(textDocument, previousTokenStart),
+                features: this.findFeaturesAt(rootSyntaxNode, textDocument, previousTokenStart),
             };
             // The completion after the current token should be prevented in case we find out that the current token definitely isn't completed yet
             // This is usually the case when the current token ends on a letter.
@@ -304,7 +310,7 @@ export class DefaultCompletionProvider implements CompletionProvider {
                     node: astNode,
                     tokenOffset: previousTokenEnd,
                     tokenEndOffset: previousTokenEnd,
-                    features: this.findFeaturesAt(textDocument, previousTokenEnd),
+                    features: this.findFeaturesAt(rootSyntaxNode, textDocument, previousTokenEnd),
                 };
             }
         }
@@ -328,30 +334,17 @@ export class DefaultCompletionProvider implements CompletionProvider {
                 node: astNode,
                 tokenOffset: nextTokenStart,
                 tokenEndOffset: nextTokenEnd,
-                features: this.findFeaturesAt(textDocument, nextTokenStart),
+                features: this.findFeaturesAt(rootSyntaxNode, textDocument, nextTokenStart),
             };
         }
     }
 
-    protected performNextTokenCompletion(document: LangiumDocument, text: string, _offset: number, _end: number): boolean {
+    protected performNextTokenCompletion(_document: LangiumDocument, text: string, _offset: number, _end: number): boolean {
         // This regex returns false if the text ends with a letter.
         // We don't want to complete new text immediately after a keyword, ID etc.
         // We only care about the last character in the text, so we use $ here.
         // The \P{L} used here is a Unicode category that matches any character that is not a letter
         return /\P{L}$/u.test(text);
-    }
-
-    protected findDataTypeRuleStart(syntaxNode: SyntaxNode, offset: number): [number, number] | undefined {
-        const containerNode = SyntaxNodeUtils.findDeclarationSyntaxNodeAtOffset(syntaxNode, offset, this.grammarConfig.nameRegexp);
-        if (!containerNode) {
-            return undefined;
-        }
-        // Identify whether the element was parsed as part of a data type rule
-        const fullNode = SyntaxNodeUtils.getDatatypeSyntaxNode(containerNode);
-        if (fullNode) {
-            return [fullNode.offset, fullNode.end];
-        }
-        return undefined;
     }
 
     /**
@@ -361,58 +354,6 @@ export class DefaultCompletionProvider implements CompletionProvider {
      */
     protected continueCompletion(items: CompletionItem[]): boolean {
         return items.length === 0;
-    }
-
-    /**
-     * This method returns two sets of token offset information.
-     *
-     * The `nextToken*` offsets are related to the token at the cursor position.
-     * If there is none, both offsets are simply set to `offset`.
-     *
-     * The `previousToken*` offsets are related to the last token before the current token at the cursor position.
-     * They are `undefined`, if there is no token before the cursor position.
-     */
-    protected backtrackToAnyToken(text: string, offset: number): CompletionBacktrackingInformation {
-        const tokens = this.lexer.tokenize(text).tokens;
-        if (tokens.length === 0) {
-            // If we don't have any tokens in our document, just return the offset position
-            return {
-                nextTokenStart: offset,
-                nextTokenEnd: offset
-            };
-        }
-        let previousToken: CompletionToken | undefined;
-        for (const token of tokens) {
-            if (token.startOffset >= offset) {
-                // We are between two tokens
-                // Return the current offset as the next token index
-                return {
-                    nextTokenStart: offset,
-                    nextTokenEnd: offset,
-                    previousTokenStart: previousToken ? previousToken.startOffset : undefined,
-                    previousTokenEnd: previousToken ? previousToken.endOffset! + 1 : undefined
-                };
-            }
-            if (token.endOffset! >= offset) {
-                // We are within a token
-                // Return the current and previous token offsets as normal
-                return {
-                    nextTokenStart: token.startOffset,
-                    nextTokenEnd: token.endOffset! + 1,
-                    previousTokenStart: previousToken ? previousToken.startOffset : undefined,
-                    previousTokenEnd: previousToken ? previousToken.endOffset! + 1 : undefined
-                };
-            }
-            previousToken = token;
-        }
-        // We have run into the end of the file
-        // Return the current offset as the next token index
-        return {
-            nextTokenStart: offset,
-            nextTokenEnd: offset,
-            previousTokenStart: previousToken ? previousToken.startOffset : undefined,
-            previousTokenEnd: previousToken ? previousToken.endOffset! + 1 : undefined
-        };
     }
 
     protected completionFor(context: CompletionContext, next: NextFeature, acceptor: CompletionAcceptor): MaybePromise<void> {
@@ -531,7 +472,7 @@ export class DefaultCompletionProvider implements CompletionProvider {
         return CompletionItemKind.Keyword;
     }
 
-    protected filterKeyword(context: CompletionContext, keyword: GrammarAST.Keyword): boolean {
+    protected filterKeyword(_context: CompletionContext, keyword: GrammarAST.Keyword): boolean {
         // Filter out keywords that do not contain any word character
         return /\p{L}/u.test(keyword.value);
     }
@@ -603,5 +544,90 @@ export class DefaultCompletionProvider implements CompletionProvider {
         } else {
             return undefined;
         }
+    }
+}
+
+/**
+ * Chevrotain-based completion provider.
+ * Uses Chevrotain's CompletionParser and Lexer for feature finding and token boundaries.
+ */
+export class DefaultCompletionProvider extends AbstractCompletionProvider {
+
+    protected readonly completionParser: LangiumCompletionParser;
+    protected readonly lexer: Lexer;
+
+    constructor(services: LangiumServices) {
+        super(services);
+        const chevrotainServices = services as unknown as LangiumChevrotainServices;
+        this.completionParser = chevrotainServices.parser.CompletionParser;
+        this.lexer = chevrotainServices.parser.Lexer;
+    }
+
+    protected findFeaturesAt(_rootSyntaxNode: SyntaxNode, textDocument: TextDocument, offset: number): NextFeature[] {
+        const text = textDocument.getText({
+            start: Position.create(0, 0),
+            end: textDocument.positionAt(offset)
+        });
+        const parserResult = this.completionParser.parse(text);
+        const tokens = parserResult.tokens;
+        // If the parser didn't parse any tokens, return the next features of the entry rule
+        if (parserResult.tokenIndex === 0) {
+            const parserRule = GrammarUtils.getEntryRule(this.grammar)!;
+            // Generate a synthetic RuleCall to the entry rule
+            const syntheticEntryRuleCall = this.buildSyntheticEntryRuleCall(parserRule);
+            return findNextFeatures([[syntheticEntryRuleCall]], tokens);
+        }
+        const leftoverTokens = [...tokens].splice(parserResult.tokenIndex);
+        const features = findNextFeatures([parserResult.elementStack.map(feature => ({ feature }))], leftoverTokens);
+        return features;
+    }
+
+    protected findTokenBoundaries(_rootSyntaxNode: SyntaxNode, text: string, offset: number): CompletionBacktrackingInformation {
+        const tokens = this.lexer.tokenize(text).tokens;
+        if (tokens.length === 0) {
+            return {
+                nextTokenStart: offset,
+                nextTokenEnd: offset
+            };
+        }
+        let previousToken: CompletionToken | undefined;
+        for (const token of tokens) {
+            if (token.startOffset >= offset) {
+                return {
+                    nextTokenStart: offset,
+                    nextTokenEnd: offset,
+                    previousTokenStart: previousToken ? previousToken.startOffset : undefined,
+                    previousTokenEnd: previousToken ? previousToken.endOffset! + 1 : undefined
+                };
+            }
+            if (token.endOffset! >= offset) {
+                return {
+                    nextTokenStart: token.startOffset,
+                    nextTokenEnd: token.endOffset! + 1,
+                    previousTokenStart: previousToken ? previousToken.startOffset : undefined,
+                    previousTokenEnd: previousToken ? previousToken.endOffset! + 1 : undefined
+                };
+            }
+            previousToken = token;
+        }
+        return {
+            nextTokenStart: offset,
+            nextTokenEnd: offset,
+            previousTokenStart: previousToken ? previousToken.startOffset : undefined,
+            previousTokenEnd: previousToken ? previousToken.endOffset! + 1 : undefined
+        };
+    }
+
+    protected findDataTypeRuleStart(syntaxNode: SyntaxNode, offset: number): [number, number] | undefined {
+        const containerNode = SyntaxNodeUtils.findDeclarationSyntaxNodeAtOffset(syntaxNode, offset, this.grammarConfig.nameRegexp);
+        if (!containerNode) {
+            return undefined;
+        }
+        // Identify whether the element was parsed as part of a data type rule
+        const fullNode = SyntaxNodeUtils.getDatatypeSyntaxNode(containerNode);
+        if (fullNode) {
+            return [fullNode.offset, fullNode.end];
+        }
+        return undefined;
     }
 }
