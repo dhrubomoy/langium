@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 import { describe, test, expect, beforeAll } from 'vitest';
-import type { AstNode } from 'langium';
+import type { AstNode, GrammarRegistry } from 'langium';
 import { SyntaxNodeUtils, CstUtils, GrammarUtils } from 'langium';
 
 import { createServicesForGrammar } from 'langium/grammar';
@@ -54,10 +54,12 @@ interface Item extends AstNode {
 
 describe('SyntaxNode utility functions', () => {
     let parse: ReturnType<typeof parseHelper<Model>>;
+    let grammarRegistry: GrammarRegistry;
 
     beforeAll(async () => {
         const services = await createServicesForGrammar({ grammar });
         parse = parseHelper<Model>(services);
+        grammarRegistry = services.grammar.GrammarRegistry;
     });
 
     describe('streamSyntaxTree', () => {
@@ -262,7 +264,7 @@ describe('SyntaxNode utility functions', () => {
             const item = doc.parseResult.value.items[0];
             const nameNode = findNodeForPropertySN(item.$syntaxNode, 'name');
             expect(nameNode).toBeDefined();
-            const assignment = findAssignmentSN(nameNode!);
+            const assignment = findAssignmentSN(nameNode!, grammarRegistry);
             expect(assignment).toBeDefined();
             expect(assignment!.feature).toBe('name');
         });

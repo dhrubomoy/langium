@@ -38,7 +38,7 @@ export class ChevrotainAdapter implements ParserAdapter {
         const root = wrapRootCstNode(rootCstNode);
         root.setDiagnostics(toParseDiagnostics(parseResult.parserErrors, parseResult.lexerErrors));
 
-        return { root };
+        return { root, builtAst: parseResult };
     }
 
     getExpectedTokens(text: string, offset: number): ExpectedToken[] {

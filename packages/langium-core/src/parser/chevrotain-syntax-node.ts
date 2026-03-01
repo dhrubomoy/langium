@@ -6,10 +6,11 @@
 
 import type { Range } from 'vscode-languageserver-types';
 import type { AbstractElement } from '../languages/generated/ast.js';
-import type { CompositeCstNode, CstNode, RootCstNode } from '../syntax-tree.js';
+import type { AstNode, CompositeCstNode, CstNode, RootCstNode } from '../syntax-tree.js';
+import type { Assignment } from '../languages/generated/ast.js';
 import type { ParseDiagnostic, RootSyntaxNode, SyntaxNode } from './syntax-node.js';
 import { isCompositeCstNode, isLeafCstNode } from '../syntax-tree.js';
-import { isAssignment, isKeyword, isRuleCall } from '../languages/generated/ast.js';
+import { isAssignment, isCrossReference, isKeyword, isParserRule, isRuleCall } from '../languages/generated/ast.js';
 import { getContainerOfType } from '../utils/ast-utils.js';
 
 /**
@@ -62,6 +63,15 @@ function deriveTypeName(cstNode: CstNode): string {
     }
     if (isRuleCall(source)) {
         return source.rule.ref?.name ?? '';
+    }
+    if (isCrossReference(source)) {
+        // buildCrossReference passes the CrossReference element as grammarSource.
+        // Derive the type from its terminal rule (e.g., FQN) so that
+        // isDataTypeRule() can match it.
+        const terminal = source.terminal;
+        if (terminal && isRuleCall(terminal) && isParserRule(terminal.rule.ref)) {
+            return terminal.rule.ref.name;
+        }
     }
     if (isKeyword(source)) {
         return source.value;
@@ -154,6 +164,48 @@ export class ChevrotainSyntaxNode implements SyntaxNode {
 
     get isKeyword(): boolean {
         return isKeywordNode(this.underlyingCstNode);
+    }
+
+    /**
+     * @internal Back-reference to the AstNode that was built from this syntax node.
+     * Enables the generic `findAstNodeForSyntaxNode()` walk-up to work for Chevrotain nodes.
+     */
+    get $astNode(): AstNode | undefined {
+        try {
+            return this.underlyingCstNode.astNode;
+        } catch {
+            return undefined;
+        }
+    }
+
+    /**
+     * @internal Whether this node was parsed within a datatype rule context.
+     * Uses the underlying CstNode's grammarSource to find the defining ParserRule
+     * and checks its `dataType` flag. Enables `getDatatypeSyntaxNode()` to work
+     * without relying on `node.type` matching a rule name.
+     */
+    get $isInDataTypeRule(): boolean {
+        const source = this.underlyingCstNode.grammarSource as AbstractElement | undefined;
+        const definingRule = getContainerOfType(source, isParserRule);
+        return !!(definingRule && definingRule.dataType);
+    }
+
+    /**
+     * @internal Find the grammar Assignment for this node by walking up the CstNode
+     * container chain within the same AST node, checking grammarSource for assignments.
+     * Replicates the old `findAssignment(cstNode)` logic from grammar-utils.
+     */
+    get $grammarAssignment(): Assignment | undefined {
+        let cst: CstNode = this.underlyingCstNode;
+        const astNode = cst.astNode;
+        while (astNode === cst.container?.astNode) {
+            const assignment = getContainerOfType(cst.grammarSource as AbstractElement | undefined, isAssignment);
+            if (assignment) {
+                return assignment;
+            }
+            cst = cst.container;
+        }
+        return undefined;
     }
 
     // --- Type information ---

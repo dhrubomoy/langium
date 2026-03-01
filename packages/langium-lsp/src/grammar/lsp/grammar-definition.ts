@@ -25,7 +25,7 @@ export class LangiumGrammarDefinitionProvider extends DefaultDefinitionProvider 
         const pathFeature: Properties<GrammarAST.GrammarImport> = 'path';
         // Bridge: get the AST node from the SyntaxNode for grammar-specific checks
         const sourceAstNode = SyntaxNodeUtils.findAstNodeForSyntaxNode(sourceSyntaxNode);
-        if (sourceAstNode && GrammarAST.isGrammarImport(sourceAstNode) && SyntaxNodeUtils.findAssignmentSN(sourceSyntaxNode)?.feature === pathFeature) {
+        if (sourceAstNode && GrammarAST.isGrammarImport(sourceAstNode) && SyntaxNodeUtils.findAssignmentSN(sourceSyntaxNode, this.grammarRegistry)?.feature === pathFeature) {
             const importedGrammar = resolveImport(this.documents, sourceAstNode);
             if (importedGrammar?.$document) {
                 const targetObject = this.findTargetObject(importedGrammar) ?? importedGrammar;

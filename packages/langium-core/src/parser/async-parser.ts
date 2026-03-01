@@ -48,15 +48,13 @@ export class DefaultAsyncParser implements AsyncParser {
     }
 
     parse<T extends AstNode>(text: string, _cancelToken: CancellationToken): Promise<ParseResult<T>> {
-        // Chevrotain path: AST is built during parsing (optimized, no regression)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const langiumParser = (this.services as any).parser.LangiumParser;
-        if (langiumParser) {
-            return Promise.resolve(langiumParser.parse(text));
-        }
-        // Generic path: ParserAdapter → SyntaxNode → AST builder
         const adapter = this.services.parser.ParserAdapter;
         const adapterResult = adapter.parse(text);
+        // Use pre-built AST if the backend built it during parsing (e.g. Chevrotain's one-pass approach)
+        if (adapterResult.builtAst) {
+            return Promise.resolve(adapterResult.builtAst as ParseResult<T>);
+        }
+        // Generic path: SyntaxNode → AST builder
         return Promise.resolve(
             this.services.parser.SyntaxNodeAstBuilder.buildAst(adapterResult.root) as ParseResult<T>
         );

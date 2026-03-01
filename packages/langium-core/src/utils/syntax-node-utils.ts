@@ -6,23 +6,12 @@
 
 import type { Assignment } from '../languages/generated/ast.js';
 import type { GrammarRegistry } from '../grammar/grammar-registry.js';
-import type { ChevrotainSyntaxNode } from '../parser/chevrotain-syntax-node.js';
 import type { SyntaxNode } from '../parser/syntax-node.js';
 import type { AstNode } from '../syntax-tree.js';
 import type { Stream, TreeStream } from './stream.js';
 import type { DocumentSegment } from '../workspace/documents.js';
-import { wrapCstNode } from '../parser/chevrotain-syntax-node.js';
 import { TreeStreamImpl } from './stream.js';
-import { findNodeForProperty, findNodesForProperty, findNodesForKeyword, findAssignment as findAssignmentCst } from './grammar-utils.js';
-import { findLeafNodeAtOffset as findLeafCstNodeAtOffset, findLeafNodeBeforeOffset as findLeafCstNodeBeforeOffset, findCommentNode as findCommentCstNode, isCommentNode as isCommentCstNode, getDatatypeNode as getDatatypeCstNode, getInteriorNodes as getInteriorCstNodes, DefaultNameRegexp } from './cst-utils.js';
-
-/**
- * Checks if a SyntaxNode is a ChevrotainSyntaxNode (bridge pattern).
- * Used internally to delegate to CstNode-based functions during Phase 1.
- */
-function isChevrotainSyntaxNode(node: SyntaxNode): node is ChevrotainSyntaxNode {
-    return 'underlyingCstNode' in node;
-}
+import { DefaultNameRegexp } from './cst-utils.js';
 
 // --- Tree streaming ---
 
@@ -51,11 +40,6 @@ export function flattenSyntaxTree(node: SyntaxNode): Stream<SyntaxNode> {
  * Returns undefined if the offset doesn't point to a node.
  */
 export function findLeafSyntaxNodeAtOffset(node: SyntaxNode, offset: number): SyntaxNode | undefined {
-    if (isChevrotainSyntaxNode(node)) {
-        const cstResult = findLeafCstNodeAtOffset(node.underlyingCstNode, offset);
-        return cstResult ? wrapCstNode(cstResult) : undefined;
-    }
-    // Generic SyntaxNode implementation
     if (node.isLeaf) {
         return node;
     }
@@ -72,11 +56,6 @@ export function findLeafSyntaxNodeAtOffset(node: SyntaxNode, offset: number): Sy
  * If no node exists at the position, returns the closest leaf before it.
  */
 export function findLeafSyntaxNodeBeforeOffset(node: SyntaxNode, offset: number): SyntaxNode | undefined {
-    if (isChevrotainSyntaxNode(node)) {
-        const cstResult = findLeafCstNodeBeforeOffset(node.underlyingCstNode, offset);
-        return cstResult ? wrapCstNode(cstResult) : undefined;
-    }
-    // Generic SyntaxNode implementation
     if (node.isLeaf) {
         return node;
     }
@@ -121,11 +100,6 @@ export function findCommentSyntaxNode(node: SyntaxNode | undefined, commentNames
     if (!node) {
         return undefined;
     }
-    if (isChevrotainSyntaxNode(node)) {
-        const cstResult = findCommentCstNode(node.underlyingCstNode, commentNames);
-        return cstResult ? wrapCstNode(cstResult) : undefined;
-    }
-    // Generic implementation: look for hidden preceding sibling with matching token type
     const prev = getPreviousSyntaxNode(node, true);
     if (prev && isCommentSyntaxNode(prev, commentNames)) {
         return prev;
@@ -137,9 +111,6 @@ export function findCommentSyntaxNode(node: SyntaxNode | undefined, commentNames
  * Check if a SyntaxNode is a comment node.
  */
 export function isCommentSyntaxNode(node: SyntaxNode, commentNames: string[]): boolean {
-    if (isChevrotainSyntaxNode(node)) {
-        return isCommentCstNode(node.underlyingCstNode, commentNames);
-    }
     return node.isLeaf && node.tokenType !== undefined && commentNames.includes(node.tokenType);
 }
 
@@ -188,20 +159,15 @@ export function getNextSyntaxNode(node: SyntaxNode, hidden = true): SyntaxNode |
     return undefined;
 }
 
-// --- Grammar-aware functions (bridging) ---
+// --- Grammar-aware functions ---
 
 /**
  * Find all SyntaxNodes within the given node that contribute to the specified property.
- * For ChevrotainSyntaxNode: delegates to existing CstNode-based functions.
- * For future backends: uses SyntaxNode.childrenForField().
+ * Uses SyntaxNode.childrenForField() which each backend implements.
  */
 export function findNodesForPropertySN(node: SyntaxNode | undefined, property: string | undefined): SyntaxNode[] {
     if (!node || !property) {
         return [];
-    }
-    if (isChevrotainSyntaxNode(node)) {
-        const cstResults = findNodesForProperty(node.underlyingCstNode, property);
-        return cstResults.map(wrapCstNode);
     }
     return node.childrenForField(property) as SyntaxNode[];
 }
@@ -212,10 +178,6 @@ export function findNodesForPropertySN(node: SyntaxNode | undefined, property: s
 export function findNodeForPropertySN(node: SyntaxNode | undefined, property: string | undefined, index?: number): SyntaxNode | undefined {
     if (!node || !property) {
         return undefined;
-    }
-    if (isChevrotainSyntaxNode(node)) {
-        const cstResult = findNodeForProperty(node.underlyingCstNode, property, index);
-        return cstResult ? wrapCstNode(cstResult) : undefined;
     }
     const children = node.childrenForField(property);
     if (children.length === 0) {
@@ -231,23 +193,33 @@ export function findNodeForPropertySN(node: SyntaxNode | undefined, property: st
 
 /**
  * Find all SyntaxNodes within the given node that correspond to the specified keyword.
+ * Only searches within the same AST node boundary (does not descend into children
+ * that belong to a different AstNode).
  */
 export function findNodesForKeywordSN(node: SyntaxNode | undefined, keyword: string): SyntaxNode[] {
     if (!node) {
         return [];
     }
-    if (isChevrotainSyntaxNode(node)) {
-        const cstResults = findNodesForKeyword(node.underlyingCstNode, keyword);
-        return cstResults.map(wrapCstNode);
-    }
-    // Generic implementation: walk children looking for keyword nodes
     const results: SyntaxNode[] = [];
-    for (const child of streamSyntaxTree(node)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ownerAstNode = (node as any).$astNode;
+    findKeywordsInBoundary(node, keyword, ownerAstNode, results);
+    return results;
+}
+
+function findKeywordsInBoundary(node: SyntaxNode, keyword: string, ownerAstNode: AstNode | undefined, results: SyntaxNode[]): void {
+    for (const child of node.children) {
         if (child.isKeyword && child.text === keyword) {
             results.push(child);
+        } else if (!child.isLeaf) {
+            // Only recurse into children that belong to the same AST node
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const childAstNode = (child as any).$astNode;
+            if (childAstNode === ownerAstNode || childAstNode === undefined) {
+                findKeywordsInBoundary(child, keyword, ownerAstNode, results);
+            }
         }
     }
-    return results;
 }
 
 /**
@@ -272,25 +244,49 @@ export function findNodeForKeywordSN(node: SyntaxNode | undefined, keyword: stri
 /**
  * If the given SyntaxNode was parsed in the context of a property assignment,
  * the respective Assignment grammar node is returned.
+ * Walks up the SyntaxNode parent chain looking for an ancestor whose type
+ * corresponds to a known grammar rule, then checks which assignment
+ * contains the given node.
  */
 export function findAssignmentSN(node: SyntaxNode, grammarRegistry?: GrammarRegistry): Assignment | undefined {
-    if (isChevrotainSyntaxNode(node)) {
-        return findAssignmentCst(node.underlyingCstNode);
-    }
     if (!grammarRegistry) {
         return undefined;
     }
-    // For non-Chevrotain backends: use GrammarRegistry to find the assignment
-    // by checking which field of the owning AstNode contains this syntax node
-    const astNode = findAstNodeForSyntaxNode(node);
-    if (!astNode?.$syntaxNode) {
-        return undefined;
+    // Strategy 1: Check if the backend exposes grammarSource-based assignment info.
+    // ChevrotainSyntaxNode provides $grammarAssignment by walking up the CstNode
+    // chain within the same AST node, replicating the old findAssignment() logic.
+    // This handles inferred types ({infer X}) and infix rules where the AST type
+    // isn't indexed by GrammarRegistry.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const directAssignment = (node as any).$grammarAssignment as Assignment | undefined;
+    if (directAssignment) {
+        return directAssignment;
     }
-    const parentSN = astNode.$syntaxNode;
-    for (const assignment of grammarRegistry.getAssignments(astNode.$type)) {
-        for (const fieldChild of parentSN.childrenForField(assignment.feature)) {
-            if (fieldChild === node || (node.offset >= fieldChild.offset && node.end <= fieldChild.end)) {
-                return assignment;
+    // Strategy 2: Walk up to find $grammarAssignment on ancestors within the same AST node
+    const astNode = findAstNodeForSyntaxNode(node);
+    let current: SyntaxNode | null = node.parent;
+    while (current) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const currentAstNode = (current as any).$astNode as AstNode | undefined;
+        if (currentAstNode && currentAstNode !== astNode) {
+            break; // Crossed AST node boundary
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const parentAssignment = (current as any).$grammarAssignment as Assignment | undefined;
+        if (parentAssignment) {
+            return parentAssignment;
+        }
+        current = current.parent;
+    }
+    // Strategy 3: Use GrammarRegistry to find assignment by type and field matching
+    if (astNode?.$syntaxNode) {
+        const parentSN = astNode.$syntaxNode;
+        const assignments = grammarRegistry.getAssignments(astNode.$type);
+        for (const assignment of assignments) {
+            for (const fieldChild of parentSN.childrenForField(assignment.feature)) {
+                if (fieldChild === node || (node.offset >= fieldChild.offset && node.end <= fieldChild.end)) {
+                    return assignment;
+                }
             }
         }
     }
@@ -302,29 +298,50 @@ export function findAssignmentSN(node: SyntaxNode, grammarRegistry?: GrammarRegi
 /**
  * If the given SyntaxNode was parsed as part of a data type rule,
  * the full datatype SyntaxNode is returned. Otherwise undefined.
- * For Chevrotain: delegates to CstNode-based getDatatypeNode.
+ * Walks up the parent chain using GrammarRegistry to detect datatype rules.
  */
-export function getDatatypeSyntaxNode(node: SyntaxNode): SyntaxNode | undefined {
-    if (isChevrotainSyntaxNode(node)) {
-        const cstResult = getDatatypeCstNode(node.underlyingCstNode);
-        return cstResult ? wrapCstNode(cstResult) : undefined;
+export function getDatatypeSyntaxNode(node: SyntaxNode, grammarRegistry?: GrammarRegistry): SyntaxNode | undefined {
+    if (!grammarRegistry) {
+        return undefined;
     }
-    // Generic: not yet implemented for non-Chevrotain backends
+    // Replicate the old getDatatypeNode logic: walk up from the leaf, checking
+    // whether each node is in a datatype rule context. Once we leave a datatype
+    // context, return the container (which spans all the datatype tokens).
+    let current: SyntaxNode | null = node;
+    let found = false;
+    while (current) {
+        if (isInDataTypeContext(current, grammarRegistry)) {
+            current = current.parent;
+            found = true;
+        } else if (found) {
+            return current;
+        } else {
+            return undefined;
+        }
+    }
     return undefined;
+}
+
+function isInDataTypeContext(node: SyntaxNode, grammarRegistry: GrammarRegistry): boolean {
+    // Prefer backend-specific check when available. ChevrotainSyntaxNode provides
+    // $isInDataTypeRule by inspecting the CstNode's grammarSource chain to find
+    // the containing parser rule — this correctly distinguishes between a node
+    // being a datatype rule vs. being CALLED FROM a datatype rule context.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const backendCheck = (node as any).$isInDataTypeRule;
+    if (backendCheck !== undefined) {
+        return backendCheck;
+    }
+    // Fallback for other backends: check node type against GrammarRegistry
+    return !!(node.type && grammarRegistry.isDataTypeRule(node.type));
 }
 
 // --- Interior nodes ---
 
 /**
  * Get all SyntaxNodes between (exclusive) two given nodes within their common parent.
- * For Chevrotain: delegates to CstNode-based getInteriorNodes.
  */
 export function getInteriorSyntaxNodes(start: SyntaxNode, end: SyntaxNode): SyntaxNode[] {
-    if (isChevrotainSyntaxNode(start) && isChevrotainSyntaxNode(end)) {
-        const cstResults = getInteriorCstNodes(start.underlyingCstNode, end.underlyingCstNode);
-        return cstResults.map(wrapCstNode);
-    }
-    // Generic implementation: find common parent, return children in between
     if (!start.parent || start.parent !== end.parent) {
         return [];
     }
@@ -363,7 +380,6 @@ export function toDocumentSegmentSN(node?: SyntaxNode): DocumentSegment | undefi
 
 /**
  * Checks whether `child` is a descendant of `parent` by walking up the parent chain.
- * Mirrors `isChildNode` from cst-utils.ts.
  */
 export function isChildSyntaxNode(child: SyntaxNode, parent: SyntaxNode): boolean {
     let current: SyntaxNode | null = child;
@@ -380,20 +396,10 @@ export function isChildSyntaxNode(child: SyntaxNode, parent: SyntaxNode): boolea
 
 /**
  * Maps a SyntaxNode back to its corresponding AstNode.
- * For ChevrotainSyntaxNode: accesses the underlying CstNode's astNode.
- * For other backends (e.g. Lezer): walks up the SyntaxNode parent chain
- * looking for the `$astNode` back-reference set by SyntaxNodeAstBuilder.
+ * Walks up the SyntaxNode parent chain looking for the `$astNode` back-reference
+ * set by each backend (ChevrotainSyntaxNode.$astNode, or SyntaxNodeAstBuilder for other backends).
  */
 export function findAstNodeForSyntaxNode(node: SyntaxNode): AstNode | undefined {
-    if (isChevrotainSyntaxNode(node)) {
-        try {
-            return node.underlyingCstNode.astNode;
-        } catch {
-            return undefined;
-        }
-    }
-    // For non-Chevrotain backends, walk up parent chain looking for $astNode
-    // back-reference set by SyntaxNodeAstBuilder during AST construction
     let current: SyntaxNode | null = node;
     while (current) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

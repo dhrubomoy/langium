@@ -176,19 +176,9 @@ export class DefaultCompletionProvider implements CompletionProvider {
         if (!leaf) {
             return undefined;
         }
-        // Chevrotain CST: use grammar-source-based detection (the CST doesn't always
-        // expose data type rule nodes in the parent chain, e.g. inside cross-references)
-        const dtNode = SyntaxNodeUtils.getDatatypeSyntaxNode(leaf);
+        const dtNode = SyntaxNodeUtils.getDatatypeSyntaxNode(leaf, this.grammarRegistry);
         if (dtNode) {
             return [dtNode.offset, dtNode.end];
-        }
-        // Non-Chevrotain backends: walk parent chain checking type names against GrammarRegistry
-        let current: SyntaxNode | null = leaf;
-        while (current) {
-            if (current.type && this.grammarRegistry.isDataTypeRule(current.type)) {
-                return [current.offset, current.end];
-            }
-            current = current.parent;
         }
         return undefined;
     }

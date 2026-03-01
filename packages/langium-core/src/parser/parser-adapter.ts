@@ -4,8 +4,10 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
+import type { AstNode } from '../syntax-tree.js';
 import type { AbstractElement, Grammar } from '../languages/generated/ast.js';
 import type { RootSyntaxNode, SyntaxNode } from './syntax-node.js';
+import type { ParseResult } from './parse-result.js';
 
 /**
  * Interface that each parser backend implements.
@@ -91,6 +93,11 @@ export interface AdapterParseResult {
     readonly root: RootSyntaxNode;
     /** Opaque state for incremental re-parse. Store on the LangiumDocument. */
     readonly incrementalState?: IncrementalParseState;
+    /**
+     * If the backend built the AST during parsing (e.g. Chevrotain's one-pass approach),
+     * it can provide the result here to skip the separate SyntaxNodeAstBuilder step.
+     */
+    readonly builtAst?: ParseResult<AstNode>;
 }
 
 /** Opaque — each backend stores whatever it needs for incremental re-parse. */

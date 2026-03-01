@@ -317,15 +317,14 @@ export class DefaultLangiumDocumentFactory implements LangiumDocumentFactory {
     }
 
     protected parse<T extends AstNode>(uri: URI, text: string, options?: ParserOptions): ParseResult<T> {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const services = this.serviceRegistry.getServices(uri) as any;
-        // Chevrotain path: AST is built during parsing (optimized, no regression)
-        if (services.parser.LangiumParser) {
-            return services.parser.LangiumParser.parse(text, options);
-        }
-        // Generic path: ParserAdapter → SyntaxNode → AST builder
+        const services = this.serviceRegistry.getServices(uri);
         const adapter = services.parser.ParserAdapter;
         const adapterResult = adapter.parse(text, options?.rule);
+        // Use pre-built AST if the backend built it during parsing (e.g. Chevrotain's one-pass approach)
+        if (adapterResult.builtAst) {
+            return adapterResult.builtAst as ParseResult<T>;
+        }
+        // Generic path: SyntaxNode → AST builder
         return services.parser.SyntaxNodeAstBuilder.buildAst(adapterResult.root) as ParseResult<T>;
     }
 

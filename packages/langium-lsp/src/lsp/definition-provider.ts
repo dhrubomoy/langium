@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 import type { DefinitionParams } from 'vscode-languageserver';
-import type { GrammarConfig, NameProvider, References, SyntaxNode, MaybePromise, LangiumDocument , Cancellation} from 'langium-core';
+import type { GrammarConfig, GrammarRegistry, NameProvider, References, SyntaxNode, MaybePromise, LangiumDocument , Cancellation} from 'langium-core';
 import type { LangiumServices } from './lsp-services.js';
 import { LocationLink } from 'vscode-languageserver';
 import { AstUtils, SyntaxNodeUtils } from 'langium-core';
@@ -39,11 +39,13 @@ export class DefaultDefinitionProvider implements DefinitionProvider {
     protected readonly nameProvider: NameProvider;
     protected readonly references: References;
     protected readonly grammarConfig: GrammarConfig;
+    protected readonly grammarRegistry: GrammarRegistry;
 
     constructor(services: LangiumServices) {
         this.nameProvider = services.references.NameProvider;
         this.references = services.references.References;
         this.grammarConfig = services.parser.GrammarConfig;
+        this.grammarRegistry = services.grammar.GrammarRegistry;
     }
 
     getDefinition(document: LangiumDocument, params: DefinitionParams, _cancelToken?: Cancellation.CancellationToken): MaybePromise<LocationLink[] | undefined> {
@@ -77,7 +79,7 @@ export class DefaultDefinitionProvider implements DefinitionProvider {
     }
 
     protected findLinks(source: SyntaxNode): GoToLink[] {
-        const datatypeSourceNode = SyntaxNodeUtils.getDatatypeSyntaxNode(source) ?? source;
+        const datatypeSourceNode = SyntaxNodeUtils.getDatatypeSyntaxNode(source, this.grammarRegistry) ?? source;
         const astNode = SyntaxNodeUtils.findAstNodeForSyntaxNode(source);
         if (!astNode) {
             return [];
