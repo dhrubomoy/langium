@@ -79,7 +79,11 @@ export abstract class AbstractThreadedAsyncParser implements AsyncParser {
     protected readonly hydrator: Hydrator;
 
     constructor(services: LangiumCoreServices) {
-        this.hydrator = services.serializer.Hydrator;
+        const hydrator = services.serializer.Hydrator;
+        if (!hydrator) {
+            throw new Error('AbstractThreadedAsyncParser requires a Hydrator service. Provide one in your backend module.');
+        }
+        this.hydrator = hydrator;
     }
 
     protected initializeWorkers(): void {

@@ -13,7 +13,7 @@ import { interpretAstReflection } from 'langium-core/grammar';
 import { createLangiumGrammarServices, createServicesForGrammar } from 'langium-lsp';
 import type { LangiumServices, LangiumSharedServices } from 'langium-lsp';
 import { createDefaultModule, createDefaultSharedModule } from 'langium-lsp';
-import { LezerAdapter, LezerGrammarTranslator, DefaultFieldMap } from 'langium-lezer';
+import { LezerAdapter, LezerGrammarTranslator, DefaultFieldMap, createLezerParserModule } from 'langium-lezer';
 
 // ---- Shared test grammars ----
 
@@ -104,8 +104,8 @@ export async function createLezerServicesForGrammar(config: CreateServicesConfig
             ParserConfig: () => ({})
         }
     };
-    // Override parser with Lezer adapter
-    const lezerModule: Module<LangiumServices, unknown> = {
+    // Override parser with pre-loaded Lezer adapter
+    const lezerAdapterOverride: Module<LangiumServices, unknown> = {
         parser: {
             ParserAdapter: () => lezerAdapter
         }
@@ -119,7 +119,8 @@ export async function createLezerServicesForGrammar(config: CreateServicesConfig
     const services = inject(
         createDefaultModule({ shared }),
         generatedModule,
-        lezerModule,
+        createLezerParserModule(),  // Provides Lezer services including Hydrator
+        lezerAdapterOverride,       // Override with pre-loaded adapter
         config.module
     ) as LangiumServices;
     shared.ServiceRegistry.register(services);

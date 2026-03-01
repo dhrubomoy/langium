@@ -76,7 +76,7 @@ export type LangiumDefaultCoreServices = {
         readonly ScopeComputation: ScopeComputation
     }
     readonly serializer: {
-        readonly Hydrator: Hydrator
+        readonly Hydrator?: Hydrator
         readonly JsonSerializer: JsonSerializer
     }
     readonly validation: {

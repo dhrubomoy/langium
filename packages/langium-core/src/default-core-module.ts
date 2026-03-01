@@ -75,7 +75,6 @@ export function createDefaultCoreModule(context: DefaultCoreModuleContext): Modu
             References: (services) => new DefaultReferences(services)
         },
         serializer: {
-            Hydrator: (_services: LangiumCoreServices) => { throw new Error('Hydrator must be provided by a backend-specific module'); },
             JsonSerializer: (services) => new DefaultJsonSerializer(services)
         },
         validation: {
