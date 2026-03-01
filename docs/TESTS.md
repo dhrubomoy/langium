@@ -7,7 +7,7 @@ which are Chevrotain-only, and documents known Lezer limitations that cause skip
 
 | Test File | Chevrotain | Lezer | Notes |
 |-----------|:----------:|:-----:|-------|
-| `completion-provider.test.ts` | ✅ | Partial | 4 describe blocks skip Lezer (see below) |
+| `completion-provider.test.ts` | ✅ | Partial | LezerCompletionProvider passes most tests; 3 individual tests skip Lezer (see below) |
 | `goto-definition.test.ts` | ✅ | Partial | 2 describe blocks skip Lezer (see below); cross-ref navigation block runs both |
 | `hover.test.ts` | ✅ | ✅ | "Hover on keywords" runs both backends |
 | `execute-command-handler.test.ts` | ✅ | ✅ | All tests run both backends |
@@ -27,12 +27,16 @@ which are Chevrotain-only, and documents known Lezer limitations that cause skip
 
 ### completion-provider.test.ts
 
-| Describe Block | Skip Reason |
-|----------------|-------------|
-| `Completion within alternatives` | Completion provider uses Chevrotain-specific tokenizer (`backtrackToAnyToken`) |
-| `Completion in data type rules` | Completion provider uses Chevrotain-specific tokenizer (`backtrackToAnyToken`) |
-| `Infix rule completion` | Infix grammars fail Lezer grammar generation |
-| `Completion for optional elements` | Completion provider uses Chevrotain-specific tokenizer (`backtrackToAnyToken`) |
+A dedicated `LezerCompletionProvider` replaces the Chevrotain-specific `DefaultCompletionProvider`
+for Lezer backends. It uses the existing parse tree (SyntaxNode) to derive completion context
+instead of Chevrotain's completion parser and lexer. Most completion tests pass for both backends.
+
+| Skipped Test | Skip Reason |
+|--------------|-------------|
+| `Should show documentation on completion items` | ML_COMMENT hidden terminal regex is not correctly translated to Lezer grammar, causing comment text to be parsed as identifiers |
+| `Should not remove same named NodeDescriptions` | Test explicitly extends `DefaultCompletionProvider` (Chevrotain-specific) |
+| `Can perform completion for fully qualified names` | Anonymous punctuation tokens (like `"."`) in data type rules are not preserved in the Lezer parse tree, breaking token matching for FQN-style rules |
+| `Infix rule completion` (entire block) | Infix grammars fail Lezer grammar generation |
 
 ### goto-definition.test.ts
 
@@ -51,12 +55,17 @@ unassigned child SyntaxNodes directly on the parent AstNode (setting `$type` fro
 processing the child's assignments, and mapping both SyntaxNodes to the same AstNode).
 This mirrors what Chevrotain's `action()` callback does at parse time.
 
-### 2. Completion Provider Tokenizer
-`DefaultCompletionProvider.backtrackToAnyToken()` accesses the Chevrotain-specific tokenizer
-(`services.parser.LangiumParser.tokenize()`), which is undefined for Lezer backends. This
-causes `TypeError: Cannot read properties of undefined (reading 'tokenize')`.
+### ~~2. Completion Provider Tokenizer~~ — FIXED
+A dedicated `LezerCompletionProvider` implements the `CompletionProvider` interface from scratch
+using the existing parse tree (SyntaxNode) instead of Chevrotain's completion parser and lexer.
+It collects leaf tokens from the parse tree, converts them to the format expected by
+`findNextFeatures`, and builds completion items for keywords and cross-references.
 
-**Impact:** All completion tests that exercise `backtrackToAnyToken` skip Lezer.
+**Remaining issues:**
+- ML_COMMENT regex (`/\/\*[\s\S]*?\*\//`) is not correctly translated to Lezer grammar syntax,
+  causing block comments to be parsed as error nodes + identifiers.
+- Anonymous punctuation tokens (like `"."`) in data type rules are not preserved in the Lezer
+  parse tree, breaking token matching for FQN-style rules (`ID ('.' ID)*`).
 
 ### 3. Infix Grammar Generation
 Grammars with `infix` rules fail Lezer grammar generation entirely (`createServices` returns
@@ -78,5 +87,6 @@ provider's comment detection relies on Chevrotain token types.
 
 ## Future Work
 
-- Implement a Lezer-compatible completion provider (or make `backtrackToAnyToken` backend-agnostic)
+- Fix ML_COMMENT regex-to-Lezer translation (non-greedy `[\s\S]*?` quantifier)
+- Fix anonymous punctuation token preservation in Lezer parse tree (needed for FQN-style data type rules)
 - Add comment folding support for Lezer (detect comment nodes by type name)

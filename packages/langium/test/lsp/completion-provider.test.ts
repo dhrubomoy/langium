@@ -113,8 +113,6 @@ describe('Langium completion provider', () => {
 });
 
 for (const { name, createServices } of BACKENDS) {
-    // Lezer: completion provider uses Chevrotain-specific tokenizer (backtrackToAnyToken)
-    if (name === 'Lezer') continue;
 describe(`Completion within alternatives (${name})`, () => {
 
     test('Should show correct keywords in completion of entry rule', async () => {
@@ -226,7 +224,9 @@ describe(`Completion within alternatives (${name})`, () => {
         });
     });
 
-    test('Should show documentation on completion items', async () => {
+    // Lezer: ML_COMMENT hidden terminal regex is not correctly translated to Lezer grammar,
+    // causing comment text to be parsed as identifiers and breaking token matching.
+    test.skipIf(name === 'Lezer')('Should show documentation on completion items', async () => {
         const grammar = `
         grammar g
         entry Model: (elements+=(Person | Greeting))*;
@@ -257,7 +257,8 @@ describe(`Completion within alternatives (${name})`, () => {
         });
     });
 
-    test('Should not remove same named NodeDescriptions', async () => {
+    // This test extends DefaultCompletionProvider directly (Chevrotain-specific)
+    test.skipIf(name === 'Lezer')('Should not remove same named NodeDescriptions', async () => {
         const grammar = `
         grammar g
         entry Model: (elements+=(Person | Greeting))*;
@@ -355,11 +356,11 @@ describe('Path import completion', () => {
 });
 
 for (const { name, createServices } of BACKENDS) {
-    // Lezer: completion provider uses Chevrotain-specific tokenizer (backtrackToAnyToken)
-    if (name === 'Lezer') continue;
 describe(`Completion in data type rules (${name})`, () => {
 
-    test('Can perform completion for fully qualified names', async () => {
+    // Lezer: anonymous punctuation tokens (like ".") in data type rules are not preserved
+    // in the Lezer parse tree, breaking token matching for FQN-style rules.
+    test.skipIf(name === 'Lezer')('Can perform completion for fully qualified names', async () => {
         const grammar = `
         grammar FQNCompletionTest
 
@@ -718,8 +719,6 @@ describe(`Infix rule completion (${name})`, async () => {
 }
 
 for (const { name, createServices } of BACKENDS) {
-    // Lezer: completion provider uses Chevrotain-specific tokenizer (backtrackToAnyToken)
-    if (name === 'Lezer') continue;
 describe(`Completion for optional elements (${name})`, async () => {
 
     test('Should complete correctly if whole rule content is optional', async () => {

@@ -11,8 +11,8 @@ import type { Module } from 'langium-core';
 import { EmptyFileSystem, URI, createDefaultCoreModule, inject } from 'langium-core';
 import { interpretAstReflection } from 'langium-core/grammar';
 import { createLangiumGrammarServices, createServicesForGrammar } from 'langium-lsp';
-import type { LangiumServices, LangiumSharedServices } from 'langium-lsp';
-import { createDefaultLSPModule, createDefaultSharedModule } from 'langium-lsp';
+import type { LangiumServices, LangiumSharedServices, CompletionProvider } from 'langium-lsp';
+import { createDefaultLSPModule, createDefaultSharedModule, LezerCompletionProvider } from 'langium-lsp';
 import { LezerAdapter, LezerGrammarTranslator, DefaultFieldMap } from 'langium-lezer';
 
 // ---- Shared test grammars ----
@@ -110,6 +110,12 @@ export async function createLezerServicesForGrammar(config: CreateServicesConfig
             ParserAdapter: () => lezerAdapter
         }
     };
+    // Override completion provider with Lezer-specific implementation
+    const lezerLspModule: Module<LangiumServices, { lsp: { CompletionProvider: CompletionProvider } }> = {
+        lsp: {
+            CompletionProvider: (services) => new LezerCompletionProvider(services)
+        }
+    };
 
     const shared = inject(
         createDefaultSharedModule(EmptyFileSystem),
@@ -121,6 +127,7 @@ export async function createLezerServicesForGrammar(config: CreateServicesConfig
         createDefaultLSPModule({ shared }),
         generatedModule,
         lezerModule,
+        lezerLspModule,
         config.module
     ) as LangiumServices;
     shared.ServiceRegistry.register(services);
