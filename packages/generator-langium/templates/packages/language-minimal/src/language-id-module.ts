@@ -1,4 +1,4 @@
-import { type Module, inject } from 'langium';
+import { type Module, inject, createChevrotainModule } from 'langium';
 import { createDefaultModule, createDefaultSharedModule, type DefaultSharedModuleContext, type LangiumServices, type LangiumSharedServices, type PartialLangiumServices } from 'langium/lsp';
 import { <%= LanguageName %>GeneratedModule, <%= LanguageName %>GeneratedSharedModule } from './generated/module.js';
 import { <%= LanguageName %>Validator, registerValidationChecks } from './<%= language-id %>-validator.js';
@@ -54,6 +54,7 @@ export function create<%= LanguageName %>Services(context: DefaultSharedModuleCo
     );
     const <%= LanguageName %> = inject(
         createDefaultModule({ shared }),
+        createChevrotainModule(),
         <%= LanguageName %>GeneratedModule,
         <%= LanguageName %>Module
     );

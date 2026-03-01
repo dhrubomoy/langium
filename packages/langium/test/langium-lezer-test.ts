@@ -6,13 +6,13 @@
 
 import { beforeAll, beforeEach, describe } from 'vitest';
 import { buildParser } from '@lezer/generator';
-import type { Grammar, LanguageMetaData, LangiumGeneratedCoreServices, LangiumGeneratedSharedCoreServices, ParserAdapter } from 'langium-core';
+import type { Grammar, LanguageMetaData, LangiumGeneratedCoreServices, LangiumGeneratedSharedCoreServices } from 'langium-core';
 import type { Module } from 'langium-core';
-import { EmptyFileSystem, URI, createDefaultCoreModule, inject } from 'langium-core';
+import { EmptyFileSystem, URI, inject } from 'langium-core';
 import { interpretAstReflection } from 'langium-core/grammar';
 import { createLangiumGrammarServices, createServicesForGrammar } from 'langium-lsp';
 import type { LangiumServices, LangiumSharedServices } from 'langium-lsp';
-import { createDefaultLSPModule, createDefaultSharedModule } from 'langium-lsp';
+import { createDefaultModule, createDefaultSharedModule } from 'langium-lsp';
 import { LezerAdapter, LezerGrammarTranslator, DefaultFieldMap } from 'langium-lezer';
 
 // ---- Shared test grammars ----
@@ -104,8 +104,8 @@ export async function createLezerServicesForGrammar(config: CreateServicesConfig
             ParserConfig: () => ({})
         }
     };
-    // Override parser with Lezer adapter (no LangiumParser → DocumentFactory uses generic path)
-    const lezerModule: Module<{ parser: { ParserAdapter: ParserAdapter } }> = {
+    // Override parser with Lezer adapter
+    const lezerModule: Module<LangiumServices, unknown> = {
         parser: {
             ParserAdapter: () => lezerAdapter
         }
@@ -117,8 +117,7 @@ export async function createLezerServicesForGrammar(config: CreateServicesConfig
         config.sharedModule
     ) as LangiumSharedServices;
     const services = inject(
-        createDefaultCoreModule({ shared }),
-        createDefaultLSPModule({ shared }),
+        createDefaultModule({ shared }),
         generatedModule,
         lezerModule,
         config.module

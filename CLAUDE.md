@@ -155,6 +155,16 @@ npm run clean                  # Remove build artifacts
 
 Single-package test: `npx vitest run packages/langium/test/parser/chevrotain-syntax-node.test.ts`
 
+### After making changes
+
+Always run these three commands to verify changes:
+
+```bash
+npm run build                  # Must pass with zero errors
+npm test                       # All tests must pass (expect 3 pre-existing fs.rmdirSync failures)
+npm run lint                   # Must pass with zero errors; use `npm run lint:fix` for auto-fixable issues
+```
+
 ## References
 
 - [DESIGN.md](DESIGN.md) — full design document (read specific sections with §N.N notation)

@@ -5,10 +5,8 @@
 ******************************************************************************/
 
 import type { Connection } from 'vscode-languageserver';
-import { createDefaultCoreModule, createDefaultSharedCoreModule, Module, TextDocument, DefaultAsyncParser, setGrammarServicesFactory, inject, EmptyFileSystem } from 'langium-core';
+import { createDefaultCoreModule, createDefaultSharedCoreModule, Module, TextDocument, setGrammarServicesFactory, inject, EmptyFileSystem } from 'langium-core';
 import type { DefaultCoreModuleContext, DefaultSharedCoreModuleContext, LangiumDefaultCoreServices, LangiumDefaultSharedCoreServices, LangiumCoreServices, LangiumSharedCoreServices } from 'langium-core';
-import type { LangiumChevrotainServices } from 'langium-chevrotain';
-import { createChevrotainParserModule, ChevrotainAdapter, DefaultHydrator } from 'langium-chevrotain';
 import { DefaultCompletionProvider } from './completion/completion-provider.js';
 import { DefaultDefinitionProvider } from './definition-provider.js';
 import { DefaultDocumentHighlightProvider } from './document-highlight-provider.js';
@@ -33,27 +31,13 @@ export interface DefaultModuleContext extends DefaultCoreModuleContext {
 }
 
 /**
- * Creates a dependency injection module configuring the default Core & LSP services for a Langium-based language implementation.
- * This is a set of services that are dedicated to a specific language.
+ * Creates a dependency injection module configuring the default parser-agnostic Core & LSP services
+ * for a Langium-based language implementation. This does not include any parser backend —
+ * you must merge a backend module (e.g., `createChevrotainModule()` from langium-chevrotain
+ * or `createLezerParserModule()` from langium-lezer) to get a working parser.
  */
 export function createDefaultModule(context: DefaultModuleContext): Module<LangiumServices, LangiumDefaultCoreServices & LangiumLSPServices> {
-    // Chevrotain parser services module (LangiumParser, Lexer, TokenBuilder, etc.)
-    // plus adapter services (ParserAdapter, AsyncParser, Hydrator)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const chevrotainModule: any = {
-        ...createChevrotainParserModule(),
-        parser: {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            ...(createChevrotainParserModule() as any).parser,
-            AsyncParser: (services: LangiumChevrotainServices) => new DefaultAsyncParser(services),
-            ParserAdapter: (services: LangiumChevrotainServices) => new ChevrotainAdapter(services),
-        },
-        serializer: {
-            Hydrator: (services: LangiumChevrotainServices) => new DefaultHydrator(services),
-        }
-    };
-    const coreWithParser = Module.merge(createDefaultCoreModule(context), chevrotainModule);
-    return Module.merge(coreWithParser, createDefaultLSPModule(context));
+    return Module.merge(createDefaultCoreModule(context), createDefaultLSPModule(context));
 }
 
 /**

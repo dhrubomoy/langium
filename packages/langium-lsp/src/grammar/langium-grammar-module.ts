@@ -6,6 +6,7 @@
 
 import { inject, DocumentState, EmptyFileSystem, AstUtils, URI } from 'langium-core';
 import type { Module, DeepPartial, Grammar, LangiumGeneratedSharedCoreServices, LangiumGeneratedCoreServices, LanguageMetaData, ParserConfig , GrammarAST } from 'langium-core';
+import { createChevrotainModule } from 'langium-chevrotain';
 import { LangiumGrammarGeneratedModule, LangiumGrammarGeneratedSharedModule, LangiumGrammarScopeComputation, LangiumGrammarScopeProvider, LangiumGrammarValidator, registerValidationChecks, LangiumGrammarNameProvider, LangiumGrammarReferences, LangiumGrammarValidationResourcesCollector, LangiumGrammarTypesValidator, registerTypeValidationChecks, interpretAstReflection } from 'langium-core/grammar';
 import type { LangiumGrammarDocument } from 'langium-core/grammar';
 import type { LangiumServices, LangiumSharedServices, PartialLangiumServices, PartialLangiumSharedServices } from '../lsp/lsp-services.js';
@@ -74,6 +75,7 @@ export function createLangiumGrammarServices(context: DefaultSharedModuleContext
     );
     const grammar = inject(
         createDefaultModule({ shared }),
+        createChevrotainModule(),
         LangiumGrammarGeneratedModule,
         LangiumGrammarModule,
         module
@@ -145,7 +147,7 @@ export async function createServicesForGrammar<L extends LangiumServices = Langi
         }
     };
     const shared = inject(createDefaultSharedModule(EmptyFileSystem), generatedSharedModule, config.sharedModule);
-    const services = inject(createDefaultModule({ shared }), generatedModule, config.module);
+    const services = inject(createDefaultModule({ shared }), createChevrotainModule(), generatedModule, config.module);
     shared.ServiceRegistry.register(services);
     return services;
 }

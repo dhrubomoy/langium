@@ -4,7 +4,7 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import { type Module, inject } from 'langium';
+import { type Module, inject, createChevrotainModule } from 'langium';
 import { createDefaultModule, createDefaultSharedModule, type DefaultSharedModuleContext, type LangiumServices, type LangiumSharedServices, type PartialLangiumServices } from 'langium/lsp';
 import { ArithmeticsScopeProvider } from './arithmetics-scope-provider.js';
 import { ArithmeticsValidator, registerValidationChecks } from './arithmetics-validator.js';
@@ -68,6 +68,7 @@ export function createArithmeticsServices(context: DefaultSharedModuleContext): 
     );
     const arithmetics = inject(
         createDefaultModule({ shared }),
+        createChevrotainModule(),
         ArithmeticsGeneratedModule,
         ArithmeticsModule
     );

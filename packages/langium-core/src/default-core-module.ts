@@ -30,6 +30,7 @@ import { DefaultWorkspaceManager } from './workspace/workspace-manager.js';
 import { JSDocDocumentationProvider } from './documentation/documentation-provider.js';
 import { DefaultCommentProvider } from './documentation/comment-provider.js';
 import { DefaultWorkspaceLock } from './workspace/workspace-lock.js';
+import { DefaultAsyncParser } from './parser/async-parser.js';
 
 /**
  * Context required for creating the default language-specific core dependency injection module.
@@ -54,11 +55,12 @@ export function createDefaultCoreModule(context: DefaultCoreModuleContext): Modu
             GrammarRegistry: (services) => new DefaultGrammarRegistry(services)
         },
         parser: {
+            AsyncParser: (services: LangiumCoreServices) => new DefaultAsyncParser(services),
             GrammarConfig: (services: LangiumCoreServices) => createGrammarConfig(services),
             ValueConverter: () => new DefaultValueConverter(),
             SyntaxNodeAstBuilder: (services: LangiumCoreServices) => new DefaultSyntaxNodeAstBuilder(services),
-            // ParserAdapter and AsyncParser must be provided by a backend-specific module
-            // (e.g., langium-chevrotain's createChevrotainParserModule)
+            // ParserAdapter must be provided by a backend-specific module
+            // (e.g., langium-chevrotain's createChevrotainModule or langium-lezer's createLezerParserModule)
         } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         workspace: {
             AstNodeLocator: () => new DefaultAstNodeLocator(),
