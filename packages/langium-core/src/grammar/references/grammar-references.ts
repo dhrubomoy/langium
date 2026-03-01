@@ -41,7 +41,7 @@ export class LangiumGrammarReferences extends DefaultReferences {
     }
 
     override findDeclarationsSN(sourceAstNode: AstNode, sourceSyntaxNode: SyntaxNode): AstNode[] {
-        const assignment = findAssignmentSN(sourceSyntaxNode);
+        const assignment = findAssignmentSN(sourceSyntaxNode, this.grammarRegistry);
         if (assignment && assignment.feature === 'feature') {
             // Only search for a special declaration if the syntax node is the feature property of the action/assignment
             if (isAssignment(sourceAstNode)) {

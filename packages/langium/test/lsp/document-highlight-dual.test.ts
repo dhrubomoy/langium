@@ -55,5 +55,18 @@ for (const { name, createServices } of BACKENDS) {
                 `,
             });
         });
+
+        test('Should highlight from cross-reference position', async () => {
+            const services = await createServices({ grammar: GRAMMAR });
+            if (!services) return;
+            const highlights = expectHighlight(services);
+            // Cursor at cross-reference — highlights both declaration and cross-reference
+            await highlights({
+                text: `
+                    person <|Alice|>
+                    hello <|Ali<|>ce|> !
+                `,
+            });
+        });
     });
 }

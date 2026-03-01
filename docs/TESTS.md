@@ -8,7 +8,7 @@ which are Chevrotain-only, and documents known Lezer limitations that cause skip
 | Test File | Chevrotain | Lezer | Notes |
 |-----------|:----------:|:-----:|-------|
 | `completion-provider.test.ts` | ✅ | Partial | 4 describe blocks skip Lezer (see below) |
-| `goto-definition.test.ts` | ✅ | Partial | 2 describe blocks skip Lezer (see below) |
+| `goto-definition.test.ts` | ✅ | Partial | 2 describe blocks skip Lezer (see below); cross-ref navigation block runs both |
 | `hover.test.ts` | ✅ | ✅ | "Hover on keywords" runs both backends |
 | `execute-command-handler.test.ts` | ✅ | ✅ | All tests run both backends |
 | `workspace-symbol.test.ts` | ✅ | ✅ | All tests run both backends |
@@ -38,7 +38,7 @@ which are Chevrotain-only, and documents known Lezer limitations that cause skip
 
 | Describe Block | Skip Reason |
 |----------------|-------------|
-| `Definition Provider datatype rule` | Test navigates FROM cross-reference positions which requires `findAssignmentSN()` — not yet implemented for non-Chevrotain backends |
+| `Definition Provider datatype rule` | Datatype rule (FQN) cross-references + alternative rules don't fully work with Lezer |
 | `Definition Provider with Infix Operators` | Infix grammars with alternatives fail Lezer grammar generation |
 
 ## Known Lezer Limitations
@@ -64,13 +64,11 @@ Grammars with `infix` rules fail Lezer grammar generation entirely (`createServi
 
 **Impact:** Infix-related test blocks are skipped for Lezer.
 
-### 4. Cross-Reference Position Navigation
-Finding references FROM cross-reference positions (as opposed to FROM declaration positions)
-doesn't work reliably with Lezer. The `findAssignmentSN`/`findDeclarationsSN` path doesn't
-correctly identify cross-reference nodes in Lezer SyntaxNode trees.
-
-**Impact:** Dual-backend find-references and document-highlight tests only test from
-declaration positions, not from cross-reference positions.
+### ~~4. Cross-Reference Position Navigation~~ — FIXED
+`findAssignmentSN()` now supports non-Chevrotain backends via GrammarRegistry lookups.
+Given a leaf SyntaxNode, it walks up to the owning AstNode, retrieves all assignments
+for that rule, and checks which field contains the node using positional containment.
+`findDeclarationsSN()` also uses `$refSyntaxNode` for array reference matching.
 
 ### 5. Comment Folding
 Comment-based folding ranges are not supported with the Lezer backend. The folding range
@@ -81,5 +79,4 @@ provider's comment detection relies on Chevrotain token types.
 ## Future Work
 
 - Implement a Lezer-compatible completion provider (or make `backtrackToAnyToken` backend-agnostic)
-- Add cross-reference position navigation support for Lezer SyntaxNodes (`findAssignmentSN`)
 - Add comment folding support for Lezer (detect comment nodes by type name)

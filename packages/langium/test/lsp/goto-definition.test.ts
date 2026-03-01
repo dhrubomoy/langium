@@ -120,8 +120,50 @@ describe('Definition Provider', () => {
 });
 
 for (const { name, createServices } of BACKENDS) {
-    // Lezer: test navigates FROM cross-reference positions which requires
-    // findAssignmentSN() — not yet implemented for non-Chevrotain backends
+    describe(`Definition Provider cross-reference navigation (${name})`, () => {
+        const crossRefGrammar = `
+            grammar Test
+            entry Model: persons+=Person* greetings+=Greeting*;
+            Person: 'person' name=ID;
+            Greeting: 'hello' person=[Person] '!';
+            terminal ID: /\\w+/;
+            hidden terminal WS: /\\s+/;
+        `;
+
+        test('Should go to definition from cross-reference position', async () => {
+            const services = await createServices({ grammar: crossRefGrammar });
+            if (!services) return;
+            const gotoDefinition = expectGoToDefinition(services);
+            // Cursor on "Alice" in "hello Alice !" — should navigate to declaration
+            await gotoDefinition({
+                text: `
+                    person <|Alice|>
+                    hello <|>Alice !
+                `,
+                index: 0,
+                rangeIndex: 0,
+            });
+        });
+
+        test('Should go to definition from declaration position (self)', async () => {
+            const services = await createServices({ grammar: crossRefGrammar });
+            if (!services) return;
+            const gotoDefinition = expectGoToDefinition(services);
+            // Cursor on "Alice" in "person Alice" — should navigate to self
+            await gotoDefinition({
+                text: `
+                    person <|<|>Alice|>
+                    hello Alice !
+                `,
+                index: 0,
+                rangeIndex: 0,
+            });
+        });
+    });
+}
+
+for (const { name, createServices } of BACKENDS) {
+    // Lezer: datatype rule (FQN) cross-references + alternative rules don't fully work with Lezer yet
     if (name === 'Lezer') continue;
     describe(`Definition Provider datatype rule (${name})`, () => {
 

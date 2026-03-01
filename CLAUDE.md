@@ -127,7 +127,7 @@ Phase file: [docs/phases/PHASE-2.md](docs/phases/PHASE-2.md)
 
 - [x] Fix alternative rule AST building in `SyntaxNodeAstBuilder` to handle Lezer's tree shape
 - [ ] Implement a Lezer-compatible completion provider (or make `backtrackToAnyToken` backend-agnostic)
-- [ ] Add cross-reference position navigation support for Lezer SyntaxNodes
+- [x] Add cross-reference position navigation support for Lezer SyntaxNodes
 - [ ] Add comment folding support for Lezer (detect comment nodes by type name)
 
 ## Conventions

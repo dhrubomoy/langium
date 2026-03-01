@@ -5,6 +5,7 @@
  ******************************************************************************/
 
 import type { Assignment } from '../languages/generated/ast.js';
+import type { GrammarRegistry } from '../grammar/grammar-registry.js';
 import type { ChevrotainSyntaxNode } from '../parser/chevrotain-syntax-node.js';
 import type { SyntaxNode } from '../parser/syntax-node.js';
 import type { AstNode } from '../syntax-tree.js';
@@ -272,11 +273,27 @@ export function findNodeForKeywordSN(node: SyntaxNode | undefined, keyword: stri
  * If the given SyntaxNode was parsed in the context of a property assignment,
  * the respective Assignment grammar node is returned.
  */
-export function findAssignmentSN(node: SyntaxNode): Assignment | undefined {
+export function findAssignmentSN(node: SyntaxNode, grammarRegistry?: GrammarRegistry): Assignment | undefined {
     if (isChevrotainSyntaxNode(node)) {
         return findAssignmentCst(node.underlyingCstNode);
     }
-    // For future backends: use GrammarRegistry lookup
+    if (!grammarRegistry) {
+        return undefined;
+    }
+    // For non-Chevrotain backends: use GrammarRegistry to find the assignment
+    // by checking which field of the owning AstNode contains this syntax node
+    const astNode = findAstNodeForSyntaxNode(node);
+    if (!astNode?.$syntaxNode) {
+        return undefined;
+    }
+    const parentSN = astNode.$syntaxNode;
+    for (const assignment of grammarRegistry.getAssignments(astNode.$type)) {
+        for (const fieldChild of parentSN.childrenForField(assignment.feature)) {
+            if (fieldChild === node || (node.offset >= fieldChild.offset && node.end <= fieldChild.end)) {
+                return assignment;
+            }
+        }
+    }
     return undefined;
 }
 

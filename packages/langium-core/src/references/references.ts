@@ -183,7 +183,7 @@ export class DefaultReferences implements References {
     findDeclarationsSN(sourceAstNode: AstNode, sourceSyntaxNode: SyntaxNode): AstNode[] {
         // Use findAssignmentSN to find the grammar Assignment for the syntax node
         // (bridges to CstNode-based findAssignment for Chevrotain)
-        const assignment = findAssignmentSN(sourceSyntaxNode);
+        const assignment = findAssignmentSN(sourceSyntaxNode, this.grammarRegistry);
         if (assignment) {
             const reference = (sourceAstNode as GenericAstNode)[assignment.feature];
 
@@ -191,10 +191,12 @@ export class DefaultReferences implements References {
                 return getReferenceNodes(reference);
             } else if (Array.isArray(reference)) {
                 for (const ref of reference) {
-                    if ((isReference(ref) || isMultiReference(ref)) && ref.$refNode
-                        && ref.$refNode.offset <= sourceSyntaxNode.offset
-                        && ref.$refNode.end >= sourceSyntaxNode.end) {
-                        return getReferenceNodes(ref);
+                    if (isReference(ref) || isMultiReference(ref)) {
+                        const refNode = ref.$refSyntaxNode ?? ref.$refNode;
+                        if (refNode && refNode.offset <= sourceSyntaxNode.offset
+                            && refNode.end >= sourceSyntaxNode.end) {
+                            return getReferenceNodes(ref);
+                        }
                     }
                 }
             }

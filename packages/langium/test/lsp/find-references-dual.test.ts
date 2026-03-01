@@ -72,5 +72,32 @@ for (const { name, createServices } of BACKENDS) {
                 includeDeclaration: true,
             });
         });
+
+        test('Should find references from cross-reference position (include decl)', async () => {
+            const services = await createServices({ grammar: GRAMMAR });
+            if (!services) return;
+            const findReferences = expectFindReferences(services);
+            // Cursor at cross-reference position — navigates FROM "hello Alice !" to declaration
+            await findReferences({
+                text: `
+                    person <|Alice|>
+                    hello <|<|>Alice|> !
+                `,
+                includeDeclaration: true,
+            });
+        });
+
+        test('Should find references from cross-reference position (exclude decl)', async () => {
+            const services = await createServices({ grammar: GRAMMAR });
+            if (!services) return;
+            const findReferences = expectFindReferences(services);
+            await findReferences({
+                text: `
+                    person Alice
+                    hello <|<|>Alice|> !
+                `,
+                includeDeclaration: false,
+            });
+        });
     });
 }
