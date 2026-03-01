@@ -11,6 +11,8 @@ import {
     createLezerServicesForGrammar,
     SIMPLE_GRAMMAR,
     LIST_GRAMMAR,
+    ALTERNATIVES_GRAMMAR,
+    ALTERNATIVE_RULE_GRAMMAR,
     CROSS_REF_GRAMMAR,
     OPTIONAL_GRAMMAR
 } from '../test-helper.js';
@@ -108,6 +110,65 @@ describe('SyntaxNodeAstBuilder via Lezer', () => {
         expect(ast.$syntaxNode).toBeDefined();
         const items = ast.items as GenericAstNode[];
         expect(items[0].$syntaxNode).toBeDefined();
+    });
+
+    test('alternatives in assignment: correct $type per element', async () => {
+        const { shared } = await createLezerServicesForGrammar(ALTERNATIVES_GRAMMAR);
+        const doc = await parseDocument(shared, 'a foo b 42 a bar');
+        const ast = doc.parseResult.value as GenericAstNode;
+
+        expect(ast.$type).toBe('Root');
+        const elements = ast.elements as GenericAstNode[];
+        expect(elements).toHaveLength(3);
+        expect(elements[0].$type).toBe('A');
+        expect(elements[0].name).toBe('foo');
+        expect(elements[1].$type).toBe('B');
+        expect(elements[1].value).toBe(42);
+        expect(elements[2].$type).toBe('A');
+        expect(elements[2].name).toBe('bar');
+    });
+
+    test('pure alternative rule: Element: Person | Greeting', async () => {
+        const { shared } = await createLezerServicesForGrammar(ALTERNATIVE_RULE_GRAMMAR);
+        const doc = await parseDocument(shared, 'person Alice hello Bob !');
+        const ast = doc.parseResult.value as GenericAstNode;
+
+        expect(ast.$type).toBe('Model');
+        const elements = ast.elements as GenericAstNode[];
+        expect(elements).toHaveLength(2);
+
+        // First element should be a Person (through Element alternative)
+        expect(elements[0].$type).toBe('Person');
+        expect(elements[0].name).toBe('Alice');
+
+        // Second element should be a Greeting (through Element alternative)
+        expect(elements[1].$type).toBe('Greeting');
+        expect(elements[1].target).toBe('Bob');
+    });
+
+    test('pure alternative rule: $syntaxNode and $container set correctly', async () => {
+        const { shared } = await createLezerServicesForGrammar(ALTERNATIVE_RULE_GRAMMAR);
+        const doc = await parseDocument(shared, 'person Alice');
+        const ast = doc.parseResult.value as GenericAstNode;
+
+        const elements = ast.elements as GenericAstNode[];
+        expect(elements[0].$type).toBe('Person');
+        expect(elements[0].$syntaxNode).toBeDefined();
+        expect(elements[0].$container).toBe(ast);
+        expect(elements[0].$containerProperty).toBe('elements');
+    });
+
+    test('pure alternative rule: findAstNode maps child SyntaxNode correctly', async () => {
+        const { shared, parser } = await createLezerServicesForGrammar(ALTERNATIVE_RULE_GRAMMAR);
+        const doc = await parseDocument(shared, 'person Alice');
+        const ast = doc.parseResult.value as GenericAstNode;
+
+        const elements = ast.elements as GenericAstNode[];
+        const person = elements[0];
+        // The SyntaxNode should map back to the correct AstNode
+        const astBuilder = parser.parser.SyntaxNodeAstBuilder;
+        const foundNode = astBuilder.findAstNode(person.$syntaxNode!);
+        expect(foundNode).toBe(person);
     });
 
     test('empty items array for list rule with no items', async () => {

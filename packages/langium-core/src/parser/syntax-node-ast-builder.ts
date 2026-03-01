@@ -201,7 +201,12 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
     /**
      * Handle children that are not part of any assignment (type override pattern).
      * When a parser rule calls a subrule without an assignment, the subrule's
-     * result becomes the current node (its properties are merged).
+     * properties are inlined into the current node and its $type is updated.
+     *
+     * This handles alternative rules (e.g., `Element: Source | Target`) by
+     * processing the child's assignments directly on the parent node, avoiding
+     * the creation of an orphaned intermediate AstNode. Mirrors what Chevrotain's
+     * action() callback does at parse time.
      */
     protected processUnassignedChildren(
         node: GenericAstNode,
@@ -222,37 +227,45 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
                 }
             }
             if (!isAssigned) {
-                // Unassigned composite child: this is a type override
-                const childResult = this.buildNode(child);
-                if (isAstNode(childResult)) {
-                    // Merge properties from the child into the current node
-                    // (mirrors Chevrotain's assignWithoutOverride)
-                    this.assignWithoutOverride(childResult as GenericAstNode, node);
-                } else if (typeof childResult === 'string') {
-                    // Data type rule result — unlikely in this context but handle it
-                }
+                this.inlineChildNode(node, child);
             }
         }
     }
 
     /**
-     * Merge properties from source into target, without overriding existing values.
-     * Arrays are concatenated. Mirrors Chevrotain's assignWithoutOverride.
+     * Inline a child SyntaxNode's content into the parent AstNode.
+     * Sets $type from the child, processes the child's assignments on the parent,
+     * recursively inlines the child's own unassigned children, and maps the child
+     * SyntaxNode to the parent AstNode for correct findAstNode() lookups.
      */
-    protected assignWithoutOverride(source: GenericAstNode, target: GenericAstNode): void {
-        for (const [name, sourceValue] of Object.entries(source)) {
-            if (name.startsWith('$')) continue; // Skip $ properties
-            const targetValue = target[name];
-            if (targetValue === undefined) {
-                target[name] = sourceValue;
-            } else if (Array.isArray(targetValue) && Array.isArray(sourceValue)) {
-                targetValue.push(...sourceValue);
-            }
+    protected inlineChildNode(node: GenericAstNode, childSN: SyntaxNode): void {
+        const childType = childSN.type;
+
+        if (this.grammarRegistry.isDataTypeRule(childType)) {
+            return;
         }
-        // The source's $type may be more specific — use it
-        if (source.$type && source.$type !== target.$type) {
-            (target as Mutable<AstNode>).$type = source.$type;
+
+        // Update $type to the child's type (mirrors Chevrotain's action callback)
+        (node as Mutable<AstNode>).$type = childType;
+
+        // Process the child's assignments directly on the parent node
+        const childAssignments = this.grammarRegistry.getAssignmentInfos(childType);
+        for (const info of childAssignments) {
+            this.processAssignment(node, childSN, info);
         }
+
+        // Recursively handle the child's own unassigned children
+        const childAssignedFields = new Set(childAssignments.map(a => a.property));
+        this.processUnassignedChildren(node, childSN, childAssignedFields);
+
+        // Map child SyntaxNode → parent AstNode for correct findAstNode() lookups
+        this.syntaxNodeToAstNode.set(childSN, node);
+        Object.defineProperty(childSN, '$astNode', {
+            value: node,
+            configurable: true,
+            enumerable: false,
+            writable: true
+        });
     }
 
     protected buildDataTypeValue(syntaxNode: SyntaxNode): string {

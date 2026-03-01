@@ -29,8 +29,8 @@ which are Chevrotain-only, and documents known Lezer limitations that cause skip
 
 | Describe Block | Skip Reason |
 |----------------|-------------|
-| `Completion within alternatives` | Grammars with alternatives (`A \| B`) produce incorrect ASTs with Lezer AST builder; completion provider uses Chevrotain-specific tokenizer (`backtrackToAnyToken`) |
-| `Completion in data type rules` | Grammar uses alternatives; completion provider uses Chevrotain-specific tokenizer |
+| `Completion within alternatives` | Completion provider uses Chevrotain-specific tokenizer (`backtrackToAnyToken`) |
+| `Completion in data type rules` | Completion provider uses Chevrotain-specific tokenizer (`backtrackToAnyToken`) |
 | `Infix rule completion` | Infix grammars fail Lezer grammar generation |
 | `Completion for optional elements` | Completion provider uses Chevrotain-specific tokenizer (`backtrackToAnyToken`) |
 
@@ -38,21 +38,18 @@ which are Chevrotain-only, and documents known Lezer limitations that cause skip
 
 | Describe Block | Skip Reason |
 |----------------|-------------|
-| `Definition Provider datatype rule` | Grammar uses alternatives (`Element: Source \| Target`) which produce incorrect ASTs with Lezer AST builder |
+| `Definition Provider datatype rule` | Test navigates FROM cross-reference positions which requires `findAssignmentSN()` — not yet implemented for non-Chevrotain backends |
 | `Definition Provider with Infix Operators` | Infix grammars with alternatives fail Lezer grammar generation |
 
 ## Known Lezer Limitations
 
 These limitations cause certain test patterns to be skipped or constrained for the Lezer backend:
 
-### 1. Alternative Rules (`A: B | C;`)
-Grammars with top-level alternatives in parser rules produce incorrect ASTs when processed
-by the Lezer AST builder (`SyntaxNodeAstBuilder`). The Lezer parse tree structure for
-alternatives doesn't map cleanly to Langium's expected AST shape.
-
-**Impact:** Tests using grammars with alternatives skip Lezer. Dual-backend test files use
-grammars without alternatives (e.g., `Model: persons+=Person* greetings+=Greeting*` instead
-of `Element: Person | Greeting`).
+### ~~1. Alternative Rules (`A: B | C;`)~~ — FIXED
+Alternative rules now work correctly. `SyntaxNodeAstBuilder.inlineChildNode()` processes
+unassigned child SyntaxNodes directly on the parent AstNode (setting `$type` from the child,
+processing the child's assignments, and mapping both SyntaxNodes to the same AstNode).
+This mirrors what Chevrotain's `action()` callback does at parse time.
 
 ### 2. Completion Provider Tokenizer
 `DefaultCompletionProvider.backtrackToAnyToken()` accesses the Chevrotain-specific tokenizer
@@ -83,7 +80,6 @@ provider's comment detection relies on Chevrotain token types.
 
 ## Future Work
 
-- Fix alternative rule AST building in `SyntaxNodeAstBuilder` to handle Lezer's tree shape
 - Implement a Lezer-compatible completion provider (or make `backtrackToAnyToken` backend-agnostic)
-- Add cross-reference position navigation support for Lezer SyntaxNodes
+- Add cross-reference position navigation support for Lezer SyntaxNodes (`findAssignmentSN`)
 - Add comment folding support for Lezer (detect comment nodes by type name)

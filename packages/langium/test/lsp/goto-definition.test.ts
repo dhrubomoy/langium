@@ -120,8 +120,8 @@ describe('Definition Provider', () => {
 });
 
 for (const { name, createServices } of BACKENDS) {
-    // Lezer: grammar uses alternatives (Element: Source | Target) which produce
-    // incorrect ASTs with Lezer AST builder
+    // Lezer: test navigates FROM cross-reference positions which requires
+    // findAssignmentSN() — not yet implemented for non-Chevrotain backends
     if (name === 'Lezer') continue;
     describe(`Definition Provider datatype rule (${name})`, () => {
 

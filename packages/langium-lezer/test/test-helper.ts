@@ -39,6 +39,16 @@ export const ALTERNATIVES_GRAMMAR = `
     terminal INT: /[0-9]+/;
 `;
 
+export const ALTERNATIVE_RULE_GRAMMAR = `
+    grammar AlternativeRuleTest
+    entry Model: elements+=Element*;
+    Element: Person | Greeting;
+    Person: 'person' name=ID;
+    Greeting: 'hello' target=ID '!';
+    hidden terminal WS: /\\s+/;
+    terminal ID: /[_a-zA-Z][\\w_]*/;
+`;
+
 export const OPTIONAL_GRAMMAR = `
     grammar OptionalTest
     entry Person: 'person' name=ID age=INT?;

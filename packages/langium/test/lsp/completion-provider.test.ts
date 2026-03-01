@@ -114,7 +114,6 @@ describe('Langium completion provider', () => {
 
 for (const { name, createServices } of BACKENDS) {
     // Lezer: completion provider uses Chevrotain-specific tokenizer (backtrackToAnyToken)
-    // and grammars with alternatives produce incorrect ASTs with Lezer AST builder
     if (name === 'Lezer') continue;
 describe(`Completion within alternatives (${name})`, () => {
 
@@ -357,7 +356,6 @@ describe('Path import completion', () => {
 
 for (const { name, createServices } of BACKENDS) {
     // Lezer: completion provider uses Chevrotain-specific tokenizer (backtrackToAnyToken)
-    // and grammar uses alternatives which produce incorrect ASTs with Lezer AST builder
     if (name === 'Lezer') continue;
 describe(`Completion in data type rules (${name})`, () => {
 

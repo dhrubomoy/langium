@@ -123,6 +123,13 @@ Phase file: [docs/phases/PHASE-2.md](docs/phases/PHASE-2.md)
 - [x] Example project with both backends (examples/dual-backend/) — parser-level only
 - [x] Documentation (docs/ARCHITECTURE.md, docs/GRAMMAR-EXTENSIONS.md)
 
+## Lezer Backend Bugs (from [docs/TESTS.md](docs/TESTS.md))
+
+- [x] Fix alternative rule AST building in `SyntaxNodeAstBuilder` to handle Lezer's tree shape
+- [ ] Implement a Lezer-compatible completion provider (or make `backtrackToAnyToken` backend-agnostic)
+- [ ] Add cross-reference position navigation support for Lezer SyntaxNodes
+- [ ] Add comment folding support for Lezer (detect comment nodes by type name)
+
 ## Conventions
 
 - TypeScript strict mode, ESM imports with `.js` extensions
