@@ -16,6 +16,7 @@ export { TextDocument } from 'vscode-languageserver-textdocument';
 import type { Diagnostic, Range } from 'vscode-languageserver-types';
 import type { FileSystemProvider } from './file-system-provider.js';
 import type { ParseResult, ParserOptions } from '../parser/parse-result.js';
+import type { RootSyntaxNode } from '../parser/syntax-node.js';
 import type { ServiceRegistry } from '../service-registry.js';
 import type { LangiumSharedCoreServices } from '../services.js';
 import type { AstNode, AstNodeDescription, MultiReference, Mutable, Reference } from '../syntax-tree.js';
@@ -281,7 +282,7 @@ export class DefaultLangiumDocumentFactory implements LangiumDocumentFactory {
         // The syntax node's fullText property contains the original text that was used to create the AST.
         const rootSyntaxNode = document.parseResult.value.$syntaxNode;
         const oldText = rootSyntaxNode && 'fullText' in rootSyntaxNode
-            ? (rootSyntaxNode as import('../parser/syntax-node.js').RootSyntaxNode).fullText
+            ? (rootSyntaxNode as RootSyntaxNode).fullText
             : document.parseResult.value.$cstNode?.root.fullText;
         const textDocument = this.textDocuments?.get(document.uri.toString());
         const text = textDocument ? textDocument.getText() : await this.fileSystemProvider.readFile(document.uri);

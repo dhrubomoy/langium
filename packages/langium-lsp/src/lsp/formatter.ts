@@ -5,8 +5,8 @@
  ******************************************************************************/
 
 import type { DocumentFormattingParams, DocumentOnTypeFormattingOptions, DocumentOnTypeFormattingParams, DocumentRangeFormattingParams, FormattingOptions, Range, TextEdit } from 'vscode-languageserver-protocol';
-import type { AstNode, CstNode, Properties, SyntaxNode, MaybePromise, Stream, LangiumDocument, TextDocument } from 'langium-core';
-import { AstUtils, Cancellation, SyntaxNodeUtils, wrapCstNode, DONE_RESULT, EMPTY_STREAM, StreamImpl, TreeStreamImpl } from 'langium-core';
+import type { AstNode, CstNode, Properties, SyntaxNode, MaybePromise, Stream, LangiumDocument, TextDocument , Cancellation} from 'langium-core';
+import { AstUtils, SyntaxNodeUtils, wrapCstNode, DONE_RESULT, EMPTY_STREAM, StreamImpl, TreeStreamImpl } from 'langium-core';
 
 /**
  * Language specific service for handling formatting related LSP requests.

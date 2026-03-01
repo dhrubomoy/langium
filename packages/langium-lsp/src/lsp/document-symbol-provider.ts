@@ -5,8 +5,8 @@
  ******************************************************************************/
 
 import type { DocumentSymbol, DocumentSymbolParams } from 'vscode-languageserver-protocol';
-import type { NameProvider, AstNode, SyntaxNode, MaybePromise, LangiumDocument } from 'langium-core';
-import { AstUtils, Cancellation } from 'langium-core';
+import type { NameProvider, AstNode, SyntaxNode, MaybePromise, LangiumDocument , Cancellation } from 'langium-core';
+import { AstUtils } from 'langium-core';
 import type { LangiumServices } from './lsp-services.js';
 import type { NodeKindProvider } from './node-kind-provider.js';
 

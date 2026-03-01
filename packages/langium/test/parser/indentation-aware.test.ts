@@ -45,7 +45,7 @@ async function createIndentationAwareServices(grammar: string, options?: Partial
         module: {
             parser: {
                 TokenBuilder: () => new IndentationAwareTokenBuilder(options),
-                Lexer: (services: any) => new IndentationAwareLexer(services)
+                Lexer: (services: LangiumChevrotainServices) => new IndentationAwareLexer(services)
             }
         } as Module<LangiumServices, PartialLangiumServices>
     });

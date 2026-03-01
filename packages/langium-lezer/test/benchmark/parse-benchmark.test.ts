@@ -238,7 +238,7 @@ describe('Parse benchmarks — Arithmetics grammar', () => {
             const lines = doc.split('\n');
             const midLine = Math.floor(lines.length / 2);
             const lineOffset = lines.slice(0, midLine).join('\n').length + 1;
-            const newDef = `def inserted_var : 42 + 1 ;`;
+            const newDef = 'def inserted_var : 42 + 1 ;';
             const editedLine = doc.slice(0, lineOffset) + newDef + '\n' + doc.slice(lineOffset);
             const lineChanges: TextChange[] = [
                 { rangeOffset: lineOffset, rangeLength: 0, text: newDef + '\n' }
@@ -533,13 +533,13 @@ describe('Parse benchmarks — Complex grammar (15000 lines)', () => {
         // Test at 100, 500, 1000 blocks (1500, 7500, 15000 lines)
         const blockCounts = [100, 500, 1000];
         const iterations = 5;
-        const results: {
+        const results: Array<{
             blocks: number;
             lines: number;
             lezerFullMs: number;
             lezerIncrMs: number;
             speedup: string;
-        }[] = [];
+        }> = [];
 
         for (const blocks of blockCounts) {
             const doc = generateComplexDocument(blocks);
@@ -878,7 +878,8 @@ describe('Tree size comparison', () => {
         chevrotainAdapter = chevResult.adapter;
     });
 
-    function countNodes(node: { children: readonly { children: readonly any[] }[] }): number {
+    interface CountableNode { children: readonly CountableNode[] }
+    function countNodes(node: CountableNode): number {
         let count = 1;
         for (const child of node.children) {
             count += countNodes(child);
@@ -888,7 +889,7 @@ describe('Tree size comparison', () => {
 
     test('node count comparison across sizes', () => {
         const sizes = [100, 500, 1000];
-        const results: { size: number; chevrotainNodes: number; lezerNodes: number }[] = [];
+        const results: Array<{ size: number; chevrotainNodes: number; lezerNodes: number }> = [];
 
         for (const size of sizes) {
             const doc = generateLargeDocument(size);

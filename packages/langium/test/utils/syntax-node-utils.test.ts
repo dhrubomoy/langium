@@ -31,7 +31,6 @@ const {
 const { findLeafNodeAtOffset } = CstUtils;
 const { findNodeForProperty, findNodesForProperty, findNodesForKeyword } = GrammarUtils;
 
-
 const grammar = `
     grammar Test
     entry Model:

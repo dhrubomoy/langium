@@ -247,7 +247,7 @@ export class LezerGrammarTranslator implements GrammarTranslator {
 
         // 10. Emit keyword template
         if (keywords.size > 0) {
-            lines.push(`kw<term> { @specialize[@name={term}]<Identifier, term> }`);
+            lines.push('kw<term> { @specialize[@name={term}]<Identifier, term> }');
             lines.push('');
         }
 

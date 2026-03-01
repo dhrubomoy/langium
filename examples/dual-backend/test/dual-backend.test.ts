@@ -14,7 +14,7 @@
  */
 
 import { describe, test, expect, beforeAll } from 'vitest';
-import type { ParserAdapter, TextChange } from 'langium-core';
+import type { Grammar, ParserAdapter, TextChange } from 'langium-core';
 import { EmptyFileSystem, URI } from 'langium-core';
 import { createLangiumGrammarServices, createServicesForGrammar } from 'langium-lsp';
 import { buildParser } from '@lezer/generator';
@@ -70,7 +70,7 @@ async function createChevrotainAdapter(): Promise<ParserAdapter> {
 async function createLezerAdapter(): Promise<LezerAdapter> {
     const grammar = await parseGrammar(TASK_GRAMMAR);
     const translator = new LezerGrammarTranslator();
-    const { grammarText, fieldMapData, keywords } = translator.generateGrammarInMemory(grammar as any);
+    const { grammarText, fieldMapData, keywords } = translator.generateGrammarInMemory(grammar as Grammar);
     const parser = buildParser(grammarText);
     const fieldMap = new DefaultFieldMap(fieldMapData);
     const adapter = new LezerAdapterClass();
@@ -78,9 +78,10 @@ async function createLezerAdapter(): Promise<LezerAdapter> {
     return adapter;
 }
 
-function collectLeafTexts(node: { children: readonly any[]; isLeaf: boolean; isHidden: boolean; text: string }): string[] {
+interface TreeNode { children: readonly TreeNode[]; isLeaf: boolean; isHidden: boolean; text: string }
+function collectLeafTexts(node: TreeNode): string[] {
     const texts: string[] = [];
-    function walk(n: any): void {
+    function walk(n: TreeNode): void {
         if (n.isHidden) return;
         if (n.isLeaf) {
             texts.push(n.text);
@@ -240,7 +241,7 @@ describe('Performance comparison', () => {
         const avgIncr = incrTimes.reduce((a, b) => a + b, 0) / incrTimes.length;
         const speedup = avgFull / avgIncr;
 
-        console.log(`\n=== Performance: 1000 tasks ===`);
+        console.log('\n=== Performance: 1000 tasks ===');
         console.log(`  Full parse:        ${avgFull.toFixed(2)} ms`);
         console.log(`  Incremental parse: ${avgIncr.toFixed(2)} ms`);
         console.log(`  Speedup:           ${speedup.toFixed(1)}x`);

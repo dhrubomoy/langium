@@ -5,10 +5,10 @@
  ******************************************************************************/
 
 import type { ReferenceParams } from 'vscode-languageserver';
-import type { NameProvider, References, AstNode, SyntaxNode, MaybePromise, LangiumDocument, GrammarConfig } from 'langium-core';
+import type { NameProvider, References, AstNode, SyntaxNode, MaybePromise, LangiumDocument, GrammarConfig , Cancellation} from 'langium-core';
 import type { LangiumServices } from './lsp-services.js';
 import { Location } from 'vscode-languageserver';
-import { Cancellation, SyntaxNodeUtils } from 'langium-core';
+import { SyntaxNodeUtils } from 'langium-core';
 
 /**
  * Language-specific service for handling find references requests.

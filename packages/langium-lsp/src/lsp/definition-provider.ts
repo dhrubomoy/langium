@@ -5,10 +5,10 @@
  ******************************************************************************/
 
 import type { DefinitionParams } from 'vscode-languageserver';
-import type { GrammarConfig, NameProvider, References, SyntaxNode, MaybePromise, LangiumDocument } from 'langium-core';
+import type { GrammarConfig, NameProvider, References, SyntaxNode, MaybePromise, LangiumDocument , Cancellation} from 'langium-core';
 import type { LangiumServices } from './lsp-services.js';
 import { LocationLink } from 'vscode-languageserver';
-import { AstUtils, Cancellation, SyntaxNodeUtils } from 'langium-core';
+import { AstUtils, SyntaxNodeUtils } from 'langium-core';
 
 /**
  * Language-specific service for handling go to definition requests.

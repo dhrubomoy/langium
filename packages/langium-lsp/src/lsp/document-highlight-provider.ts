@@ -5,10 +5,10 @@
  ******************************************************************************/
 
 import type { DocumentHighlightParams } from 'vscode-languageserver';
-import type { GrammarConfig, NameProvider, FindReferencesOptions, References, AstNode, MaybePromise, ReferenceDescription, LangiumDocument } from 'langium-core';
+import type { GrammarConfig, NameProvider, FindReferencesOptions, References, AstNode, MaybePromise, ReferenceDescription, LangiumDocument , Cancellation} from 'langium-core';
 import type { LangiumServices } from './lsp-services.js';
 import { DocumentHighlight } from 'vscode-languageserver';
-import { AstUtils, Cancellation, SyntaxNodeUtils, UriUtils } from 'langium-core';
+import { AstUtils, SyntaxNodeUtils, UriUtils } from 'langium-core';
 
 /**
  * Language-specific service for handling document highlight requests.

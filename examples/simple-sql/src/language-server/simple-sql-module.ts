@@ -13,8 +13,8 @@ import {
     type LangiumSharedServices,
     type PartialLangiumServices
 } from 'langium/lsp';
-import { createLezerParserModule, LezerAdapter, DefaultFieldMap } from 'langium-lezer';
-import type { FieldMapData } from 'langium-lezer';
+import { createLezerParserModule, DefaultFieldMap } from 'langium-lezer';
+import type { FieldMapData , LezerAdapter} from 'langium-lezer';
 import { SimpleSQLValidator, registerValidationChecks } from './simple-sql-validator.js';
 import { SimpleSQLGeneratedModule, SimpleSQLGeneratedSharedModule } from './generated/module.js';
 // Lezer-generated parse tables and data

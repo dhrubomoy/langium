@@ -4,7 +4,7 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import { URI } from '../utils/uri-utils.js';
+import type { URI } from '../utils/uri-utils.js';
 import type { LangiumDocuments } from '../workspace/documents.js';
 import type { AstNode } from '../syntax-tree.js';
 import * as ast from '../languages/generated/ast.js';

@@ -5,10 +5,10 @@
  ******************************************************************************/
 
 import type { FoldingRangeParams } from 'vscode-languageserver';
-import type { AstNode, SyntaxNode, MaybePromise, LangiumDocument } from 'langium-core';
+import type { AstNode, SyntaxNode, MaybePromise, LangiumDocument , Cancellation} from 'langium-core';
 import type { LangiumServices } from './lsp-services.js';
 import { FoldingRange, FoldingRangeKind } from 'vscode-languageserver';
-import { AstUtils, Cancellation, SyntaxNodeUtils } from 'langium-core';
+import { AstUtils, SyntaxNodeUtils } from 'langium-core';
 
 /**
  * Language-specific service for handling folding range requests.

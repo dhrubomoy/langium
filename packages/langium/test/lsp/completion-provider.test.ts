@@ -113,70 +113,70 @@ describe('Langium completion provider', () => {
 });
 
 for (const { name, createServices } of BACKENDS) {
-describe(`Completion within alternatives (${name})`, () => {
+    describe(`Completion within alternatives (${name})`, () => {
 
-    test('Should show correct keywords in completion of entry rule', async () => {
+        test('Should show correct keywords in completion of entry rule', async () => {
 
-        const grammar = `
+            const grammar = `
         grammar g
         entry Main: a?='a' 'b' 'c' | a?='a' 'b' 'd';
         hidden terminal WS: /\\s+/;
         `;
 
-        const services = await createServices({ grammar });
-        if (!services) return;
-        const completion = expectCompletion(services);
-        const text = '<|>a <|>b <|>c';
+            const services = await createServices({ grammar });
+            if (!services) return;
+            const completion = expectCompletion(services);
+            const text = '<|>a <|>b <|>c';
 
-        await completion({
-            text,
-            index: 0,
-            expectedItems: ['a']
+            await completion({
+                text,
+                index: 0,
+                expectedItems: ['a']
+            });
+            await completion({
+                text,
+                index: 1,
+                expectedItems: ['b']
+            });
+            await completion({
+                text,
+                index: 2,
+                expectedItems: ['c', 'd']
+            });
         });
-        await completion({
-            text,
-            index: 1,
-            expectedItems: ['b']
-        });
-        await completion({
-            text,
-            index: 2,
-            expectedItems: ['c', 'd']
-        });
-    });
-    test('Should show correct keywords in completion of group', async () => {
+        test('Should show correct keywords in completion of group', async () => {
 
-        const grammar = `
+            const grammar = `
         grammar g
         entry Main: ('a' a+=ID | 'b' b+=ID | 'c' c+=ID)*;
         hidden terminal WS: /\\s+/;
         terminal ID: /\\w+/;
         `;
 
-        const services = await createServices({ grammar });
-        if (!services) return;
-        const completion = expectCompletion(services);
-        const text = '<|>a id1 <|>b id2 <|>c id3';
+            const services = await createServices({ grammar });
+            if (!services) return;
+            const completion = expectCompletion(services);
+            const text = '<|>a id1 <|>b id2 <|>c id3';
 
-        await completion({
-            text,
-            index: 0,
-            expectedItems: ['a', 'b', 'c']
+            await completion({
+                text,
+                index: 0,
+                expectedItems: ['a', 'b', 'c']
+            });
+            await completion({
+                text,
+                index: 1,
+                expectedItems: ['a', 'b', 'c']
+            });
+            await completion({
+                text,
+                index: 2,
+                expectedItems: ['a', 'b', 'c']
+            });
         });
-        await completion({
-            text,
-            index: 1,
-            expectedItems: ['a', 'b', 'c']
-        });
-        await completion({
-            text,
-            index: 2,
-            expectedItems: ['a', 'b', 'c']
-        });
-    });
-    test('Should show correct cross reference and keyword in completion', async () => {
+        test('Should show correct cross reference and keyword in completion', async () => {
 
-        const grammar = `
+            const grammar = `
         grammar g
         entry Main: elements+=(Item | Ref)*;
         Item: 'item' name=ID;
@@ -185,20 +185,20 @@ describe(`Completion within alternatives (${name})`, () => {
         hidden terminal WS: /\\s+/;
         `;
 
-        const services = await createServices({ grammar });
-        if (!services) return;
-        const completion = expectCompletion(services);
-        const text = 'item A ref <|>A';
+            const services = await createServices({ grammar });
+            if (!services) return;
+            const completion = expectCompletion(services);
+            const text = 'item A ref <|>A';
 
-        await completion({
-            text,
-            index: 0,
-            expectedItems: ['A', 'self']
+            await completion({
+                text,
+                index: 0,
+                expectedItems: ['A', 'self']
+            });
         });
-    });
 
-    test('Should remove duplicated entries', async () => {
-        const grammar = `
+        test('Should remove duplicated entries', async () => {
+            const grammar = `
         grammar g
         entry Model: (elements+=(Person | Greeting))*;
         Person: 'person' name=ID;
@@ -209,25 +209,25 @@ describe(`Completion within alternatives (${name})`, () => {
         hidden terminal WS: /\\s+/;
         `;
 
-        const services = await createServices({ grammar });
-        if (!services) return;
-        const completion = expectCompletion(services);
-        const text = `
+            const services = await createServices({ grammar });
+            if (!services) return;
+            const completion = expectCompletion(services);
+            const text = `
         person A
         hello <|>
         `;
 
-        await completion({
-            text,
-            index: 0,
-            expectedItems: ['A']
+            await completion({
+                text,
+                index: 0,
+                expectedItems: ['A']
+            });
         });
-    });
 
-    // Lezer: ML_COMMENT hidden terminal regex is not correctly translated to Lezer grammar,
-    // causing comment text to be parsed as identifiers and breaking token matching.
-    test.skipIf(name === 'Lezer')('Should show documentation on completion items', async () => {
-        const grammar = `
+        // Lezer: ML_COMMENT hidden terminal regex is not correctly translated to Lezer grammar,
+        // causing comment text to be parsed as identifiers and breaking token matching.
+        test.skipIf(name === 'Lezer')('Should show documentation on completion items', async () => {
+            const grammar = `
         grammar g
         entry Model: (elements+=(Person | Greeting))*;
         Person: 'person' name=ID;
@@ -237,29 +237,29 @@ describe(`Completion within alternatives (${name})`, () => {
         hidden terminal ML_COMMENT: /\\/\\*[\\s\\S]*?\\*\\//;
         `;
 
-        const services = await createServices({ grammar });
-        if (!services) return;
-        const completion = expectCompletion(services);
-        const text = `
+            const services = await createServices({ grammar });
+            if (!services) return;
+            const completion = expectCompletion(services);
+            const text = `
         /** Hello this is A */
         person A
         hello <|>
         `;
 
-        await completion({
-            text,
-            index: 0,
-            expectedItems: ['Hello this is A'],
-            itemToString: item => {
-                assert.ok(MarkupContent.is(item.documentation), 'Completion item should be of type `MarkupContent`.');
-                return item.documentation.value;
-            }
+            await completion({
+                text,
+                index: 0,
+                expectedItems: ['Hello this is A'],
+                itemToString: item => {
+                    assert.ok(MarkupContent.is(item.documentation), 'Completion item should be of type `MarkupContent`.');
+                    return item.documentation.value;
+                }
+            });
         });
-    });
 
-    // This test extends DefaultCompletionProvider directly (Chevrotain-specific)
-    test.skipIf(name === 'Lezer')('Should not remove same named NodeDescriptions', async () => {
-        const grammar = `
+        // This test extends DefaultCompletionProvider directly (Chevrotain-specific)
+        test.skipIf(name === 'Lezer')('Should not remove same named NodeDescriptions', async () => {
+            const grammar = `
         grammar g
         entry Model: (elements+=(Person | Greeting))*;
         Person: 'person' name=ID birth=INT;
@@ -270,42 +270,42 @@ describe(`Completion within alternatives (${name})`, () => {
         hidden terminal WS: /\\s+/;
         `;
 
-        const services = await createServices({
-            grammar, module: {
-                lsp: {
-                    CompletionProvider: (services) => new class extends DefaultCompletionProvider {
-                        override createReferenceCompletionItem(nodeDescription: AstNodeDescription, refInfo: ReferenceInfo, context: CompletionContext) {
+            const services = await createServices({
+                grammar, module: {
+                    lsp: {
+                        CompletionProvider: (services) => new class extends DefaultCompletionProvider {
+                            override createReferenceCompletionItem(nodeDescription: AstNodeDescription, refInfo: ReferenceInfo, context: CompletionContext) {
                             // Use <name> <birth> as label
-                            const label = nodeDescription.name + ' ' + (nodeDescription as AstNodeDescription & { birth: string }).birth;
-                            return { ...super.createReferenceCompletionItem(nodeDescription, refInfo, context), label };
-                        }
-                    }(services),
-                },
-                workspace: {
-                    AstNodeDescriptionProvider: (services) => new class extends DefaultAstNodeDescriptionProvider {
-                        override createDescription(node: AstNode & { birth?: string }, name: string | undefined, document: LangiumDocument): AstNodeDescription & { birth?: string } {
+                                const label = nodeDescription.name + ' ' + (nodeDescription as AstNodeDescription & { birth: string }).birth;
+                                return { ...super.createReferenceCompletionItem(nodeDescription, refInfo, context), label };
+                            }
+                        }(services),
+                    },
+                    workspace: {
+                        AstNodeDescriptionProvider: (services) => new class extends DefaultAstNodeDescriptionProvider {
+                            override createDescription(node: AstNode & { birth?: string }, name: string | undefined, document: LangiumDocument): AstNodeDescription & { birth?: string } {
                             // Add birth info to index
-                            return { ...super.createDescription(node, name, document), birth: node.birth };
-                        }
-                    }(services)
-                }
-            } satisfies Module<LangiumServices, PartialLangiumServices>
-        });
-        if (!services) return;
-        const completion = expectCompletion(services);
-        const text = `
+                                return { ...super.createDescription(node, name, document), birth: node.birth };
+                            }
+                        }(services)
+                    }
+                } satisfies Module<LangiumServices, PartialLangiumServices>
+            });
+            if (!services) return;
+            const completion = expectCompletion(services);
+            const text = `
         person John 1979
         person John 2023
         hello <|>
         `;
 
-        await completion({
-            text,
-            index: 0,
-            expectedItems: ['John 1979', 'John 2023']
+            await completion({
+                text,
+                index: 0,
+                expectedItems: ['John 1979', 'John 2023']
+            });
         });
     });
-});
 }
 
 describe('Path import completion', () => {
@@ -356,12 +356,12 @@ describe('Path import completion', () => {
 });
 
 for (const { name, createServices } of BACKENDS) {
-describe(`Completion in data type rules (${name})`, () => {
+    describe(`Completion in data type rules (${name})`, () => {
 
-    // Lezer: anonymous punctuation tokens (like ".") in data type rules are not preserved
-    // in the Lezer parse tree, breaking token matching for FQN-style rules.
-    test.skipIf(name === 'Lezer')('Can perform completion for fully qualified names', async () => {
-        const grammar = `
+        // Lezer: anonymous punctuation tokens (like ".") in data type rules are not preserved
+        // in the Lezer parse tree, breaking token matching for FQN-style rules.
+        test.skipIf(name === 'Lezer')('Can perform completion for fully qualified names', async () => {
+            const grammar = `
         grammar FQNCompletionTest
 
         entry Model:
@@ -380,11 +380,11 @@ describe(`Completion in data type rules (${name})`, () => {
         hidden terminal ML_COMMENT: /\\/\\*[\\s\\S]*?\\*\\//;
         `;
 
-        const services = await createServices({ grammar });
-        if (!services) return;
-        const completion = expectCompletion(services);
+            const services = await createServices({ grammar });
+            if (!services) return;
+            const completion = expectCompletion(services);
 
-        const text = `
+            const text = `
             person John.Miller
             person John.Smith.Junior
             person John.Smith.Senior
@@ -393,69 +393,69 @@ describe(`Completion in data type rules (${name})`, () => {
             Hello <|>John./* Hello */ <|>Miller
         `;
 
-        await completion({
-            text: text,
-            index: 0,
-            expectedItems: [
-                'John.Miller',
-                'John.Smith.Junior',
-                'John.Smith.Senior'
-            ]
+            await completion({
+                text: text,
+                index: 0,
+                expectedItems: [
+                    'John.Miller',
+                    'John.Smith.Junior',
+                    'John.Smith.Senior'
+                ]
+            });
+
+            await completion({
+                text: text,
+                index: 1,
+                expectedItems: [
+                    'John.Miller',
+                    'John.Smith.Junior',
+                    'John.Smith.Senior'
+                ]
+            });
+
+            await completion({
+                text: text,
+                index: 2,
+                expectedItems: [
+                    'John.Smith.Junior',
+                    'John.Smith.Senior'
+                ]
+            });
+
+            await completion({
+                text: text,
+                index: 3,
+                expectedItems: [
+                    'John.Smith.Junior'
+                ]
+            });
+
+            await completion({
+                text: text,
+                index: 4,
+                expectedItems: [
+                    'John.Miller',
+                    'John.Smith.Junior',
+                    'John.Smith.Senior'
+                ]
+            });
+
+            // A comment within the FQN should prevent any completion from appearing
+            await completion({
+                text: text,
+                index: 5,
+                expectedItems: []
+            });
         });
 
-        await completion({
-            text: text,
-            index: 1,
-            expectedItems: [
-                'John.Miller',
-                'John.Smith.Junior',
-                'John.Smith.Senior'
-            ]
-        });
-
-        await completion({
-            text: text,
-            index: 2,
-            expectedItems: [
-                'John.Smith.Junior',
-                'John.Smith.Senior'
-            ]
-        });
-
-        await completion({
-            text: text,
-            index: 3,
-            expectedItems: [
-                'John.Smith.Junior'
-            ]
-        });
-
-        await completion({
-            text: text,
-            index: 4,
-            expectedItems: [
-                'John.Miller',
-                'John.Smith.Junior',
-                'John.Smith.Senior'
-            ]
-        });
-
-        // A comment within the FQN should prevent any completion from appearing
-        await completion({
-            text: text,
-            index: 5,
-            expectedItems: []
-        });
     });
-
-});
 }
 
 for (const { name, createServices } of BACKENDS) {
-describe(`Common prefixes (${name})`, async () => {
+    describe(`Common prefixes (${name})`, async () => {
 
-    test('Can complete common prefixes in alternatives', async () => {
-        const grammar = `
+        test('Can complete common prefixes in alternatives', async () => {
+            const grammar = `
         grammar Test
 
         entry Model: (item+=A | item+=B)*;
@@ -467,29 +467,29 @@ describe(`Common prefixes (${name})`, async () => {
         hidden terminal ML_COMMENT: /\\/\\*[\\s\\S]*?\\*\\//;
         `;
 
-        const services = await createServices({ grammar });
-        if (!services) return;
-        const completion = expectCompletion(services);
-        const text = 'a b d <|>a <|>b <|>c';
-        await completion({
-            text,
-            index: 0,
-            expectedItems: ['a']
+            const services = await createServices({ grammar });
+            if (!services) return;
+            const completion = expectCompletion(services);
+            const text = 'a b d <|>a <|>b <|>c';
+            await completion({
+                text,
+                index: 0,
+                expectedItems: ['a']
+            });
+            await completion({
+                text,
+                index: 1,
+                expectedItems: ['b']
+            });
+            await completion({
+                text,
+                index: 2,
+                expectedItems: ['c', 'd']
+            });
         });
-        await completion({
-            text,
-            index: 1,
-            expectedItems: ['b']
-        });
-        await completion({
-            text,
-            index: 2,
-            expectedItems: ['c', 'd']
-        });
-    });
 
-    test('Can complete common prefixes in alternatives for case insensitive language', async () => {
-        const grammar = `
+        test('Can complete common prefixes in alternatives for case insensitive language', async () => {
+            const grammar = `
         grammar Test
 
         entry Model: (item+=A | item+=B)*;
@@ -501,36 +501,36 @@ describe(`Common prefixes (${name})`, async () => {
         hidden terminal ML_COMMENT: /\\/\\*[\\s\\S]*?\\*\\//;
         `;
 
-        const languageMetaData = {
-            caseInsensitive: true,
-            fileExtensions: ['.txt'],
-            languageId: 'UNKNOWN',
-            mode: 'development' as const
-        };
+            const languageMetaData = {
+                caseInsensitive: true,
+                fileExtensions: ['.txt'],
+                languageId: 'UNKNOWN',
+                mode: 'development' as const
+            };
 
-        const services = await createServices({ grammar, languageMetaData });
-        if (!services) return;
-        const completion = expectCompletion(services);
-        const text = 'A b d <|>A <|>b <|>C';
-        await completion({
-            text,
-            index: 0,
-            expectedItems: ['a']
+            const services = await createServices({ grammar, languageMetaData });
+            if (!services) return;
+            const completion = expectCompletion(services);
+            const text = 'A b d <|>A <|>b <|>C';
+            await completion({
+                text,
+                index: 0,
+                expectedItems: ['a']
+            });
+            await completion({
+                text,
+                index: 1,
+                expectedItems: ['b']
+            });
+            await completion({
+                text,
+                index: 2,
+                expectedItems: ['c', 'd']
+            });
         });
-        await completion({
-            text,
-            index: 1,
-            expectedItems: ['b']
-        });
-        await completion({
-            text,
-            index: 2,
-            expectedItems: ['c', 'd']
-        });
-    });
 
-    test('Can enter and leave a rule in common prefixes', async () => {
-        const grammar = `
+        test('Can enter and leave a rule in common prefixes', async () => {
+            const grammar = `
         grammar Test
 
         entry Model: (item+=A | item+=B)*;
@@ -544,31 +544,31 @@ describe(`Common prefixes (${name})`, async () => {
         hidden terminal ML_COMMENT: /\\/\\*[\\s\\S]*?\\*\\//;
         `;
 
-        const services = await createServices({ grammar });
-        if (!services) return;
-        const completion = expectCompletion(services);
-        const text = 'a b d <|>a <|>b <|>c';
-        await completion({
-            text,
-            index: 0,
-            expectedItems: ['a']
+            const services = await createServices({ grammar });
+            if (!services) return;
+            const completion = expectCompletion(services);
+            const text = 'a b d <|>a <|>b <|>c';
+            await completion({
+                text,
+                index: 0,
+                expectedItems: ['a']
+            });
+            // Ensures that we can enter the X rule within the common prefix
+            await completion({
+                text,
+                index: 1,
+                expectedItems: ['b']
+            });
+            // Ensures that we can leave the X rule to return to A/B
+            await completion({
+                text,
+                index: 2,
+                expectedItems: ['c', 'd']
+            });
         });
-        // Ensures that we can enter the X rule within the common prefix
-        await completion({
-            text,
-            index: 1,
-            expectedItems: ['b']
-        });
-        // Ensures that we can leave the X rule to return to A/B
-        await completion({
-            text,
-            index: 2,
-            expectedItems: ['c', 'd']
-        });
-    });
 
-    test('Can enter and leave annotation in a Java-like grammar', async () => {
-        const grammar = `
+        test('Can enter and leave annotation in a Java-like grammar', async () => {
+            const grammar = `
         grammar Test
 
         entry Model: content+=Content*;
@@ -594,29 +594,29 @@ describe(`Common prefixes (${name})`, async () => {
         terminal ID: /[_a-zA-Z][\\w_]*/;
         `;
 
-        const services = await createServices({ grammar,
-            module: {
-                lsp: {
+            const services = await createServices({ grammar,
+                module: {
+                    lsp: {
                     // CompletionProvider that shows ALL completions for testing purposes
-                    CompletionProvider: (services: LangiumServices) =>
-                        new (class extends DefaultCompletionProvider {
-                            protected override filterKeyword(
-                                _context: CompletionContext,
-                                _keyword: GrammarAST.Keyword
-                            ): boolean {
-                                return true;
-                            }
+                        CompletionProvider: (services: LangiumServices) =>
+                            new (class extends DefaultCompletionProvider {
+                                protected override filterKeyword(
+                                    _context: CompletionContext,
+                                    _keyword: GrammarAST.Keyword
+                                ): boolean {
+                                    return true;
+                                }
 
-                            protected override continueCompletion(_items: CompletionItem[]): boolean {
-                                return true;
-                            }
-                        })(services),
+                                protected override continueCompletion(_items: CompletionItem[]): boolean {
+                                    return true;
+                                }
+                            })(services),
+                    },
                 },
-            },
-        });
-        if (!services) return;
-        const completion = expectCompletion(services);
-        const text1 = `
+            });
+            if (!services) return;
+            const completion = expectCompletion(services);
+            const text1 = `
         @description
         public interface Demo1;
 
@@ -624,47 +624,47 @@ describe(`Common prefixes (${name})`, async () => {
         <|>public interface Demo2;
         `;
 
-        await completion({
-            text: text1,
-            index: 0,
-            expectedItems: [
+            await completion({
+                text: text1,
+                index: 0,
+                expectedItems: [
                 // Annotation arguments
-                '(',
-                // Another new annotation
-                '@',
-                // Visibility keywords
-                'public', 'internal',
-                // class or interface keyword
-                'interface', 'class'
-            ]
-        });
-        // Add space after "(" to ensure that the completion doesn't attempt to finish the "(" token
-        const text2 = `
+                    '(',
+                    // Another new annotation
+                    '@',
+                    // Visibility keywords
+                    'public', 'internal',
+                    // class or interface keyword
+                    'interface', 'class'
+                ]
+            });
+            // Add space after "(" to ensure that the completion doesn't attempt to finish the "(" token
+            const text2 = `
         @description( <|>a)
         @description( <|>b)
         public interface Demo3;
         `;
-        await completion({
-            text: text2,
-            index: 0,
-            expectedItems: ['a', 'b', 'c']
+            await completion({
+                text: text2,
+                index: 0,
+                expectedItems: ['a', 'b', 'c']
+            });
+            await completion({
+                text: text2,
+                index: 1,
+                expectedItems: ['a', 'b', 'c']
+            });
         });
-        await completion({
-            text: text2,
-            index: 1,
-            expectedItems: ['a', 'b', 'c']
-        });
-    });
 
-});
+    });
 }
 
 for (const { name, createServices } of BACKENDS) {
     // Lezer: infix grammars fail Lezer generation
     if (name === 'Lezer') continue;
-describe(`Infix rule completion (${name})`, async () => {
+    describe(`Infix rule completion (${name})`, async () => {
 
-    const grammar = `
+        const grammar = `
         grammar Test
         entry Model: expr=Expr;
         Expr: BinaryExpr;
@@ -676,53 +676,53 @@ describe(`Infix rule completion (${name})`, async () => {
         hidden terminal WS: /\\s+/;
     `;
 
-    const services = await createServices({ grammar });
-    if (!services) return;
-    const completion = expectCompletion(services);
+        const services = await createServices({ grammar });
+        if (!services) return;
+        const completion = expectCompletion(services);
 
-    test('Should complete infix operators', async () => {
-        const text = 'x <|>a y <|>b z';
-        const items = ['a', 'b', 'c', 'd'];
-        await completion({
-            text,
-            index: 0,
-            expectedItems: items
+        test('Should complete infix operators', async () => {
+            const text = 'x <|>a y <|>b z';
+            const items = ['a', 'b', 'c', 'd'];
+            await completion({
+                text,
+                index: 0,
+                expectedItems: items
+            });
+            await completion({
+                text,
+                index: 1,
+                expectedItems: items
+            });
         });
-        await completion({
-            text,
-            index: 1,
-            expectedItems: items
+
+        test('Should complete primary expressions', async () => {
+            const text = '<|>x a <|>y b <|>z';
+            const items = ['x', 'y', 'z'];
+            await completion({
+                text,
+                index: 0,
+                expectedItems: items
+            });
+            await completion({
+                text,
+                index: 1,
+                expectedItems: items
+            });
+            await completion({
+                text,
+                index: 2,
+                expectedItems: items
+            });
         });
+
     });
-
-    test('Should complete primary expressions', async () => {
-        const text = '<|>x a <|>y b <|>z';
-        const items = ['x', 'y', 'z'];
-        await completion({
-            text,
-            index: 0,
-            expectedItems: items
-        });
-        await completion({
-            text,
-            index: 1,
-            expectedItems: items
-        });
-        await completion({
-            text,
-            index: 2,
-            expectedItems: items
-        });
-    });
-
-});
 }
 
 for (const { name, createServices } of BACKENDS) {
-describe(`Completion for optional elements (${name})`, async () => {
+    describe(`Completion for optional elements (${name})`, async () => {
 
-    test('Should complete correctly if whole rule content is optional', async () => {
-        const grammar = `
+        test('Should complete correctly if whole rule content is optional', async () => {
+            const grammar = `
             grammar Test
 
             entry Document:
@@ -736,16 +736,16 @@ describe(`Completion for optional elements (${name})`, async () => {
 
             hidden terminal WS: /\\s+/;
         `;
-        const services = await createServices({ grammar });
-        if (!services) return;
-        const completion = expectCompletion(services);
-        const text = '';
-        await completion({
-            text,
-            index: 0,
-            expectedItems: ['@annotation', 'document']
+            const services = await createServices({ grammar });
+            if (!services) return;
+            const completion = expectCompletion(services);
+            const text = '';
+            await completion({
+                text,
+                index: 0,
+                expectedItems: ['@annotation', 'document']
+            });
         });
-    });
 
-});
+    });
 }

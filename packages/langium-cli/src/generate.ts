@@ -388,7 +388,7 @@ export async function runGenerator(config: LangiumConfig, options: GenerateOptio
                 log('log', options, `Generated Lezer parse tables for ${chalk.white.bold(grammar.name ?? 'language')}`);
             }
         } catch (e) {
-            log('error', options, chalk.red(`Failed to load langium-lezer package. Install it with: npm install langium-lezer`));
+            log('error', options, chalk.red('Failed to load langium-lezer package. Install it with: npm install langium-lezer'));
             log('error', options, chalk.red(String(e)));
             return buildResult(false);
         }

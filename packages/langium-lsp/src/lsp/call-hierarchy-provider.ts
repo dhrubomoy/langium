@@ -5,10 +5,10 @@
  ******************************************************************************/
 
 import type { CallHierarchyIncomingCall, CallHierarchyIncomingCallsParams, CallHierarchyItem, CallHierarchyOutgoingCall, CallHierarchyOutgoingCallsParams, CallHierarchyPrepareParams,  } from 'vscode-languageserver';
-import type { GrammarConfig, NameProvider, References, AstNode, Stream, ReferenceDescription, LangiumDocument, LangiumDocuments, MaybePromise } from 'langium-core';
+import type { GrammarConfig, NameProvider, References, AstNode, Stream, ReferenceDescription, LangiumDocument, LangiumDocuments, MaybePromise , Cancellation} from 'langium-core';
 import type { LangiumServices } from './lsp-services.js';
 import { SymbolKind } from 'vscode-languageserver';
-import { Cancellation, SyntaxNodeUtils, URI } from 'langium-core';
+import { SyntaxNodeUtils, URI } from 'langium-core';
 
 /**
  * Language-specific service for handling call hierarchy requests.

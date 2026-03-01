@@ -135,7 +135,7 @@ describe('AST Building via Lezer', () => {
 
     test('INSERT statement is parsed correctly', async () => {
         const doc = await parseDocument(
-            "create table users (id int, name text);\n" +
+            'create table users (id int, name text);\n' +
             "insert into users values (1, 'Alice');"
         );
         expect(doc.parseResult.lexerErrors).toHaveLength(0);
@@ -181,7 +181,7 @@ describe('AST Building via Lezer', () => {
             'create table users (id int, name text);\n' +
             'create table orders (id int, amount float);\n' +
             'select id from users;\n' +
-            "insert into orders values (1, 49.99);"
+            'insert into orders values (1, 49.99);'
         );
         expect(doc.parseResult.lexerErrors).toHaveLength(0);
         expect(doc.parseResult.parserErrors).toHaveLength(0);

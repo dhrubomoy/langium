@@ -8,7 +8,7 @@
 // createDefaultCoreModule / createDefaultSharedCoreModule from default-module.ts
 // (now in the langium meta-package). The service creation is now deferred to
 // a configurable factory that must be set by the meta-package or application.
-import * as ast from '../languages/generated/ast.js';
+import type * as ast from '../languages/generated/ast.js';
 import type { LangiumCoreServices } from '../services.js';
 import type { Mutable } from '../syntax-tree.js';
 import { URI } from './uri-utils.js';

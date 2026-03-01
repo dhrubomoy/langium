@@ -10,8 +10,8 @@ import type { NextFeature } from './follow-element-computation.js';
 import type { NodeKindProvider } from '../node-kind-provider.js';
 import type { FuzzyMatcher } from '../fuzzy-matcher.js';
 import type { LangiumServices } from '../lsp-services.js';
-import type { MarkupContent } from 'vscode-languageserver';
-import { CompletionItemKind, CompletionList, Position } from 'vscode-languageserver';
+import type { MarkupContent , Position } from 'vscode-languageserver';
+import { CompletionItemKind, CompletionList } from 'vscode-languageserver';
 import { GrammarAST, AstUtils, SyntaxNodeUtils, GrammarUtils, stream } from 'langium-core';
 import { findFirstFeatures, findNextFeatures } from './follow-element-computation.js';
 

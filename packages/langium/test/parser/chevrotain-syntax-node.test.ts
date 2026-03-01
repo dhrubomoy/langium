@@ -185,6 +185,7 @@ describe('ChevrotainSyntaxNode', () => {
         const doc = await parse('model foo');
         const rootSyntaxNode = doc.parseResult.value.$syntaxNode!;
         expect(isChevrotainSyntaxNode(rootSyntaxNode)).toBe(true);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const underlyingCst = (rootSyntaxNode as any).underlyingCstNode;
         expect(underlyingCst).toBeDefined();
         expect(underlyingCst).toBe(doc.parseResult.value.$cstNode);

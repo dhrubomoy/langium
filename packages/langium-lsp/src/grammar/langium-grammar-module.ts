@@ -4,8 +4,8 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import { inject, DocumentState, EmptyFileSystem, AstUtils, URI, GrammarAST } from 'langium-core';
-import type { Module, DeepPartial, Grammar, LangiumGeneratedSharedCoreServices, LangiumGeneratedCoreServices, LanguageMetaData, ParserConfig } from 'langium-core';
+import { inject, DocumentState, EmptyFileSystem, AstUtils, URI } from 'langium-core';
+import type { Module, DeepPartial, Grammar, LangiumGeneratedSharedCoreServices, LangiumGeneratedCoreServices, LanguageMetaData, ParserConfig , GrammarAST } from 'langium-core';
 import { LangiumGrammarGeneratedModule, LangiumGrammarGeneratedSharedModule, LangiumGrammarScopeComputation, LangiumGrammarScopeProvider, LangiumGrammarValidator, registerValidationChecks, LangiumGrammarNameProvider, LangiumGrammarReferences, LangiumGrammarValidationResourcesCollector, LangiumGrammarTypesValidator, registerTypeValidationChecks, interpretAstReflection } from 'langium-core/grammar';
 import type { LangiumGrammarDocument } from 'langium-core/grammar';
 import type { LangiumServices, LangiumSharedServices, PartialLangiumServices, PartialLangiumSharedServices } from '../lsp/lsp-services.js';

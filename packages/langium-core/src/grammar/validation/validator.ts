@@ -166,7 +166,6 @@ export class LangiumGrammarValidator {
         this.documents = services.shared.workspace.LangiumDocuments;
     }
 
-
     checkGrammarName(grammar: ast.Grammar, accept: ValidationAcceptor): void {
         if (grammar.name) {
             const firstChar = grammar.name.substring(0, 1);

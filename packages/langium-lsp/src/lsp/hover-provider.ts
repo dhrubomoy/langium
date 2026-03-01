@@ -5,9 +5,9 @@
  ******************************************************************************/
 
 import type { Hover, HoverParams } from 'vscode-languageserver';
-import type { GrammarConfig, GrammarRegistry, References, AstNode, MaybePromise, LangiumDocument, DocumentationProvider } from 'langium-core';
+import type { GrammarConfig, GrammarRegistry, References, AstNode, MaybePromise, LangiumDocument, DocumentationProvider , Cancellation} from 'langium-core';
 import type { LangiumServices } from './lsp-services.js';
-import { Cancellation, SyntaxNodeUtils, isJSDoc, parseJSDoc, isAstNodeWithComment, CstUtils, isLeafCstNode } from 'langium-core';
+import { SyntaxNodeUtils, isJSDoc, parseJSDoc, isAstNodeWithComment, CstUtils, isLeafCstNode } from 'langium-core';
 
 /**
  * Language-specific service for handling hover requests.

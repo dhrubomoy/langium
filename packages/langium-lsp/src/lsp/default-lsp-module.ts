@@ -43,6 +43,7 @@ export function createDefaultModule(context: DefaultModuleContext): Module<Langi
     const chevrotainModule: any = {
         ...createChevrotainParserModule(),
         parser: {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             ...(createChevrotainParserModule() as any).parser,
             AsyncParser: (services: LangiumChevrotainServices) => new DefaultAsyncParser(services),
             ParserAdapter: (services: LangiumChevrotainServices) => new ChevrotainAdapter(services),

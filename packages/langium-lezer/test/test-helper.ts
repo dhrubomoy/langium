@@ -181,7 +181,7 @@ export function assertLeafSequenceEqual(a: RootSyntaxNode, b: RootSyntaxNode): v
 export function assertDiagnosticsEquivalent(
     a: readonly ParseDiagnostic[],
     b: readonly ParseDiagnostic[],
-    positionTolerance = 5
+    _positionTolerance = 5
 ): void {
     // Both should agree on whether there are errors
     const aErrors = a.filter(d => d.severity === 'error');

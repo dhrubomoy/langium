@@ -1,8 +1,7 @@
 /******************************************************************************
- * Grammar Extensions Test (Phase 3 Step 1)
- *
- * Validates that the Langium meta-grammar parser correctly handles all new
- * Phase 3 grammar constructs and produces the expected AST structures.
+ * Copyright 2024 TypeFox GmbH
+ * This program and the accompanying materials are made available under the
+ * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
 import type { Grammar } from 'langium';

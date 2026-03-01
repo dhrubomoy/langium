@@ -5,10 +5,10 @@
  ******************************************************************************/
 
 import type { Position, Range, RenameParams, TextDocumentPositionParams, WorkspaceEdit } from 'vscode-languageserver-protocol';
-import type { GrammarConfig, NameProvider, References, SyntaxNode, MaybePromise, LangiumDocument } from 'langium-core';
+import type { GrammarConfig, NameProvider, References, SyntaxNode, MaybePromise, LangiumDocument , Cancellation} from 'langium-core';
 import type { LangiumServices } from './lsp-services.js';
 import { TextEdit } from 'vscode-languageserver-types';
-import { Cancellation, SyntaxNodeUtils, isNamed } from 'langium-core';
+import { SyntaxNodeUtils, isNamed } from 'langium-core';
 
 /**
  * Language-specific service for handling rename requests and prepare rename requests.

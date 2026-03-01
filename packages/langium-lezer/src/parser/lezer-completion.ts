@@ -58,8 +58,7 @@ export function getLezerExpectedTokens(
     // Look at the node names in the parser's vocabulary to find
     // tokens that could appear in the current context
     const nodeSet = parser.nodeSet;
-    for (let i = 0; i < nodeSet.types.length; i++) {
-        const type = nodeSet.types[i];
+    for (const type of nodeSet.types) {
         // Skip error and anonymous types
         if (type.isError || type.name === '') continue;
         // Skip non-leaf types (we only want tokens, not rules)
