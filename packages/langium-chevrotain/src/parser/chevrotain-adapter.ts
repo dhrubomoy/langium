@@ -4,7 +4,7 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import type { Grammar, LexError, ParseError, RootCstNode, ParseDiagnostic, AdapterParseResult, ExpectedToken, ParserAdapter, ParserAdapterConfig } from 'langium-core';
+import type { Grammar, LexError, ParseError, RootCstNode, ParseDiagnostic, AdapterParseResult, ExpectedToken, ParserAdapter, ParserAdapterConfig, CompletionParseData, CompletionBacktrackingInformation, SyntaxNode } from 'langium-core';
 import { wrapRootCstNode } from 'langium-core';
 import type { LangiumChevrotainServices } from './chevrotain-services.js';
 
@@ -60,6 +60,51 @@ export class ChevrotainAdapter implements ParserAdapter {
         }
 
         return expectedTokens;
+    }
+
+    getCompletionData(_root: SyntaxNode, text: string, offset: number): CompletionParseData {
+        const parserResult = this.services.parser.CompletionParser.parse(text.substring(0, offset));
+        return {
+            tokens: parserResult.tokens.map(t => ({
+                image: t.image,
+                tokenType: { name: t.tokenType.name }
+            })),
+            featureStack: parserResult.elementStack,
+            tokenIndex: parserResult.tokenIndex
+        };
+    }
+
+    getTokenBoundaries(_root: SyntaxNode, text: string, offset: number): CompletionBacktrackingInformation {
+        const tokens = this.services.parser.Lexer.tokenize(text).tokens;
+        if (tokens.length === 0) {
+            return { nextTokenStart: offset, nextTokenEnd: offset };
+        }
+        let previousToken: { startOffset: number; endOffset?: number } | undefined;
+        for (const token of tokens) {
+            if (token.startOffset >= offset) {
+                return {
+                    nextTokenStart: offset,
+                    nextTokenEnd: offset,
+                    previousTokenStart: previousToken ? previousToken.startOffset : undefined,
+                    previousTokenEnd: previousToken ? previousToken.endOffset! + 1 : undefined
+                };
+            }
+            if (token.endOffset! >= offset) {
+                return {
+                    nextTokenStart: token.startOffset,
+                    nextTokenEnd: token.endOffset! + 1,
+                    previousTokenStart: previousToken ? previousToken.startOffset : undefined,
+                    previousTokenEnd: previousToken ? previousToken.endOffset! + 1 : undefined
+                };
+            }
+            previousToken = token;
+        }
+        return {
+            nextTokenStart: offset,
+            nextTokenEnd: offset,
+            previousTokenStart: previousToken ? previousToken.startOffset : undefined,
+            previousTokenEnd: previousToken ? previousToken.endOffset! + 1 : undefined
+        };
     }
 }
 

@@ -5,18 +5,17 @@
  ******************************************************************************/
 
 import type { CompletionItem, CompletionParams, TextEdit } from 'vscode-languageserver-protocol';
-import type { NameProvider, ScopeProvider, AstNode, AstNodeDescription, AstReflection, MultiReference, Mutable, Reference, ReferenceInfo, SyntaxNode, MaybePromise, LangiumDocument, TextDocument, GrammarConfig, DocumentationProvider, Stream , Cancellation} from 'langium-core';
-import type { LangiumCompletionParser, LangiumChevrotainServices, Lexer } from 'langium-chevrotain';
+import type { NameProvider, ScopeProvider, AstNode, AstNodeDescription, AstReflection, MultiReference, Mutable, Reference, ReferenceInfo, SyntaxNode, MaybePromise, LangiumDocument, TextDocument, GrammarConfig, DocumentationProvider, Stream, Cancellation, ParserAdapter, GrammarRegistry, CompletionBacktrackingInformation } from 'langium-core';
 import type { NextFeature } from './follow-element-computation.js';
 import type { NodeKindProvider } from '../node-kind-provider.js';
 import type { FuzzyMatcher } from '../fuzzy-matcher.js';
 import type { LangiumServices } from '../lsp-services.js';
-/** Minimal token shape for completion backtracking. Chevrotain's IToken is a structural supertype. */
-interface CompletionToken { startOffset: number; endOffset?: number }
 import type { MarkupContent } from 'vscode-languageserver';
 import { CompletionItemKind, CompletionList, Position } from 'vscode-languageserver';
 import { GrammarAST, AstUtils, SyntaxNodeUtils, GrammarUtils, stream } from 'langium-core';
 import { findFirstFeatures, findNextFeatures } from './follow-element-computation.js';
+
+export type { CompletionBacktrackingInformation } from 'langium-core';
 
 export type CompletionAcceptor = (context: CompletionContext, value: CompletionValueItem) => void
 
@@ -73,13 +72,6 @@ export interface CompletionProviderOptions {
     allCommitCharacters?: string[];
 }
 
-export interface CompletionBacktrackingInformation {
-    previousTokenStart?: number;
-    previousTokenEnd?: number;
-    nextTokenStart: number;
-    nextTokenEnd: number;
-}
-
 export function mergeCompletionProviderOptions(options: Array<CompletionProviderOptions | undefined>): CompletionProviderOptions {
     const triggerCharacters = Array.from(new Set(options.flatMap(option => option?.triggerCharacters ?? [])));
     const allCommitCharacters = Array.from(new Set(options.flatMap(option => option?.allCommitCharacters ?? [])));
@@ -113,15 +105,14 @@ export interface CompletionProvider {
 }
 
 /**
- * Abstract base class for completion providers.
- * Contains all parser-agnostic completion logic shared between backends.
- * Subclasses implement 3 abstract methods for backend-specific behavior:
- * - `findFeaturesAt` — compute expected grammar features at an offset
- * - `findTokenBoundaries` — find token start/end positions around the cursor
- * - `findDataTypeRuleStart` — detect if cursor is inside a data type rule
+ * Default completion provider that delegates parser-specific behavior
+ * to the `ParserAdapter`. Works with any backend (Chevrotain, Lezer, etc.)
+ * without requiring manual DI overrides.
  */
-export abstract class AbstractCompletionProvider implements CompletionProvider {
+export class DefaultCompletionProvider implements CompletionProvider {
 
+    protected readonly parserAdapter: ParserAdapter;
+    protected readonly grammarRegistry: GrammarRegistry;
     protected readonly documentationProvider: DocumentationProvider;
     protected readonly scopeProvider: ScopeProvider;
     protected readonly grammar: GrammarAST.Grammar;
@@ -133,6 +124,8 @@ export abstract class AbstractCompletionProvider implements CompletionProvider {
     readonly completionOptions?: CompletionProviderOptions;
 
     constructor(services: LangiumServices) {
+        this.parserAdapter = services.parser.ParserAdapter;
+        this.grammarRegistry = services.grammar.GrammarRegistry;
         this.scopeProvider = services.references.ScopeProvider;
         this.grammar = services.Grammar;
         this.nameProvider = services.references.NameProvider;
@@ -143,25 +136,62 @@ export abstract class AbstractCompletionProvider implements CompletionProvider {
         this.documentationProvider = services.documentation.DocumentationProvider;
     }
 
-    // ---- Abstract methods (backend-specific) ----
+    // ---- Parser-delegated methods ----
 
     /**
      * Compute grammar features expected at a given offset.
-     * Chevrotain uses its CompletionParser; Lezer collects leaf tokens from the parse tree.
+     * Delegates token collection to the parser adapter, then uses
+     * `findNextFeatures` to compute the follow set.
      */
-    protected abstract findFeaturesAt(rootSyntaxNode: SyntaxNode, textDocument: TextDocument, offset: number): NextFeature[];
+    protected findFeaturesAt(rootSyntaxNode: SyntaxNode, textDocument: TextDocument, offset: number): NextFeature[] {
+        const { tokens, featureStack, tokenIndex } = this.parserAdapter.getCompletionData(rootSyntaxNode, textDocument.getText(), offset);
+
+        if (featureStack && tokenIndex > 0) {
+            // Backend provided a feature stack (e.g. Chevrotain) — skip already-parsed tokens
+            const leftoverTokens = tokens.slice(tokenIndex);
+            return findNextFeatures([featureStack.map(feature => ({ feature }))], leftoverTokens);
+        }
+
+        // No feature stack — replay from entry rule (Lezer and other backends)
+        const parserRule = GrammarUtils.getEntryRule(this.grammar)!;
+        const syntheticEntryRuleCall = this.buildSyntheticEntryRuleCall(parserRule);
+        return findNextFeatures([[syntheticEntryRuleCall]], tokens);
+    }
 
     /**
      * Find token boundary information around the cursor offset.
-     * Chevrotain uses its Lexer; Lezer walks parse tree leaves.
+     * Delegates to the parser adapter.
      */
-    protected abstract findTokenBoundaries(rootSyntaxNode: SyntaxNode, text: string, offset: number): CompletionBacktrackingInformation;
+    protected findTokenBoundaries(rootSyntaxNode: SyntaxNode, text: string, offset: number): CompletionBacktrackingInformation {
+        return this.parserAdapter.getTokenBoundaries(rootSyntaxNode, text, offset);
+    }
 
     /**
      * Detect if the cursor is inside a data type rule and return its span.
-     * Returns `[startOffset, endOffset]` if inside a data type rule, `undefined` otherwise.
+     * Uses GrammarRegistry for backend-agnostic data type rule detection.
      */
-    protected abstract findDataTypeRuleStart(rootSyntaxNode: SyntaxNode, offset: number): [number, number] | undefined;
+    protected findDataTypeRuleStart(rootSyntaxNode: SyntaxNode, offset: number): [number, number] | undefined {
+        const leaf = SyntaxNodeUtils.findLeafSyntaxNodeAtOffset(rootSyntaxNode, offset)
+            ?? SyntaxNodeUtils.findLeafSyntaxNodeBeforeOffset(rootSyntaxNode, offset);
+        if (!leaf) {
+            return undefined;
+        }
+        // Chevrotain CST: use grammar-source-based detection (the CST doesn't always
+        // expose data type rule nodes in the parent chain, e.g. inside cross-references)
+        const dtNode = SyntaxNodeUtils.getDatatypeSyntaxNode(leaf);
+        if (dtNode) {
+            return [dtNode.offset, dtNode.end];
+        }
+        // Non-Chevrotain backends: walk parent chain checking type names against GrammarRegistry
+        let current: SyntaxNode | null = leaf;
+        while (current) {
+            if (current.type && this.grammarRegistry.isDataTypeRule(current.type)) {
+                return [current.offset, current.end];
+            }
+            current = current.parent;
+        }
+        return undefined;
+    }
 
     // ---- Shared implementation ----
 
@@ -548,86 +578,6 @@ export abstract class AbstractCompletionProvider implements CompletionProvider {
 }
 
 /**
- * Chevrotain-based completion provider.
- * Uses Chevrotain's CompletionParser and Lexer for feature finding and token boundaries.
+ * @deprecated Use `DefaultCompletionProvider` directly — it now works with any parser backend.
  */
-export class DefaultCompletionProvider extends AbstractCompletionProvider {
-
-    protected readonly completionParser: LangiumCompletionParser;
-    protected readonly lexer: Lexer;
-
-    constructor(services: LangiumServices) {
-        super(services);
-        const chevrotainServices = services as unknown as LangiumChevrotainServices;
-        this.completionParser = chevrotainServices.parser.CompletionParser;
-        this.lexer = chevrotainServices.parser.Lexer;
-    }
-
-    protected findFeaturesAt(_rootSyntaxNode: SyntaxNode, textDocument: TextDocument, offset: number): NextFeature[] {
-        const text = textDocument.getText({
-            start: Position.create(0, 0),
-            end: textDocument.positionAt(offset)
-        });
-        const parserResult = this.completionParser.parse(text);
-        const tokens = parserResult.tokens;
-        // If the parser didn't parse any tokens, return the next features of the entry rule
-        if (parserResult.tokenIndex === 0) {
-            const parserRule = GrammarUtils.getEntryRule(this.grammar)!;
-            // Generate a synthetic RuleCall to the entry rule
-            const syntheticEntryRuleCall = this.buildSyntheticEntryRuleCall(parserRule);
-            return findNextFeatures([[syntheticEntryRuleCall]], tokens);
-        }
-        const leftoverTokens = [...tokens].splice(parserResult.tokenIndex);
-        const features = findNextFeatures([parserResult.elementStack.map(feature => ({ feature }))], leftoverTokens);
-        return features;
-    }
-
-    protected findTokenBoundaries(_rootSyntaxNode: SyntaxNode, text: string, offset: number): CompletionBacktrackingInformation {
-        const tokens = this.lexer.tokenize(text).tokens;
-        if (tokens.length === 0) {
-            return {
-                nextTokenStart: offset,
-                nextTokenEnd: offset
-            };
-        }
-        let previousToken: CompletionToken | undefined;
-        for (const token of tokens) {
-            if (token.startOffset >= offset) {
-                return {
-                    nextTokenStart: offset,
-                    nextTokenEnd: offset,
-                    previousTokenStart: previousToken ? previousToken.startOffset : undefined,
-                    previousTokenEnd: previousToken ? previousToken.endOffset! + 1 : undefined
-                };
-            }
-            if (token.endOffset! >= offset) {
-                return {
-                    nextTokenStart: token.startOffset,
-                    nextTokenEnd: token.endOffset! + 1,
-                    previousTokenStart: previousToken ? previousToken.startOffset : undefined,
-                    previousTokenEnd: previousToken ? previousToken.endOffset! + 1 : undefined
-                };
-            }
-            previousToken = token;
-        }
-        return {
-            nextTokenStart: offset,
-            nextTokenEnd: offset,
-            previousTokenStart: previousToken ? previousToken.startOffset : undefined,
-            previousTokenEnd: previousToken ? previousToken.endOffset! + 1 : undefined
-        };
-    }
-
-    protected findDataTypeRuleStart(syntaxNode: SyntaxNode, offset: number): [number, number] | undefined {
-        const containerNode = SyntaxNodeUtils.findDeclarationSyntaxNodeAtOffset(syntaxNode, offset, this.grammarConfig.nameRegexp);
-        if (!containerNode) {
-            return undefined;
-        }
-        // Identify whether the element was parsed as part of a data type rule
-        const fullNode = SyntaxNodeUtils.getDatatypeSyntaxNode(containerNode);
-        if (fullNode) {
-            return [fullNode.offset, fullNode.end];
-        }
-        return undefined;
-    }
-}
+export const AbstractCompletionProvider = DefaultCompletionProvider;

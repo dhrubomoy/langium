@@ -4,8 +4,8 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import type { Grammar } from '../languages/generated/ast.js';
-import type { RootSyntaxNode } from './syntax-node.js';
+import type { AbstractElement, Grammar } from '../languages/generated/ast.js';
+import type { RootSyntaxNode, SyntaxNode } from './syntax-node.js';
 
 /**
  * Interface that each parser backend implements.
@@ -55,6 +55,26 @@ export interface ParserAdapter {
      * - Tree-sitter: analyze valid tokens from parse table state
      */
     getExpectedTokens(text: string, offset: number): ExpectedToken[];
+
+    /**
+     * Get completion parse data at an offset.
+     * Returns the token stream and optional feature stack needed by the
+     * completion provider to compute follow-set features.
+     *
+     * - Chevrotain: uses the dedicated CompletionParser to get a feature stack
+     *   and token index, allowing the completion provider to skip already-parsed tokens.
+     * - Lezer: collects leaf nodes from the existing parse tree and converts
+     *   them to tokens. No feature stack (completion replays from the entry rule).
+     */
+    getCompletionData(root: SyntaxNode, text: string, offset: number): CompletionParseData;
+
+    /**
+     * Find token boundaries around the cursor for completion backtracking.
+     *
+     * - Chevrotain: uses the Lexer to tokenize the full text.
+     * - Lezer: walks parse tree leaf nodes.
+     */
+    getTokenBoundaries(root: SyntaxNode, text: string, offset: number): CompletionBacktrackingInformation;
 
     /**
      * Release resources (WASM modules, etc.).
@@ -107,4 +127,37 @@ export interface ParserAdapterConfig {
     maxLookahead?: number;
     /** Arbitrary backend-specific config. */
     backendConfig?: Record<string, unknown>;
+}
+
+/**
+ * Minimal token shape for completion. Structural supertype of Chevrotain's IToken.
+ */
+export interface CompletionToken {
+    readonly image: string;
+    readonly tokenType: { readonly name: string };
+}
+
+/**
+ * Raw data from a parser backend for computing completion features.
+ */
+export interface CompletionParseData {
+    /** Token stream from the parse. */
+    readonly tokens: CompletionToken[];
+    /**
+     * Grammar feature stack from the parser (e.g. Chevrotain's element stack).
+     * If undefined, completion starts from the entry rule and replays all tokens.
+     */
+    readonly featureStack?: readonly AbstractElement[];
+    /** Index in tokens where unparsed tokens begin. 0 means all tokens are unparsed. */
+    readonly tokenIndex: number;
+}
+
+/**
+ * Token boundary information around the cursor for completion backtracking.
+ */
+export interface CompletionBacktrackingInformation {
+    previousTokenStart?: number;
+    previousTokenEnd?: number;
+    nextTokenStart: number;
+    nextTokenEnd: number;
 }

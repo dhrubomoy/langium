@@ -15,7 +15,6 @@ import {
 } from 'langium/lsp';
 import { createLezerParserModule, LezerAdapter, DefaultFieldMap } from 'langium-lezer';
 import type { FieldMapData } from 'langium-lezer';
-import { LezerCompletionProvider } from 'langium/lsp';
 import { SimpleSQLValidator, registerValidationChecks } from './simple-sql-validator.js';
 import { SimpleSQLGeneratedModule, SimpleSQLGeneratedSharedModule } from './generated/module.js';
 // Lezer-generated parse tables and data
@@ -43,9 +42,6 @@ export type SimpleSQLServices = LangiumServices & SimpleSQLAddedServices
 export const SimpleSQLModule: Module<SimpleSQLServices, PartialLangiumServices & SimpleSQLAddedServices> = {
     validation: {
         SimpleSQLValidator: () => new SimpleSQLValidator()
-    },
-    lsp: {
-        CompletionProvider: (services) => new LezerCompletionProvider(services)
     }
 };
 
