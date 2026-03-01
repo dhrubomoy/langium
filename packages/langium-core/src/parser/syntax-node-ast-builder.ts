@@ -85,11 +85,16 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
         // Create the AstNode
         const node: GenericAstNode = { $type: ruleName } as GenericAstNode;
 
-        // Process assignments from the grammar registry
+        // Process assignments from the grammar registry.
+        // Deduplicate by property name: grammar rules like `items+=X (',' items+=X)*`
+        // produce multiple AssignmentInfo entries for the same property. Since
+        // childrenForField returns ALL matching children regardless, we must only
+        // process each property once to avoid doubling array contents.
         const assignmentInfos = this.grammarRegistry.getAssignmentInfos(ruleName);
         const assignedFields = new Set<string>();
 
         for (const info of assignmentInfos) {
+            if (assignedFields.has(info.property)) continue;
             assignedFields.add(info.property);
             this.processAssignment(node, syntaxNode, info);
         }
@@ -100,8 +105,13 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
         // Set mandatory default values (empty arrays, default booleans, etc.)
         assignMandatoryProperties(this.reflection, node);
 
-        // Associate SyntaxNode with AstNode (bidirectional)
-        this.defineSyntaxNodeProperty(node, syntaxNode);
+        // Associate SyntaxNode with AstNode (bidirectional).
+        // If inlineChildNode already set $syntaxNode to the inlined child's SyntaxNode
+        // (because $type changed from the original ruleName), don't overwrite it —
+        // the inlined SyntaxNode is where the field children live.
+        if ((node as Mutable<AstNode>).$type === ruleName) {
+            this.defineSyntaxNodeProperty(node, syntaxNode);
+        }
         this.syntaxNodeToAstNode.set(syntaxNode, node);
         // Store back-reference on SyntaxNode for findAstNodeForSyntaxNode()
         Object.defineProperty(syntaxNode, '$astNode', {
@@ -248,15 +258,21 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
         // Update $type to the child's type (mirrors Chevrotain's action callback)
         (node as Mutable<AstNode>).$type = childType;
 
-        // Process the child's assignments directly on the parent node
+        // Process the child's assignments directly on the parent node.
+        // Deduplicate by property name (same as in buildNode).
         const childAssignments = this.grammarRegistry.getAssignmentInfos(childType);
+        const childAssignedFields = new Set<string>();
         for (const info of childAssignments) {
+            if (childAssignedFields.has(info.property)) continue;
+            childAssignedFields.add(info.property);
             this.processAssignment(node, childSN, info);
         }
-
-        // Recursively handle the child's own unassigned children
-        const childAssignedFields = new Set(childAssignments.map(a => a.property));
         this.processUnassignedChildren(node, childSN, childAssignedFields);
+
+        // Update $syntaxNode to point to the inlined child's SyntaxNode so that
+        // findAssignmentSN can locate field children (e.g., SelectStmtTable) which
+        // are direct children of the inlined SyntaxNode, not the outer wrapper.
+        this.defineSyntaxNodeProperty(node, childSN);
 
         // Map child SyntaxNode → parent AstNode for correct findAstNode() lookups
         this.syntaxNodeToAstNode.set(childSN, node);
@@ -296,16 +312,40 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
     }
 
     protected convertParserErrors(root: RootSyntaxNode): ParseError[] {
+        const text = root.fullText;
         return root.diagnostics
             .filter(d => d.source === 'parser')
-            .map(d => ({
-                message: d.message,
-                token: {
-                    image: '',
-                    startOffset: d.offset,
-                    endOffset: d.offset + d.length
-                }
-            }));
+            .map(d => {
+                const start = this.offsetToLineColumn(text, d.offset);
+                const end = this.offsetToLineColumn(text, d.offset + d.length);
+                return {
+                    message: d.message,
+                    token: {
+                        image: text.substring(d.offset, d.offset + d.length),
+                        startOffset: d.offset,
+                        startLine: start.line,
+                        startColumn: start.column,
+                        endOffset: d.offset + d.length,
+                        endLine: end.line,
+                        endColumn: end.column
+                    }
+                };
+            });
+    }
+
+    /**
+     * Convert a byte offset to 1-based line/column (Chevrotain convention).
+     */
+    protected offsetToLineColumn(text: string, offset: number): { line: number; column: number } {
+        let line = 1;
+        let lastLineStart = 0;
+        for (let i = 0; i < offset && i < text.length; i++) {
+            if (text.charCodeAt(i) === 10) { // '\n'
+                line++;
+                lastLineStart = i + 1;
+            }
+        }
+        return { line, column: offset - lastLineStart + 1 };
     }
 
     protected convertLexerErrors(root: RootSyntaxNode): LexError[] {

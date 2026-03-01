@@ -54,7 +54,7 @@
     "build": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
     "langium:generate": "langium generate",
-    "test": "echo 'No tests yet'"
+    "test": "vitest run"
   },
   "dependencies": {
     "langium": "~4.2.0",

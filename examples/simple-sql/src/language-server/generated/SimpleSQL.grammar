@@ -11,9 +11,9 @@
 // precedence 4: *, / (left)
 Expr { Expr !prec_Expr_0 kw<"or"> Expr | Expr !prec_Expr_1 kw<"and"> Expr | Expr !prec_Expr_2 "=" Expr | Expr !prec_Expr_2 "!=" Expr | Expr !prec_Expr_2 "<" Expr | Expr !prec_Expr_2 ">" Expr | Expr !prec_Expr_2 "<=" Expr | Expr !prec_Expr_2 ">=" Expr | Expr !prec_Expr_3 "+" Expr | Expr !prec_Expr_3 "-" Expr | Expr !prec_Expr_4 "*" Expr | Expr !prec_Expr_4 "/" Expr | PrimaryExpr }
 
-Statement { SelectStmt | CreateTableStmt | InsertStmt }
+Statement { (SelectStmt | CreateTableStmt | InsertStmt) }
 
-SelectStmt { kw<"select"> SelectStmtStar | SelectStmtColumns ("," SelectStmtColumns)* kw<"from"> SelectStmtTable (kw<"where"> SelectStmtCondition)? ";" }
+SelectStmt { kw<"select"> (SelectStmtStar | SelectStmtColumns ("," SelectStmtColumns)*) kw<"from"> SelectStmtTable (kw<"where"> SelectStmtCondition)? ";" }
 
 ColumnExpr { ColumnExprExpression (kw<"as"> ColumnExprAlias)? }
 
@@ -21,11 +21,11 @@ CreateTableStmt { kw<"create"> kw<"table"> CreateTableStmtName "(" CreateTableSt
 
 ColumnDef { ColumnDefName !TypeAnnotation ColumnDefType }
 
-DataType { kw<"int"> | kw<"text"> | kw<"float"> | kw<"bool"> }
+DataType { (kw<"int"> | kw<"text"> | kw<"float"> | kw<"bool">) }
 
 InsertStmt { kw<"insert"> kw<"into"> InsertStmtTable kw<"values"> "(" InsertStmtValues ("," InsertStmtValues)* ")" ";" }
 
-PrimaryExpr { NumberLit | StringLit | BoolLit | NullLit | FunctionCall | ColumnRef | ParenExpr | NotExpr }
+PrimaryExpr { (NumberLit | StringLit | BoolLit | NullLit | FunctionCall | ColumnRef | ParenExpr | NotExpr) }
 
 ParenExpr { "(" ParenExprInner ")" }
 
@@ -64,7 +64,7 @@ FunctionCallArgs { Expr }
 ColumnRefName { Identifier }
 NumberLitValue { Number }
 StringLitValue { String }
-BoolLitValue { kw<"true"> | kw<"false"> }
+BoolLitValue { (kw<"true"> | kw<"false">) }
 
 kw<term> { @specialize[@name={term}]<Identifier, term> }
 

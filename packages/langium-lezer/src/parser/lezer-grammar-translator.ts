@@ -667,7 +667,15 @@ export class LezerGrammarTranslator implements GrammarTranslator {
         const parts = alternatives.elements.map(el =>
             this.translateElement(parentRuleName, el, fieldMapData, keywords, wrapperRules)
         );
-        return parts.join(' | ');
+        const result = parts.join(' | ');
+        // Wrap in parentheses when there are multiple alternatives to preserve
+        // grouping when this expression appears inside a sequence (Group).
+        // Without parens, `a b | c d` means `(a b) | (c d)` in Lezer syntax,
+        // but the Langium AST intends `a (b | c) d`.
+        if (parts.length > 1) {
+            return `(${result})`;
+        }
+        return result;
     }
 
     private translateGroup(
