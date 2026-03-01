@@ -5,8 +5,8 @@
  ******************************************************************************/
 
 import { describe, test } from 'vitest';
-import { createServicesForGrammar } from 'langium/grammar';
 import { expectWorkspaceSymbols, parseHelper } from 'langium/test';
+import { BACKENDS } from '../langium-lezer-test.js';
 
 const grammar = `
  grammar HelloWorld
@@ -16,38 +16,38 @@ const grammar = `
  hidden terminal WS: /\\s+/;
  `.trim();
 
-describe('Workspace symbols', () => {
+for (const { name, createServices } of BACKENDS) {
+    describe(`Workspace symbols (${name})`, () => {
 
-    test('Should show all workspace symbols', async () => {
-        const helloWorldServices = await createServicesForGrammar({
-            grammar
+        test('Should show all workspace symbols', async () => {
+            const services = await createServices({ grammar });
+            if (!services) return;
+            const symbols = expectWorkspaceSymbols(services.shared);
+            const parser = parseHelper(services);
+            await parser('Person Alice');
+            await parser('Person Bob');
+            await symbols({
+                expectedSymbols: [
+                    'Alice',
+                    'Bob'
+                ]
+            });
         });
-        const symbols = expectWorkspaceSymbols(helloWorldServices.shared);
-        const parser = parseHelper(helloWorldServices);
-        await parser('Person Alice');
-        await parser('Person Bob');
-        await symbols({
-            expectedSymbols: [
-                'Alice',
-                'Bob'
-            ]
+
+        test('Should show all workspace symbols matching the query', async () => {
+            const services = await createServices({ grammar });
+            if (!services) return;
+            const symbols = expectWorkspaceSymbols(services.shared);
+            const parser = parseHelper(services);
+            await parser('Person Alice');
+            await parser('Person Bob');
+            await symbols({
+                query: 'Ali',
+                expectedSymbols: [
+                    'Alice'
+                ]
+            });
         });
     });
-
-    test('Should show all workspace symbols matching the query', async () => {
-        const helloWorldServices = await createServicesForGrammar({
-            grammar
-        });
-        const symbols = expectWorkspaceSymbols(helloWorldServices.shared);
-        const parser = parseHelper(helloWorldServices);
-        await parser('Person Alice');
-        await parser('Person Bob');
-        await symbols({
-            query: 'Ali',
-            expectedSymbols: [
-                'Alice'
-            ]
-        });
-    });
-});
+}
 

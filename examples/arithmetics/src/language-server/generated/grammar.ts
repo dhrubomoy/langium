@@ -513,6 +513,13 @@ export const ArithmeticsGrammar = (): Grammar => loadedArithmeticsGrammar ?? (lo
       }
     }
   ],
+  "conflictBlocks": [],
+  "extendBlocks": [],
+  "externalContexts": [],
+  "externalTokenBlocks": [],
   "imports": [],
-  "interfaces": []
+  "interfaces": [],
+  "localTokenBlocks": [],
+  "precedenceBlocks": [],
+  "specializeBlocks": []
 }`));

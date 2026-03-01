@@ -1,6 +1,14 @@
 {
     "files": [],
     "references": [
+        { "path": "./packages/langium-core/tsconfig.src.json" },
+        { "path": "./packages/langium-core/tsconfig.test.json" },
+        { "path": "./packages/langium-chevrotain/tsconfig.src.json" },
+        { "path": "./packages/langium-chevrotain/tsconfig.test.json" },
+        { "path": "./packages/langium-lezer/tsconfig.src.json" },
+        { "path": "./packages/langium-lezer/tsconfig.test.json" },
+        { "path": "./packages/langium-lsp/tsconfig.src.json" },
+        { "path": "./packages/langium-lsp/tsconfig.test.json" },
         { "path": "./packages/langium/tsconfig.src.json" },
         { "path": "./packages/langium/tsconfig.test.json" },
         { "path": "./packages/langium-railroad/tsconfig.json" },
@@ -17,6 +25,7 @@
         { "path": "./examples/requirements/tsconfig.src.json" },
         { "path": "./examples/requirements/tsconfig.test.json" },
         { "path": "./examples/statemachine/tsconfig.src.json" },
-        { "path": "./examples/statemachine/tsconfig.test.json" }
+        { "path": "./examples/statemachine/tsconfig.test.json" },
+        { "path": "./examples/simple-sql/tsconfig.src.json" }
     ]
  }

@@ -4,7 +4,7 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import { EmptyFileSystem, type AstNode, type LangiumCoreServices } from 'langium';
+import { EmptyFileSystem, type AstNode, type LangiumCoreServices, type LangiumChevrotainServices } from 'langium';
 import { describe, expect, test, beforeEach } from 'vitest';
 import { createLangiumGrammarServices, createServicesForGrammar  } from 'langium/grammar';
 import { parseHelper  } from 'langium/test';
@@ -27,13 +27,13 @@ describe('Partial parsing', () => {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     function expectCorrectParse(text: string, rule?: string): any {
-        const result = services.parser.LangiumParser.parse(text, { rule });
+        const result = (services as unknown as LangiumChevrotainServices).parser.LangiumParser.parse(text, { rule });
         expect(result.parserErrors.length).toBe(0);
         return result.value;
     }
 
     function expectErrorneousParse(text: string, rule?: string): void {
-        const result = services.parser.LangiumParser.parse(text, { rule });
+        const result = (services as unknown as LangiumChevrotainServices).parser.LangiumParser.parse(text, { rule });
         expect(result.parserErrors.length).toBeGreaterThan(0);
     }
 
@@ -69,7 +69,7 @@ describe('Partial parsing', () => {
 describe('hidden node parsing', () => {
 
     test('finishes in expected time', async () => {
-        const parser = createLangiumGrammarServices(EmptyFileSystem).grammar.parser.LangiumParser;
+        const parser = (createLangiumGrammarServices(EmptyFileSystem).grammar as unknown as LangiumChevrotainServices).parser.LangiumParser;
         let content = 'Rule:';
         // Adding hidden nodes used to cause exponential parsing time behavior
         for (let i = 0; i < 2500; i++) {
@@ -103,7 +103,7 @@ describe('parser error recovery', () => {
             const services = await createServicesForGrammar({ grammar: text });
             const opening = '('.repeat(open);
             const closing = ')'.repeat(close);
-            const result = services.parser.LangiumParser.parse(`${opening}a${closing};`);
+            const result = (services as unknown as LangiumChevrotainServices).parser.LangiumParser.parse(`${opening}a${closing};`);
             // Expect only one parser error independent of the number of missing closing parenthesis
             expect(result.parserErrors).toHaveLength(1);
         });
@@ -234,7 +234,7 @@ describe('Infix operator parsing', async () => {
         expect(document.parseResult.parserErrors).toHaveLength(0);
         const node = (document.parseResult.value as ExprModel).expr;
         expect(node.$type).toBe('BinaryExpression');
-        const parser = services.parser.LangiumParser;
+        const parser = (services as unknown as LangiumChevrotainServices).parser.LangiumParser;
         // Directly accessing the operatorPrecedence map for testing purposes
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const precedence = (parser as any).operatorPrecedence as Map<string, unknown>;
@@ -281,7 +281,7 @@ describe('Infix operator parsing', async () => {
         const node2 = (document2.parseResult.value as ExprModel).expr;
         expect(node2.$type).toBe('BinaryExpression');
 
-        const parser = services.parser.LangiumParser;
+        const parser = (services as unknown as LangiumChevrotainServices).parser.LangiumParser;
         // Directly accessing the operatorPrecedence map for testing purposes
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const precedence = (parser as any).operatorPrecedence as Map<string, unknown>;

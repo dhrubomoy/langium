@@ -11,7 +11,19 @@ import './langium-types'
 entry Grammar returns Grammar:
     (isDeclared?='grammar' name=ID)?
     imports+=GrammarImport*
-    (rules+=AbstractRule | interfaces+=Interface | types+=Type)*;
+    (
+        rules+=AbstractRule
+      | interfaces+=Interface
+      | types+=Type
+      | precedenceBlocks+=PrecedenceBlock
+      | externalTokenBlocks+=ExternalTokenBlock
+      | externalContexts+=ExternalContext
+      | specializeBlocks+=SpecializeBlock
+      | extendBlocks+=ExtendBlock
+      | conflictBlocks+=ConflictBlock
+      | localTokenBlocks+=LocalTokenBlock
+      | tokenPrecedenceBlocks+=TokenPrecedenceBlock
+    )*;
 
 Interface returns Interface:
     'interface' name=ID
@@ -84,6 +96,57 @@ InfixRuleOperatorList returns InfixRuleOperatorList:
 
 Associativity returns string: 'left' | 'right';
 
+// --- Phase 3: Grammar Extension Rules ---
+
+PrecedenceBlock returns PrecedenceBlock:
+    'precedence' '{' levels+=PrecedenceLevel+ '}' ';'?;
+
+PrecedenceLevel returns PrecedenceLevel:
+    name=ID (associativity=Associativity 'assoc')? ';'?;
+
+ExternalTokenBlock returns ExternalTokenBlock:
+    'external' 'tokens' 'from' path=STRING '{'
+        tokens+=ExternalTokenDecl (',' tokens+=ExternalTokenDecl)* ','?
+    '}' ';'?;
+
+ExternalTokenDecl returns ExternalTokenDecl:
+    name=ID;
+
+ExternalContext returns ExternalContext:
+    'external' 'context' name=ID 'from' path=STRING ';'?;
+
+SpecializeBlock returns SpecializeBlock:
+    'specialize' terminal=[TerminalRule:ID] '{'
+        mappings+=TokenMapping+
+    '}' ';'?;
+
+ExtendBlock returns ExtendBlock:
+    'extend' terminal=[TerminalRule:ID] '{'
+        mappings+=TokenMapping+
+    '}' ';'?;
+
+TokenMapping returns TokenMapping:
+    source=STRING '=>' target=ID ';'?;
+
+ConflictBlock returns ConflictBlock:
+    'conflicts' '{' sets+=ConflictSet+ '}' ';'?;
+
+ConflictSet returns ConflictSet:
+    '[' rules+=[AbstractRule:ID] (',' rules+=[AbstractRule:ID])+ ']' ';'?;
+
+LocalTokenBlock returns LocalTokenBlock:
+    'local' 'tokens' 'in' rule=[ParserRule:ID] '{'
+        terminals+=TerminalRule+
+    '}' ';'?;
+
+TokenPrecedenceBlock returns TokenPrecedenceBlock:
+    'token' 'precedence' '{' entries+=TokenPrecedenceEntry (',' entries+=TokenPrecedenceEntry)* '}' ';'?;
+
+TokenPrecedenceEntry returns TokenPrecedenceEntry:
+    terminal=[TerminalRule:ID] | literal=STRING;
+
+// --- End Phase 3 Rules ---
+
 InferredType<imperative> returns InferredType:
     (<imperative> 'infer' | <!imperative> 'infers') name=ID;
 
@@ -111,7 +174,9 @@ AbstractToken returns AbstractElement:
     Action;
 
 AbstractTokenWithCardinality returns AbstractElement:
-    (Assignment | AbstractTerminal) cardinality=('?'|'*'|'+')?;
+    (Assignment | AbstractTerminal) cardinality=('?'|'*'|'+')?
+    ('@precMarker' '=' precMarker=ID)?
+    ('@dynamicPrecedence' '(' dynamicPrecedence=NUMBER ')')?;
 
 Action returns AbstractElement:
     {Action} '{' (type=[AbstractType:ID] | inferredType=InferredType<true>) ('.' feature=FeatureName operator=('='|'+=') 'current')? '}';
@@ -227,6 +292,7 @@ CharacterRange returns TerminalElement:
     {CharacterRange} left=Keyword ('..' right=Keyword)?;
 
 FeatureName returns string:
+    'conflicts' | 'context' | 'extend' | 'external' | 'from' | 'local' | 'precedence' | 'specialize' | 'token' | 'tokens' |
     'infix' | 'on' | 'right' | 'left' | 'assoc' | 'current' | 'entry' | 'extends' | 'false' | 'fragment' | 'grammar' | 'hidden' | 'import' | 'interface' | 'returns' | 'terminal' | 'true' | 'type' | 'infer' | 'infers' | 'with' | PrimitiveType | ID;
 
 terminal ID: /\^?[_a-zA-Z][\w_]*/;

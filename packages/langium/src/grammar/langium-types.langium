@@ -24,6 +24,8 @@ type ValueLiteral = ArrayLiteral | BooleanLiteral | NumberLiteral | StringLitera
 
 interface AbstractElement {
     cardinality?: "*" | "+" | "?";
+    precMarker?: string;
+    dynamicPrecedence?: number;
 }
 
 interface Action extends AbstractElement {
@@ -88,6 +90,14 @@ interface Grammar {
     name?: string;
     rules: AbstractRule[];
     types: Type[];
+    precedenceBlocks: PrecedenceBlock[];
+    externalTokenBlocks: ExternalTokenBlock[];
+    externalContexts: ExternalContext[];
+    specializeBlocks: SpecializeBlock[];
+    extendBlocks: ExtendBlock[];
+    conflictBlocks: ConflictBlock[];
+    localTokenBlocks: LocalTokenBlock[];
+    tokenPrecedenceBlocks: TokenPrecedenceBlock[];
 }
 
 interface GrammarImport {
@@ -250,5 +260,67 @@ interface UntilToken extends TerminalElement {
 }
 
 interface Wildcard extends TerminalElement {
+}
+
+// --- Phase 3: Grammar Extensions ---
+
+interface PrecedenceBlock {
+    levels: PrecedenceLevel[];
+}
+
+interface PrecedenceLevel {
+    name: string;
+    associativity?: Associativity;
+}
+
+interface ExternalTokenBlock {
+    path: string;
+    tokens: ExternalTokenDecl[];
+}
+
+interface ExternalTokenDecl {
+    name: string;
+}
+
+interface ExternalContext {
+    name: string;
+    path: string;
+}
+
+interface SpecializeBlock {
+    terminal: @TerminalRule;
+    mappings: TokenMapping[];
+}
+
+interface ExtendBlock {
+    terminal: @TerminalRule;
+    mappings: TokenMapping[];
+}
+
+interface TokenMapping {
+    source: string;
+    target: string;
+}
+
+interface ConflictBlock {
+    sets: ConflictSet[];
+}
+
+interface ConflictSet {
+    rules: @AbstractRule[];
+}
+
+interface LocalTokenBlock {
+    rule: @ParserRule;
+    terminals: TerminalRule[];
+}
+
+interface TokenPrecedenceBlock {
+    entries: TokenPrecedenceEntry[];
+}
+
+interface TokenPrecedenceEntry {
+    terminal?: @TerminalRule;
+    literal?: string;
 }
 

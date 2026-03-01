@@ -380,7 +380,14 @@ export const DomainModelGrammar = (): Grammar => loadedDomainModelGrammar ?? (lo
       "fragment": false
     }
   ],
+  "conflictBlocks": [],
+  "extendBlocks": [],
+  "externalContexts": [],
+  "externalTokenBlocks": [],
   "imports": [],
   "interfaces": [],
+  "localTokenBlocks": [],
+  "precedenceBlocks": [],
+  "specializeBlocks": [],
   "types": []
 }`));

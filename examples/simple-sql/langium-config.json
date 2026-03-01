@@ -1,0 +1,13 @@
+{
+    "projectName": "SimpleSQL",
+    "parserBackend": "lezer",
+    "languages": [{
+        "id": "simple-sql",
+        "grammar": "src/language-server/simple-sql.langium",
+        "fileExtensions": [".ssql"],
+        "textMate": {
+            "out": "syntaxes/simple-sql.tmLanguage.json"
+        }
+    }],
+    "out": "src/language-server/generated"
+}

@@ -32,6 +32,8 @@ export interface LangiumConfig {
     validation?: LangiumGrammarValidationOptions
     /** Configure the chevrotain parser for all languages */
     chevrotainParserConfig?: IParserConfig,
+    /** Default parser backend. Default: 'chevrotain'. */
+    parserBackend?: 'chevrotain' | 'lezer',
     /** The following option is meant to be used only by Langium itself */
     langiumInternal?: boolean
 }
@@ -73,6 +75,8 @@ export interface LangiumLanguageConfig {
     }
     /** Configure the chevrotain parser for a single language */
     chevrotainParserConfig?: IParserConfig
+    /** Per-language parser backend override. */
+    parserBackend?: 'chevrotain' | 'lezer'
     /** Enable BNF file generation */
     bnf?: {
         /** Output path for the BNF file */

@@ -2,39 +2,43 @@
  * Copyright 2021 TypeFox GmbH
  * This program and the accompanying materials are made available under the
  * terms of the MIT License, which is available in the project root.
-******************************************************************************/
+ ******************************************************************************/
 
-import type { Module } from './dependency-injection.js';
-import type { LangiumDefaultCoreServices, LangiumDefaultSharedCoreServices, LangiumCoreServices, LangiumSharedCoreServices } from './services.js';
-import type { FileSystemProvider } from './workspace/file-system-provider.js';
-import { createGrammarConfig } from './languages/grammar-config.js';
-import { createCompletionParser } from './parser/completion-parser-builder.js';
-import { createLangiumParser } from './parser/langium-parser-builder.js';
-import { DefaultTokenBuilder } from './parser/token-builder.js';
-import { DefaultValueConverter } from './parser/value-converter.js';
-import { DefaultLinker } from './references/linker.js';
-import { DefaultNameProvider } from './references/name-provider.js';
-import { DefaultReferences } from './references/references.js';
-import { DefaultScopeComputation } from './references/scope-computation.js';
-import { DefaultScopeProvider } from './references/scope-provider.js';
-import { DefaultJsonSerializer } from './serializer/json-serializer.js';
-import { DefaultServiceRegistry } from './service-registry.js';
-import { DefaultDocumentValidator } from './validation/document-validator.js';
-import { ValidationRegistry } from './validation/validation-registry.js';
-import { DefaultAstNodeDescriptionProvider, DefaultReferenceDescriptionProvider } from './workspace/ast-descriptions.js';
-import { DefaultAstNodeLocator } from './workspace/ast-node-locator.js';
-import { DefaultConfigurationProvider } from './workspace/configuration.js';
-import { DefaultDocumentBuilder } from './workspace/document-builder.js';
-import { DefaultLangiumDocumentFactory, DefaultLangiumDocuments } from './workspace/documents.js';
-import { DefaultIndexManager } from './workspace/index-manager.js';
-import { DefaultWorkspaceManager } from './workspace/workspace-manager.js';
-import { DefaultLexer, DefaultLexerErrorMessageProvider } from './parser/lexer.js';
-import { JSDocDocumentationProvider } from './documentation/documentation-provider.js';
-import { DefaultCommentProvider } from './documentation/comment-provider.js';
-import { LangiumParserErrorMessageProvider } from './parser/langium-parser.js';
-import { DefaultAsyncParser } from './parser/async-parser.js';
-import { DefaultWorkspaceLock } from './workspace/workspace-lock.js';
-import { DefaultHydrator } from './serializer/hydrator.js';
+import type { Module } from 'langium-core';
+import type { LangiumDefaultCoreServices, LangiumDefaultSharedCoreServices, LangiumCoreServices, LangiumSharedCoreServices } from 'langium-core';
+import type { LangiumChevrotainServices } from 'langium-chevrotain';
+import type { FileSystemProvider } from 'langium-core';
+import { DefaultGrammarRegistry } from 'langium-core';
+import { createGrammarConfig } from 'langium-core';
+import { ChevrotainAdapter } from 'langium-chevrotain';
+import { createCompletionParser } from 'langium-chevrotain';
+import { createLangiumParser } from 'langium-chevrotain';
+import { DefaultTokenBuilder } from 'langium-chevrotain';
+import { DefaultValueConverter } from 'langium-core';
+import { DefaultLinker } from 'langium-core';
+import { DefaultNameProvider } from 'langium-core';
+import { DefaultReferences } from 'langium-core';
+import { DefaultScopeComputation } from 'langium-core';
+import { DefaultScopeProvider } from 'langium-core';
+import { DefaultJsonSerializer } from 'langium-core';
+import { DefaultServiceRegistry } from 'langium-core';
+import { DefaultDocumentValidator } from 'langium-core';
+import { ValidationRegistry } from 'langium-core';
+import { DefaultAstNodeDescriptionProvider, DefaultReferenceDescriptionProvider } from 'langium-core';
+import { DefaultAstNodeLocator } from 'langium-core';
+import { DefaultConfigurationProvider } from 'langium-core';
+import { DefaultDocumentBuilder } from 'langium-core';
+import { DefaultLangiumDocumentFactory, DefaultLangiumDocuments } from 'langium-core';
+import { DefaultIndexManager } from 'langium-core';
+import { DefaultWorkspaceManager } from 'langium-core';
+import { JSDocDocumentationProvider } from 'langium-core';
+import { DefaultCommentProvider } from 'langium-core';
+import { DefaultAsyncParser } from 'langium-core';
+import { DefaultLexer, DefaultLexerErrorMessageProvider } from 'langium-chevrotain';
+import { LangiumParserErrorMessageProvider } from 'langium-chevrotain';
+import { DefaultWorkspaceLock } from 'langium-core';
+import { DefaultHydrator } from 'langium-chevrotain';
+import { setGrammarServicesFactory, inject, EmptyFileSystem } from 'langium-core';
 
 /**
  * Context required for creating the default language-specific dependency injection module.
@@ -48,21 +52,32 @@ export interface DefaultCoreModuleContext {
  * This is a set of services that are dedicated to a specific language.
  */
 export function createDefaultCoreModule(context: DefaultCoreModuleContext): Module<LangiumCoreServices, LangiumDefaultCoreServices> {
+    // The module also registers Chevrotain-specific services (LangiumParser, Lexer, etc.)
+    // for backward compatibility. The casts are safe because the DI container merges
+    // all services and the Chevrotain services are always available at runtime.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const chevrotainServices: any = {
+        LangiumParser: (services: LangiumChevrotainServices) => createLangiumParser(services),
+        CompletionParser: (services: LangiumChevrotainServices) => createCompletionParser(services),
+        TokenBuilder: () => new DefaultTokenBuilder(),
+        Lexer: (services: LangiumChevrotainServices) => new DefaultLexer(services),
+        ParserErrorMessageProvider: () => new LangiumParserErrorMessageProvider(),
+        LexerErrorMessageProvider: () => new DefaultLexerErrorMessageProvider(),
+    };
     return {
         documentation: {
             CommentProvider: (services) => new DefaultCommentProvider(services),
             DocumentationProvider: (services) => new JSDocDocumentationProvider(services)
         },
+        grammar: {
+            GrammarRegistry: (services) => new DefaultGrammarRegistry(services)
+        },
         parser: {
-            AsyncParser: (services) => new DefaultAsyncParser(services),
+            AsyncParser: (services) => new DefaultAsyncParser(services as unknown as LangiumChevrotainServices),
             GrammarConfig: (services) => createGrammarConfig(services),
-            LangiumParser: (services) => createLangiumParser(services),
-            CompletionParser: (services) => createCompletionParser(services),
             ValueConverter: () => new DefaultValueConverter(),
-            TokenBuilder: () => new DefaultTokenBuilder(),
-            Lexer: (services) => new DefaultLexer(services),
-            ParserErrorMessageProvider: () => new LangiumParserErrorMessageProvider(),
-            LexerErrorMessageProvider: () => new DefaultLexerErrorMessageProvider()
+            ParserAdapter: (services) => new ChevrotainAdapter(services as unknown as LangiumChevrotainServices),
+            ...chevrotainServices,
         },
         workspace: {
             AstNodeLocator: () => new DefaultAstNodeLocator(),
@@ -77,7 +92,7 @@ export function createDefaultCoreModule(context: DefaultCoreModuleContext): Modu
             References: (services) => new DefaultReferences(services)
         },
         serializer: {
-            Hydrator: (services) => new DefaultHydrator(services),
+            Hydrator: (services) => new DefaultHydrator(services as unknown as LangiumChevrotainServices),
             JsonSerializer: (services) => new DefaultJsonSerializer(services)
         },
         validation: {
@@ -122,3 +137,14 @@ export function createDefaultSharedCoreModule(context: DefaultSharedCoreModuleCo
         profilers: {}
     };
 }
+
+// Register the grammar services factory so that langium-core's grammar-loader
+// can create services without a circular dependency.
+setGrammarServicesFactory(() => {
+    const shared = inject(
+        createDefaultSharedCoreModule(EmptyFileSystem)
+    ) as LangiumSharedCoreServices;
+    return inject(
+        createDefaultCoreModule({ shared })
+    ) as LangiumCoreServices;
+});

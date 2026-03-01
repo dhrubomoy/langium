@@ -3,7 +3,7 @@
  * This program and the accompanying materials are made available under the
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
-import type { Grammar, IParserConfig, LangiumDocuments, LangiumParser, LanguageMetaData } from 'langium';
+import type { Grammar, IParserConfig, LangiumDocuments, LangiumParser, LanguageMetaData, LangiumChevrotainServices } from 'langium';
 import type { LangiumConfig, LangiumLanguageConfig } from './package-types.js';
 import { AstUtils, GrammarAST, prepareLangiumParser } from 'langium';
 import type { LangiumGrammarServices} from 'langium/grammar';
@@ -26,7 +26,7 @@ export async function validateParser(grammar: Grammar, config: LangiumConfig, gr
 
     let parser: LangiumParser | undefined;
     try {
-        parser = prepareLangiumParser(services);
+        parser = prepareLangiumParser(services as unknown as LangiumChevrotainServices);
         // The finalization step invokes parser validation, which can lead to thrown errors
         parser.finalize();
         return undefined;

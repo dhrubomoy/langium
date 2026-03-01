@@ -56,6 +56,10 @@
     "@rollup/rollup-linux-x64-gnu": "^4"
   },
   "workspaces": [
+    "packages/langium-core",
+    "packages/langium-chevrotain",
+    "packages/langium-lezer",
+    "packages/langium-lsp",
     "packages/langium",
     "packages/langium-railroad",
     "packages/langium-cli",
@@ -65,6 +69,7 @@
     "examples/arithmetics",
     "examples/domainmodel",
     "examples/requirements",
-    "examples/statemachine"
+    "examples/statemachine",
+    "examples/simple-sql"
   ]
 }

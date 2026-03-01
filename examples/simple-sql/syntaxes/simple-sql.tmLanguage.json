@@ -1,0 +1,46 @@
+{
+  "name": "simple-sql",
+  "scopeName": "source.simple-sql",
+  "fileTypes": [
+    ".ssql"
+  ],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "name": "keyword.control.simple-sql",
+      "match": "\\b(and|as|bool|create|false|float|from|insert|int|into|not|null|or|select|table|text|true|values|where)\\b"
+    },
+    {
+      "name": "string.quoted.single.simple-sql",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "include": "#string-character-escape"
+        }
+      ]
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "begin": "--",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.whitespace.comment.leading.simple-sql"
+            }
+          },
+          "end": "(?=$)",
+          "name": "comment.line.simple-sql"
+        }
+      ]
+    },
+    "string-character-escape": {
+      "name": "constant.character.escape.simple-sql",
+      "match": "\\\\(x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|u\\{[0-9A-Fa-f]+\\}|[0-2][0-7]{0,2}|3[0-6][0-7]?|37[0-7]?|[4-7][0-7]?|.|$)"
+    }
+  }
+}

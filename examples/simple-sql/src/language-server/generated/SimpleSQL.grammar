@@ -1,0 +1,78 @@
+@precedence { TypeAnnotation @left, prec_Expr_0 @left, prec_Expr_1 @left, prec_Expr_2 @left, prec_Expr_3 @left, prec_Expr_4 @left }
+
+@top Program { ProgramStatements* }
+
+@skip { whitespace | LineComment }
+
+// precedence 0: or (left)
+// precedence 1: and (left)
+// precedence 2: =, !=, <, >, <=, >= (left)
+// precedence 3: +, - (left)
+// precedence 4: *, / (left)
+Expr { Expr !prec_Expr_0 kw<"or"> Expr | Expr !prec_Expr_1 kw<"and"> Expr | Expr !prec_Expr_2 "=" Expr | Expr !prec_Expr_2 "!=" Expr | Expr !prec_Expr_2 "<" Expr | Expr !prec_Expr_2 ">" Expr | Expr !prec_Expr_2 "<=" Expr | Expr !prec_Expr_2 ">=" Expr | Expr !prec_Expr_3 "+" Expr | Expr !prec_Expr_3 "-" Expr | Expr !prec_Expr_4 "*" Expr | Expr !prec_Expr_4 "/" Expr | PrimaryExpr }
+
+Statement { SelectStmt | CreateTableStmt | InsertStmt }
+
+SelectStmt { kw<"select"> SelectStmtStar | SelectStmtColumns ("," SelectStmtColumns)* kw<"from"> SelectStmtTable (kw<"where"> SelectStmtCondition)? ";" }
+
+ColumnExpr { ColumnExprExpression (kw<"as"> ColumnExprAlias)? }
+
+CreateTableStmt { kw<"create"> kw<"table"> CreateTableStmtName "(" CreateTableStmtColumns ("," CreateTableStmtColumns)* ")" ";" }
+
+ColumnDef { ColumnDefName !TypeAnnotation ColumnDefType }
+
+DataType { kw<"int"> | kw<"text"> | kw<"float"> | kw<"bool"> }
+
+InsertStmt { kw<"insert"> kw<"into"> InsertStmtTable kw<"values"> "(" InsertStmtValues ("," InsertStmtValues)* ")" ";" }
+
+PrimaryExpr { NumberLit | StringLit | BoolLit | NullLit | FunctionCall | ColumnRef | ParenExpr | NotExpr }
+
+ParenExpr { "(" ParenExprInner ")" }
+
+NotExpr { kw<"not"> NotExprOperand }
+
+FunctionCall[@dynamicPrecedence=2] { ~conflict_FunctionCall_ColumnRef FunctionCallName "(" (FunctionCallArgs ("," FunctionCallArgs)*)? ")" }
+
+ColumnRef { ~conflict_FunctionCall_ColumnRef ColumnRefName }
+
+NumberLit { NumberLitValue }
+
+StringLit { StringLitValue }
+
+BoolLit { BoolLitValue }
+
+NullLit {  kw<"null"> }
+
+// Wrapper rules for field access
+ProgramStatements { Statement }
+SelectStmtStar { "*" }
+SelectStmtColumns { ColumnExpr }
+SelectStmtTable { Identifier }
+SelectStmtCondition { Expr }
+ColumnExprExpression { Expr }
+ColumnExprAlias { Identifier }
+CreateTableStmtName { Identifier }
+CreateTableStmtColumns { ColumnDef }
+ColumnDefName { Identifier }
+ColumnDefType { DataType }
+InsertStmtTable { Identifier }
+InsertStmtValues { Expr }
+ParenExprInner { Expr }
+NotExprOperand { PrimaryExpr }
+FunctionCallName { Identifier }
+FunctionCallArgs { Expr }
+ColumnRefName { Identifier }
+NumberLitValue { Number }
+StringLitValue { String }
+BoolLitValue { kw<"true"> | kw<"false"> }
+
+kw<term> { @specialize[@name={term}]<Identifier, term> }
+
+@tokens {
+  @precedence { LineComment, "-" }
+  Identifier { $[A-Z_a-z] $[0-9A-Z_a-z]* }
+  Number { $[0-9]+ ("." $[0-9]+)? }
+  String { "'" ![']* "'" }
+  whitespace { @whitespace+ }
+  LineComment { "-" "-" ![\n\r]* }
+}

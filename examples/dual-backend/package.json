@@ -1,0 +1,26 @@
+{
+  "name": "langium-dual-backend-example",
+  "version": "4.2.0",
+  "description": "Example demonstrating Langium-X with both Chevrotain and Lezer backends",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "langium-core": "~4.2.0",
+    "langium-chevrotain": "~4.2.0",
+    "langium-lezer": "~4.2.0",
+    "langium-lsp": "~4.2.0",
+    "langium": "~4.2.0"
+  },
+  "devDependencies": {
+    "langium-cli": "~4.2.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eclipse-langium/langium.git",
+    "directory": "examples/dual-backend"
+  },
+  "license": "MIT"
+}
