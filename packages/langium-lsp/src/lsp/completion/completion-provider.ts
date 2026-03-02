@@ -5,17 +5,13 @@
  ******************************************************************************/
 
 import type { CompletionItem, CompletionParams, TextEdit } from 'vscode-languageserver-protocol';
-import type { NameProvider, ScopeProvider, AstNode, AstNodeDescription, AstReflection, MultiReference, Mutable, Reference, ReferenceInfo, SyntaxNode, MaybePromise, LangiumDocument, TextDocument, GrammarConfig, DocumentationProvider, Stream, Cancellation, ParserAdapter, GrammarRegistry, CompletionBacktrackingInformation } from 'langium-core';
-import type { NextFeature } from './follow-element-computation.js';
+import type { NameProvider, ScopeProvider, AstNode, AstNodeDescription, AstReflection, MultiReference, Reference, ReferenceInfo, MaybePromise, LangiumDocument, TextDocument, DocumentationProvider, Stream, Cancellation, ParserAdapter, GrammarRegistry, CompletionFeature } from 'langium-core';
 import type { NodeKindProvider } from '../node-kind-provider.js';
 import type { FuzzyMatcher } from '../fuzzy-matcher.js';
 import type { LangiumServices } from '../lsp-services.js';
 import type { MarkupContent , Position } from 'vscode-languageserver';
 import { CompletionItemKind, CompletionList } from 'vscode-languageserver';
-import { GrammarAST, AstUtils, SyntaxNodeUtils, GrammarUtils, stream } from 'langium-core';
-import { findFirstFeatures, findNextFeatures } from './follow-element-computation.js';
-
-export type { CompletionBacktrackingInformation } from 'langium-core';
+import { GrammarAST, AstUtils, stream } from 'langium-core';
 
 export type CompletionAcceptor = (context: CompletionContext, value: CompletionValueItem) => void
 
@@ -31,7 +27,7 @@ export interface CompletionContext {
     node?: AstNode
     document: LangiumDocument
     textDocument: TextDocument
-    features: NextFeature[]
+    features: CompletionFeature[]
     /**
      * Index at the start of the token related to this context.
      * If the context performs completion for a token that doesn't exist yet, it is equal to the `offset`.
@@ -105,9 +101,14 @@ export interface CompletionProvider {
 }
 
 /**
- * Default completion provider that delegates parser-specific behavior
- * to the `ParserAdapter`. Works with any backend (Chevrotain, Lezer, etc.)
- * without requiring manual DI overrides.
+ * Default completion provider that delegates completion feature computation
+ * to the `ParserAdapter`. Each backend (Chevrotain, Lezer, etc.) implements
+ * its own completion logic via `ParserAdapter.getCompletionFeatures()`.
+ *
+ * This class handles the shared presentation layer: converting backend-agnostic
+ * `CompletionFeature` objects into LSP `CompletionItem` objects, including
+ * keyword filtering, cross-reference scope resolution, text edit computation,
+ * fuzzy matching, and deduplication.
  */
 export class DefaultCompletionProvider implements CompletionProvider {
 
@@ -119,7 +120,6 @@ export class DefaultCompletionProvider implements CompletionProvider {
     protected readonly nameProvider: NameProvider;
     protected readonly nodeKindProvider: NodeKindProvider;
     protected readonly fuzzyMatcher: FuzzyMatcher;
-    protected readonly grammarConfig: GrammarConfig;
     protected readonly astReflection: AstReflection;
     readonly completionOptions?: CompletionProviderOptions;
 
@@ -131,64 +131,30 @@ export class DefaultCompletionProvider implements CompletionProvider {
         this.nameProvider = services.references.NameProvider;
         this.nodeKindProvider = services.shared.lsp.NodeKindProvider;
         this.fuzzyMatcher = services.shared.lsp.FuzzyMatcher;
-        this.grammarConfig = services.parser.GrammarConfig;
         this.astReflection = services.shared.AstReflection;
         this.documentationProvider = services.documentation.DocumentationProvider;
     }
 
-    // ---- Parser-delegated methods ----
-
-    /**
-     * Compute grammar features expected at a given offset.
-     * Delegates token collection to the parser adapter, then uses
-     * `findNextFeatures` to compute the follow set.
-     */
-    protected findFeaturesAt(rootSyntaxNode: SyntaxNode, textDocument: TextDocument, offset: number): NextFeature[] {
-        const { tokens, featureStack, tokenIndex } = this.parserAdapter.getCompletionData(rootSyntaxNode, textDocument.getText(), offset);
-
-        if (featureStack && tokenIndex > 0) {
-            // Backend provided a feature stack (e.g. Chevrotain) — skip already-parsed tokens
-            const leftoverTokens = tokens.slice(tokenIndex);
-            return findNextFeatures([featureStack.map(feature => ({ feature }))], leftoverTokens);
-        }
-
-        // No feature stack — replay from entry rule (Lezer and other backends)
-        const parserRule = GrammarUtils.getEntryRule(this.grammar)!;
-        const syntheticEntryRuleCall = this.buildSyntheticEntryRuleCall(parserRule);
-        return findNextFeatures([[syntheticEntryRuleCall]], tokens);
-    }
-
-    /**
-     * Find token boundary information around the cursor offset.
-     * Delegates to the parser adapter.
-     */
-    protected findTokenBoundaries(rootSyntaxNode: SyntaxNode, text: string, offset: number): CompletionBacktrackingInformation {
-        return this.parserAdapter.getTokenBoundaries(rootSyntaxNode, text, offset);
-    }
-
-    /**
-     * Detect if the cursor is inside a data type rule and return its span.
-     * Uses GrammarRegistry for backend-agnostic data type rule detection.
-     */
-    protected findDataTypeRuleStart(rootSyntaxNode: SyntaxNode, offset: number): [number, number] | undefined {
-        const leaf = SyntaxNodeUtils.findLeafSyntaxNodeAtOffset(rootSyntaxNode, offset)
-            ?? SyntaxNodeUtils.findLeafSyntaxNodeBeforeOffset(rootSyntaxNode, offset);
-        if (!leaf) {
+    async getCompletion(document: LangiumDocument, params: CompletionParams, _cancelToken?: Cancellation.CancellationToken): Promise<CompletionList | undefined> {
+        const rootSyntaxNode = document.parseResult.value.$syntaxNode;
+        if (!rootSyntaxNode) {
             return undefined;
         }
-        const dtNode = SyntaxNodeUtils.getDatatypeSyntaxNode(leaf, this.grammarRegistry);
-        if (dtNode) {
-            return [dtNode.offset, dtNode.end];
-        }
-        return undefined;
-    }
 
-    // ---- Shared implementation ----
+        const textDocument = document.textDocument;
+        const text = textDocument.getText();
+        const offset = textDocument.offsetAt(params.position);
 
-    async getCompletion(document: LangiumDocument, params: CompletionParams, _cancelToken?: Cancellation.CancellationToken): Promise<CompletionList | undefined> {
+        // Delegate to the parser backend to compute completion features
+        const results = this.parserAdapter.getCompletionFeatures({
+            rootSyntaxNode,
+            text,
+            offset,
+            grammar: this.grammar,
+            grammarRegistry: this.grammarRegistry
+        });
+
         const items: CompletionItem[] = [];
-        const contexts = this.buildContexts(document, params.position);
-
         const acceptor: CompletionAcceptor = (context, value) => {
             const completionItem = this.fillCompletionItem(context, value);
             if (completionItem) {
@@ -196,16 +162,27 @@ export class DefaultCompletionProvider implements CompletionProvider {
             }
         };
 
-        const distinctionFunction = (element: NextFeature) => {
-            if (GrammarAST.isKeyword(element.feature)) {
-                return element.feature.value;
+        const distinctionFunction = (element: CompletionFeature) => {
+            if (element.kind === 'keyword') {
+                return element.value;
             } else {
-                return element.feature;
+                return element.grammarElement;
             }
         };
 
-        const completedFeatures: NextFeature[] = [];
-        for (const context of contexts) {
+        const completedFeatures: CompletionFeature[] = [];
+        for (const result of results) {
+            const context: CompletionContext = {
+                node: result.contextNode,
+                document,
+                textDocument,
+                features: result.features,
+                tokenOffset: result.tokenOffset,
+                tokenEndOffset: result.tokenEndOffset,
+                offset: result.offset,
+                position: params.position
+            };
+
             await Promise.all(
                 stream(context.features)
                     .distinct(distinctionFunction)
@@ -233,140 +210,6 @@ export class DefaultCompletionProvider implements CompletionProvider {
         return stream(items).distinct(item => `${item.kind}_${item.label}_${item.detail}`).toArray();
     }
 
-    protected buildSyntheticEntryRuleCall(rule: GrammarAST.ParserRule): NextFeature {
-        // The "start" node is simply an empty group that is followed by the rule call
-        const start: GrammarAST.Group = {
-            $type: 'Group',
-            $container: undefined!,
-            elements: []
-        };
-        const startNext: NextFeature<GrammarAST.Group> = {
-            feature: start
-        };
-        // This is the element that we want to complete
-        const ruleCall: GrammarAST.RuleCall = {
-            $type: 'RuleCall',
-            $container: undefined!,
-            rule: {
-                ref: rule,
-                $refText: rule.name
-            },
-            arguments: []
-        };
-        const group: GrammarAST.Group = {
-            $type: 'Group',
-            $container: undefined!,
-            elements: [
-                start,
-                ruleCall
-            ]
-        };
-        (start as Mutable<AstNode>).$container = group;
-        (ruleCall as Mutable<AstNode>).$container = group;
-        return startNext;
-    }
-
-    protected *buildContexts(document: LangiumDocument, position: Position): IterableIterator<CompletionContext> {
-        const rootSyntaxNode = document.parseResult.value.$syntaxNode;
-        if (!rootSyntaxNode) {
-            return;
-        }
-        const textDocument = document.textDocument;
-        const text = textDocument.getText();
-        const offset = textDocument.offsetAt(position);
-        const partialContext = {
-            document,
-            textDocument,
-            offset,
-            position
-        };
-        // Data type rules need special handling, as their tokens are irrelevant for completion purposes.
-        // If we encounter a data type rule at the current offset, we jump to the start of the data type rule.
-        const dataTypeRuleOffsets = this.findDataTypeRuleStart(rootSyntaxNode, offset);
-        if (dataTypeRuleOffsets) {
-            const [ruleStart, ruleEnd] = dataTypeRuleOffsets;
-            const leafBefore = SyntaxNodeUtils.findLeafSyntaxNodeBeforeOffset(rootSyntaxNode, ruleStart);
-            const parentNode = leafBefore ? SyntaxNodeUtils.findAstNodeForSyntaxNode(leafBefore) : undefined;
-            yield {
-                ...partialContext,
-                node: parentNode,
-                tokenOffset: ruleStart,
-                tokenEndOffset: ruleEnd,
-                features: this.findFeaturesAt(rootSyntaxNode, textDocument, ruleStart),
-            };
-        }
-        // For all other purposes, it's enough to jump to the start of the current/previous token
-        const { nextTokenStart, nextTokenEnd, previousTokenStart, previousTokenEnd } = this.findTokenBoundaries(rootSyntaxNode, text, offset);
-        let astNodeOffset = nextTokenStart;
-        if (offset <= nextTokenStart && previousTokenStart !== undefined) {
-            // This check indicates that the cursor is still before the next token, so we should use the previous AST node (if it exists)
-            astNodeOffset = previousTokenStart;
-        }
-        const leaf = SyntaxNodeUtils.findLeafSyntaxNodeBeforeOffset(rootSyntaxNode, astNodeOffset);
-        const astNode = leaf ? SyntaxNodeUtils.findAstNodeForSyntaxNode(leaf) : undefined;
-        let performNextCompletion = true;
-        if (previousTokenStart !== undefined && previousTokenEnd !== undefined && previousTokenEnd === offset) {
-            // This context aims to complete the current feature
-            yield {
-                ...partialContext,
-                node: astNode,
-                tokenOffset: previousTokenStart,
-                tokenEndOffset: previousTokenEnd,
-                features: this.findFeaturesAt(rootSyntaxNode, textDocument, previousTokenStart),
-            };
-            // The completion after the current token should be prevented in case we find out that the current token definitely isn't completed yet
-            // This is usually the case when the current token ends on a letter.
-            performNextCompletion = this.performNextTokenCompletion(
-                document,
-                text.substring(previousTokenStart, previousTokenEnd),
-                previousTokenStart,
-                previousTokenEnd
-            );
-            if (performNextCompletion) {
-                // This context aims to complete the immediate next feature (if one exists at the current cursor position)
-                // It uses the previous syntax node start/offset for that.
-                yield {
-                    ...partialContext,
-                    node: astNode,
-                    tokenOffset: previousTokenEnd,
-                    tokenEndOffset: previousTokenEnd,
-                    features: this.findFeaturesAt(rootSyntaxNode, textDocument, previousTokenEnd),
-                };
-            }
-        }
-
-        if (!astNode) {
-            const parserRule = GrammarUtils.getEntryRule(this.grammar);
-            if (!parserRule) {
-                throw new Error('Missing entry parser rule');
-            }
-            // This context aims to perform completion for the grammar start (usually when the document is empty)
-            yield {
-                ...partialContext,
-                tokenOffset: nextTokenStart,
-                tokenEndOffset: nextTokenEnd,
-                features: findFirstFeatures(parserRule.definition).map(f => f[f.length - 1]),
-            };
-        } else if (performNextCompletion) {
-            // This context aims to complete the next feature, using the next syntax node start/end
-            yield {
-                ...partialContext,
-                node: astNode,
-                tokenOffset: nextTokenStart,
-                tokenEndOffset: nextTokenEnd,
-                features: this.findFeaturesAt(rootSyntaxNode, textDocument, nextTokenStart),
-            };
-        }
-    }
-
-    protected performNextTokenCompletion(_document: LangiumDocument, text: string, _offset: number, _end: number): boolean {
-        // This regex returns false if the text ends with a letter.
-        // We don't want to complete new text immediately after a keyword, ID etc.
-        // We only care about the last character in the text, so we use $ here.
-        // The \P{L} used here is a Unicode category that matches any character that is not a letter
-        return /\P{L}$/u.test(text);
-    }
-
     /**
      * Indicates whether the completion should continue to process the next completion context.
      *
@@ -376,34 +219,32 @@ export class DefaultCompletionProvider implements CompletionProvider {
         return items.length === 0;
     }
 
-    protected completionFor(context: CompletionContext, next: NextFeature, acceptor: CompletionAcceptor): MaybePromise<void> {
-        if (GrammarAST.isKeyword(next.feature)) {
-            return this.completionForKeyword(context, next.feature, acceptor);
-        } else if (GrammarAST.isCrossReference(next.feature) && context.node) {
-            return this.completionForCrossReference(context, next as NextFeature<GrammarAST.CrossReference>, acceptor);
+    protected completionFor(context: CompletionContext, feature: CompletionFeature, acceptor: CompletionAcceptor): MaybePromise<void> {
+        if (feature.kind === 'keyword' && GrammarAST.isKeyword(feature.grammarElement)) {
+            return this.completionForKeyword(context, feature.grammarElement, acceptor);
+        } else if (feature.kind === 'crossReference' && GrammarAST.isCrossReference(feature.grammarElement) && context.node) {
+            return this.completionForCrossReference(context, feature, acceptor);
         }
-        // Don't offer any completion for other elements (i.e. terminals, datatype rules)
-        // We - from a framework level - cannot reasonably assume their contents.
-        // Adopters can just override `completionFor` if they want to do that anyway.
     }
 
-    protected completionForCrossReference(context: CompletionContext, next: NextFeature<GrammarAST.CrossReference>, acceptor: CompletionAcceptor): MaybePromise<void> {
-        const assignment = AstUtils.getContainerOfType(next.feature, GrammarAST.isAssignment);
+    protected completionForCrossReference(context: CompletionContext, feature: CompletionFeature, acceptor: CompletionAcceptor): MaybePromise<void> {
+        const assignment = feature.assignment;
         let node = context.node;
         if (assignment && node) {
-            if (next.type) {
+            if (feature.type) {
                 // When `type` is set, it indicates that we have just entered a new parser rule.
                 // The cross reference that we're trying to complete is on a new element that doesn't exist yet.
                 // So we create a new synthetic element with the correct type information.
                 node = {
-                    $type: next.type,
+                    $type: feature.type,
                     $container: node,
-                    $containerProperty: next.property
+                    $containerProperty: feature.property
                 };
                 AstUtils.assignMandatoryProperties(this.astReflection, node);
             }
+            const crossRef = feature.grammarElement as GrammarAST.CrossReference;
             let reference: Reference | MultiReference;
-            if (next.feature.isMulti) {
+            if (crossRef.isMulti) {
                 reference = {
                     $refText: '',
                     items: []

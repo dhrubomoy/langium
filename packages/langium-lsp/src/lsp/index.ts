@@ -7,7 +7,6 @@
  */
 
 export * from './completion/completion-provider.js';
-export * from './completion/follow-element-computation.js';
 export * from './call-hierarchy-provider.js';
 export * from './code-action.js';
 export * from './code-lens-provider.js';

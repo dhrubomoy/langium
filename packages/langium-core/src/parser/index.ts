@@ -6,6 +6,7 @@
 
 export * from './async-parser.js';
 export * from './chevrotain-syntax-node.js';
+export * from './completion-backend.js';
 export * from './grammar-translator.js';
 export * from './parse-result.js';
 export * from './parser-adapter.js';

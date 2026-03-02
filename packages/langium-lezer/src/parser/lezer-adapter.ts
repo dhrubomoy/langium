@@ -18,12 +18,14 @@ import type {
     IncrementalParseState,
     CompletionParseData,
     CompletionBacktrackingInformation,
-    SyntaxNode
+    SyntaxNode,
+    CompletionRequest,
+    CompletionResult
 } from 'langium-core';
 import type { FieldMap } from './field-map.js';
 import { EMPTY_FIELD_MAP } from './field-map.js';
 import { LezerRootSyntaxNode } from './lezer-syntax-node.js';
-import { getLezerExpectedTokens } from './lezer-completion.js';
+import { LezerCompletion } from './lezer-completion.js';
 
 /**
  * Opaque incremental state stored between parses.
@@ -48,6 +50,7 @@ export class LezerAdapter implements ParserAdapter {
     private parser!: LRParser;
     private fieldMap: FieldMap = EMPTY_FIELD_MAP;
     private keywordSet: Set<string> = new Set();
+    private completion = new LezerCompletion();
 
     configure(_grammar: Grammar, _config?: ParserAdapterConfig): void {
         // Parse tables are loaded via loadParseTables(), not from grammar.
@@ -115,51 +118,23 @@ export class LezerAdapter implements ParserAdapter {
         };
     }
 
-    getExpectedTokens(text: string, offset: number): ExpectedToken[] {
-        this.ensureConfigured();
-        return getLezerExpectedTokens(this.parser, text, offset);
+    getCompletionFeatures(request: CompletionRequest): CompletionResult[] {
+        return this.completion.getCompletionFeatures(request);
     }
 
-    getCompletionData(root: SyntaxNode, _text: string, offset: number): CompletionParseData {
-        const leaves = this.collectLeaves(root).filter(l => l.end <= offset);
-        const tokens = leaves.map(leaf => ({
-            image: leaf.text,
-            tokenType: { name: leaf.isKeyword ? leaf.text : leaf.type }
-        }));
-        return { tokens, tokenIndex: 0 };
+    /** @deprecated Use `getCompletionFeatures()` instead. */
+    getExpectedTokens(_text: string, _offset: number): ExpectedToken[] {
+        return [];
     }
 
-    getTokenBoundaries(root: SyntaxNode, _text: string, offset: number): CompletionBacktrackingInformation {
-        const leaves = this.collectLeaves(root);
-        if (leaves.length === 0) {
-            return { nextTokenStart: offset, nextTokenEnd: offset };
-        }
-        let previousLeaf: SyntaxNode | undefined;
-        for (const leaf of leaves) {
-            if (leaf.offset >= offset) {
-                return {
-                    nextTokenStart: offset,
-                    nextTokenEnd: offset,
-                    previousTokenStart: previousLeaf?.offset,
-                    previousTokenEnd: previousLeaf?.end,
-                };
-            }
-            if (leaf.end >= offset) {
-                return {
-                    nextTokenStart: leaf.offset,
-                    nextTokenEnd: leaf.end,
-                    previousTokenStart: previousLeaf?.offset,
-                    previousTokenEnd: previousLeaf?.end,
-                };
-            }
-            previousLeaf = leaf;
-        }
-        return {
-            nextTokenStart: offset,
-            nextTokenEnd: offset,
-            previousTokenStart: previousLeaf?.offset,
-            previousTokenEnd: previousLeaf?.end,
-        };
+    /** @deprecated Use `getCompletionFeatures()` instead. */
+    getCompletionData(_root: SyntaxNode, _text: string, _offset: number): CompletionParseData {
+        return { tokens: [], tokenIndex: 0 };
+    }
+
+    /** @deprecated Use `getCompletionFeatures()` instead. */
+    getTokenBoundaries(_root: SyntaxNode, _text: string, offset: number): CompletionBacktrackingInformation {
+        return { nextTokenStart: offset, nextTokenEnd: offset };
     }
 
     dispose(): void {
@@ -196,30 +171,6 @@ export class LezerAdapter implements ParserAdapter {
             }
         });
         return diagnostics;
-    }
-
-    /**
-     * Collect all non-hidden, non-error leaf nodes from the parse tree in document order.
-     */
-    private collectLeaves(root: SyntaxNode): SyntaxNode[] {
-        const result: SyntaxNode[] = [];
-        this.collectLeavesRecursive(root, result);
-        return result;
-    }
-
-    private collectLeavesRecursive(node: SyntaxNode, result: SyntaxNode[]): void {
-        if (node.isLeaf) {
-            // Include leaf if it's not hidden, not an error placeholder, and has a meaningful type.
-            // Lezer creates empty error leaf nodes as placeholders for missing tokens —
-            // these must be excluded or they break grammar token matching in findNextFeatures.
-            if (!node.isHidden && !node.isError && (node.isKeyword || node.type !== '')) {
-                result.push(node);
-            }
-            return;
-        }
-        for (const child of node.children) {
-            this.collectLeavesRecursive(child, result);
-        }
     }
 
     private ensureConfigured(): void {

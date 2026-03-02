@@ -4,73 +4,501 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import type { LRParser } from '@lezer/lr';
-import type { ExpectedToken } from 'langium-core';
+import type { CompletionRequest, CompletionResult, CompletionFeature, SyntaxNode, GrammarRegistry } from 'langium-core';
+import { GrammarAST, GrammarUtils, SyntaxNodeUtils } from 'langium-core';
 
 /**
- * Compute expected tokens at a given offset using Lezer's parse state.
+ * Lezer-specific completion logic.
+ * Walks the Lezer parse tree to determine where the cursor is in the grammar,
+ * then uses GrammarRegistry to compute what grammar features are expected next.
  *
- * Strategy:
- * 1. Parse the text up to the cursor position.
- * 2. Inspect the parse tree's rightmost nodes to determine context.
- * 3. Use the parser's term names to suggest valid continuations.
+ * This replaces the Chevrotain-oriented token-replay approach with a direct
+ * tree-walking approach that leverages Lezer's error recovery: Lezer always
+ * produces a complete tree, inserting error nodes where input doesn't match.
  *
- * This is inherently less precise than Chevrotain's `computeContentAssist()`
- * for LL grammars. Acceptable tradeoffs:
- * - May suggest tokens that are grammatically valid but semantically invalid
- *   (filtered by Langium's scope/linker layer anyway)
- * - Does not handle mid-token completion as precisely
- * - Error recovery state may cause over-suggestion
- *
- * These limitations are acceptable because Langium's completion pipeline
- * already applies semantic filtering on top of syntactic suggestions.
+ * Used internally by `LezerAdapter.getCompletionFeatures()`.
  */
-export function getLezerExpectedTokens(
-    parser: LRParser,
-    text: string,
-    offset: number
-): ExpectedToken[] {
-    // Parse text up to the cursor position
-    const partialText = text.slice(0, offset);
-    const tree = parser.parse(partialText);
+export class LezerCompletion {
 
-    const expectedTokens: ExpectedToken[] = [];
+    getCompletionFeatures(request: CompletionRequest): CompletionResult[] {
+        const { rootSyntaxNode, text, offset, grammar, grammarRegistry } = request;
+        const results: CompletionResult[] = [];
 
-    // Find the deepest node at the end of the partial parse
-    const cursor = tree.cursor();
-    cursor.moveTo(offset);
+        // Extract partial text for filtering
+        const partialText = this.getPartialToken(text, offset);
+        const tokenOffset = offset - partialText.length;
 
-    // Walk up from the cursor position to find the containing rule context
-    // and determine what tokens could validly follow
-    let currentNode = cursor.node;
+        // Find the context AST node for scope resolution
+        const leaf = SyntaxNodeUtils.findLeafSyntaxNodeBeforeOffset(rootSyntaxNode, offset)
+            ?? SyntaxNodeUtils.findLeafSyntaxNodeAtOffset(rootSyntaxNode, offset);
+        const contextNode = leaf ? SyntaxNodeUtils.findAstNodeForSyntaxNode(leaf) : undefined;
 
-    // If we're at an error node, the parser couldn't match the input,
-    // so we look at the parent context for valid continuations
-    if (currentNode.type.isError && currentNode.parent) {
-        currentNode = currentNode.parent;
+        // Find the rule node to use for completion.
+        // Strategy: find the deepest node at cursor, walk up to a rule node.
+        // If we end up at root, check if root itself is a known rule (Lezer may inline entry rules).
+        const nodeAtCursor = this.findDeepestNode(rootSyntaxNode, offset);
+        const ruleNode = this.findRuleNodeForCompletion(nodeAtCursor, rootSyntaxNode, grammarRegistry);
+
+        if (ruleNode) {
+            const rule = grammarRegistry.getRuleByName(ruleNode.type);
+            if (rule && GrammarAST.isParserRule(rule)) {
+                const features = this.getExpectedFeatures(ruleNode, rule.definition, offset, grammarRegistry);
+                results.push({
+                    features,
+                    contextNode,
+                    tokenOffset,
+                    tokenEndOffset: offset,
+                    offset
+                });
+                return results;
+            }
+        }
+
+        // Fallback: at the top level or empty document — offer entry rule's first features
+        const entryRule = GrammarUtils.getEntryRule(grammar);
+        if (entryRule) {
+            const features = this.getFirstFeatures(entryRule.definition, grammarRegistry);
+            results.push({
+                features,
+                contextNode,
+                tokenOffset,
+                tokenEndOffset: offset,
+                offset
+            });
+        }
+        return results;
     }
 
-    // Inspect the node's type to determine valid follow tokens.
-    // For now, we use a simplified approach: examine sibling structure
-    // to determine what kinds of tokens could appear next.
-    // A full implementation would analyze the LR parse table state directly.
+    /**
+     * Find the deepest (most specific) node at the given offset.
+     */
+    protected findDeepestNode(root: SyntaxNode, offset: number): SyntaxNode {
+        let node = root;
+        let found = true;
+        while (found) {
+            found = false;
+            for (const child of node.children) {
+                if (child.offset <= offset && child.end >= offset) {
+                    node = child;
+                    found = true;
+                    break;
+                }
+            }
+        }
+        return node;
+    }
 
-    // Look at the node names in the parser's vocabulary to find
-    // tokens that could appear in the current context
-    const nodeSet = parser.nodeSet;
-    for (const type of nodeSet.types) {
-        // Skip error and anonymous types
-        if (type.isError || type.name === '') continue;
-        // Skip non-leaf types (we only want tokens, not rules)
-        // Heuristic: types with no children in the set are likely tokens
-        if (type.id > 0 && type.name) {
-            expectedTokens.push({
-                name: type.name,
-                isKeyword: false, // Will be refined with grammar registry
-                pattern: undefined
-            });
+    /**
+     * Find the rule node to use for completion.
+     * Walks up from the node at cursor past error/leaf nodes.
+     * If we reach the root, checks whether the root itself is a known grammar rule
+     * (Lezer may inline delegation rules like `Statement: CreateTableStmt`).
+     */
+    protected findRuleNodeForCompletion(
+        node: SyntaxNode,
+        root: SyntaxNode,
+        grammarRegistry: GrammarRegistry
+    ): SyntaxNode | null {
+        let current: SyntaxNode | null = node;
+        while (current) {
+            if (!current.isError && !current.isLeaf && current.type !== '') {
+                // Check if this is a known grammar rule
+                const rule = grammarRegistry.getRuleByName(current.type);
+                if (rule && GrammarAST.isParserRule(rule)) {
+                    return current;
+                }
+            }
+            if (current === root) {
+                break;
+            }
+            current = current.parent;
+        }
+        return null;
+    }
+
+    /**
+     * Determine what grammar features are expected next at the given offset
+     * within a rule node, based on which children have already been matched.
+     */
+    protected getExpectedFeatures(
+        ruleNode: SyntaxNode,
+        definition: GrammarAST.AbstractElement,
+        offset: number,
+        grammarRegistry: GrammarRegistry
+    ): CompletionFeature[] {
+        // Collect successfully matched children before the cursor
+        const matchedTypes: string[] = [];
+        for (const child of ruleNode.children) {
+            if (child.end <= offset && !child.isError) {
+                if (child.isKeyword) {
+                    matchedTypes.push(child.text);
+                } else if (child.type) {
+                    matchedTypes.push(child.type);
+                }
+            }
+        }
+
+        // Walk the grammar definition to find what should come next
+        return this.walkDefinition(definition, matchedTypes, 0, grammarRegistry).features;
+    }
+
+    /**
+     * Walk a grammar definition to compute expected features given matched children.
+     * Returns the expected features and how many matched children were consumed.
+     *
+     * Handles element repetition (cardinality * or +): when all contents of a
+     * repeating element are consumed, loops back to try matching again.
+     */
+    protected walkDefinition(
+        element: GrammarAST.AbstractElement,
+        matchedTypes: string[],
+        matchIndex: number,
+        grammarRegistry: GrammarRegistry
+    ): { features: CompletionFeature[]; consumed: number } {
+        // Walk the element once
+        let result = this.walkElementOnce(element, matchedTypes, matchIndex, grammarRegistry);
+
+        // Handle repetition: if element has * or + cardinality
+        if (this.isRepeating(element) && result.consumed > 0) {
+            let totalConsumed = result.consumed;
+
+            // Keep consuming iterations while there are matches and no completion features
+            while (result.features.length === 0 && result.consumed > 0) {
+                result = this.walkElementOnce(element, matchedTypes, matchIndex + totalConsumed, grammarRegistry);
+                totalConsumed += result.consumed;
+            }
+
+            if (result.features.length > 0) {
+                // Found features in a subsequent iteration
+                return { features: result.features, consumed: totalConsumed };
+            }
+
+            // All matches consumed — offer first features of this element (it can repeat)
+            const firstFeatures = this.getFirstFeatures(element, grammarRegistry);
+            return { features: firstFeatures, consumed: totalConsumed };
+        }
+
+        return result;
+    }
+
+    /**
+     * Walk a grammar element once (without repetition handling).
+     */
+    protected walkElementOnce(
+        element: GrammarAST.AbstractElement,
+        matchedTypes: string[],
+        matchIndex: number,
+        grammarRegistry: GrammarRegistry
+    ): { features: CompletionFeature[]; consumed: number } {
+        if (GrammarAST.isGroup(element)) {
+            return this.walkGroup(element, matchedTypes, matchIndex, grammarRegistry);
+        } else if (GrammarAST.isAlternatives(element) || GrammarAST.isUnorderedGroup(element)) {
+            return this.walkAlternatives(element, matchedTypes, matchIndex, grammarRegistry);
+        } else if (GrammarAST.isAssignment(element)) {
+            return this.walkAssignment(element, matchedTypes, matchIndex, grammarRegistry);
+        } else if (GrammarAST.isRuleCall(element)) {
+            return this.walkRuleCall(element, matchedTypes, matchIndex, grammarRegistry);
+        } else if (GrammarAST.isKeyword(element)) {
+            return this.walkKeyword(element, matchedTypes, matchIndex);
+        } else if (GrammarAST.isAction(element)) {
+            // Actions don't consume tokens — skip them
+            return { features: [], consumed: 0 };
+        } else {
+            return { features: [], consumed: 0 };
         }
     }
 
-    return expectedTokens;
+    protected walkGroup(
+        group: GrammarAST.Group,
+        matchedTypes: string[],
+        matchIndex: number,
+        grammarRegistry: GrammarRegistry
+    ): { features: CompletionFeature[]; consumed: number } {
+        let currentIndex = matchIndex;
+
+        for (const elem of group.elements) {
+            const result = this.walkDefinition(elem, matchedTypes, currentIndex, grammarRegistry);
+            currentIndex += result.consumed;
+
+            if (result.features.length > 0) {
+                // This element has unmatched features — these are our completions
+                // But also check if this element can be empty (optional, or rule with optional content)
+                // and collect features from following elements
+                const features = [...result.features];
+                if (this.canBeEmpty(elem)) {
+                    // Also offer features from the next elements in the group
+                    const remaining = this.collectFeaturesFromIndex(group, group.elements.indexOf(elem) + 1, grammarRegistry);
+                    features.push(...remaining);
+                }
+                return { features, consumed: currentIndex - matchIndex };
+            }
+        }
+
+        // All elements matched — nothing to complete in this group
+        return { features: [], consumed: currentIndex - matchIndex };
+    }
+
+    protected walkAlternatives(
+        alternatives: GrammarAST.Alternatives | GrammarAST.UnorderedGroup,
+        matchedTypes: string[],
+        matchIndex: number,
+        grammarRegistry: GrammarRegistry
+    ): { features: CompletionFeature[]; consumed: number } {
+        // If nothing has been matched yet at this position, offer first features of all alternatives
+        if (matchIndex >= matchedTypes.length) {
+            const allFeatures: CompletionFeature[] = [];
+            for (const alt of alternatives.elements) {
+                const first = this.getFirstFeatures(alt, grammarRegistry);
+                allFeatures.push(...first);
+            }
+            return { features: allFeatures, consumed: 0 };
+        }
+
+        // Try to match each alternative — prioritize alternatives that consume tokens
+        for (const alt of alternatives.elements) {
+            const result = this.walkDefinition(alt, matchedTypes, matchIndex, grammarRegistry);
+            if (result.consumed > 0) {
+                // This alternative actually matched and consumed tokens
+                return result;
+            }
+        }
+
+        // No alternative consumed tokens — offer first features of all alternatives
+        const allFeatures: CompletionFeature[] = [];
+        for (const alt of alternatives.elements) {
+            const first = this.getFirstFeatures(alt, grammarRegistry);
+            allFeatures.push(...first);
+        }
+        return { features: allFeatures, consumed: 0 };
+    }
+
+    protected walkAssignment(
+        assignment: GrammarAST.Assignment,
+        matchedTypes: string[],
+        matchIndex: number,
+        grammarRegistry: GrammarRegistry
+    ): { features: CompletionFeature[]; consumed: number } {
+        const terminal = assignment.terminal;
+
+        if (GrammarAST.isCrossReference(terminal)) {
+            // Cross-reference: check if already matched
+            if (matchIndex < matchedTypes.length) {
+                // Something matched at this position — consumed
+                return { features: [], consumed: 1 };
+            }
+            // Not matched — offer cross-reference completion
+            return {
+                features: [{
+                    kind: 'crossReference',
+                    value: '',
+                    grammarElement: terminal,
+                    assignment,
+                    property: assignment.feature
+                }],
+                consumed: 0
+            };
+        }
+
+        // Delegate to the terminal element
+        return this.walkDefinition(terminal, matchedTypes, matchIndex, grammarRegistry);
+    }
+
+    protected walkRuleCall(
+        ruleCall: GrammarAST.RuleCall,
+        matchedTypes: string[],
+        matchIndex: number,
+        grammarRegistry: GrammarRegistry
+    ): { features: CompletionFeature[]; consumed: number } {
+        const rule = ruleCall.rule.ref;
+        if (!rule) {
+            return { features: [], consumed: 0 };
+        }
+
+        if (GrammarAST.isParserRule(rule)) {
+            // Check if the matched type at this position corresponds to this rule
+            if (matchIndex < matchedTypes.length) {
+                const matchedType = matchedTypes[matchIndex];
+                // The matched child might be of the rule's type or a subtype
+                const ruleType = GrammarUtils.getExplicitRuleType(rule) ?? rule.name;
+                if (matchedType === ruleType || matchedType === rule.name) {
+                    return { features: [], consumed: 1 };
+                }
+            }
+            // Not matched — offer the rule's first features
+            const features = this.getFirstFeatures(rule.definition, grammarRegistry);
+            return { features, consumed: 0 };
+        } else if (GrammarAST.isTerminalRule(rule)) {
+            // Terminal rules (ID, STRING, etc.) — check if matched.
+            // Note: Lezer translates terminal names (e.g. ID → Identifier),
+            // so we can't rely on exact name match alone.
+            if (matchIndex < matchedTypes.length) {
+                const matchedType = matchedTypes[matchIndex];
+                if (matchedType === rule.name) {
+                    return { features: [], consumed: 1 };
+                }
+                // If the matched type is not a known parser rule, it's likely
+                // a terminal token (with a Lezer-translated name) — consume it.
+                const knownRule = grammarRegistry.getRuleByName(matchedType);
+                if (!knownRule) {
+                    return { features: [], consumed: 1 };
+                }
+            }
+            // Can't offer completions for terminal rules from framework level
+            return { features: [], consumed: 0 };
+        }
+
+        return { features: [], consumed: 0 };
+    }
+
+    protected walkKeyword(
+        keyword: GrammarAST.Keyword,
+        matchedTypes: string[],
+        matchIndex: number
+    ): { features: CompletionFeature[]; consumed: number } {
+        if (matchIndex < matchedTypes.length) {
+            const matchedType = matchedTypes[matchIndex];
+            if (matchedType === keyword.value) {
+                return { features: [], consumed: 1 };
+            }
+        }
+        // Keyword not yet matched — offer it as completion
+        return {
+            features: [{
+                kind: 'keyword',
+                value: keyword.value,
+                grammarElement: keyword
+            }],
+            consumed: 0
+        };
+    }
+
+    /**
+     * Collect first features from a group starting at a given element index.
+     * Used when an element is optional and we need features from following elements too.
+     */
+    protected collectFeaturesFromIndex(
+        group: GrammarAST.Group,
+        startIndex: number,
+        grammarRegistry: GrammarRegistry
+    ): CompletionFeature[] {
+        const features: CompletionFeature[] = [];
+        for (let i = startIndex; i < group.elements.length; i++) {
+            const elem = group.elements[i];
+            const first = this.getFirstFeatures(elem, grammarRegistry);
+            features.push(...first);
+            if (!this.isOptional(elem)) {
+                break; // Stop at first required element
+            }
+        }
+        return features;
+    }
+
+    /**
+     * Get the first completable features of a grammar element.
+     * Recurses into groups, alternatives, assignments, and rule calls.
+     */
+    protected getFirstFeatures(
+        element: GrammarAST.AbstractElement,
+        grammarRegistry: GrammarRegistry,
+        visited: Set<string> = new Set()
+    ): CompletionFeature[] {
+        if (GrammarAST.isKeyword(element)) {
+            return [{
+                kind: 'keyword',
+                value: element.value,
+                grammarElement: element
+            }];
+        } else if (GrammarAST.isGroup(element)) {
+            const features: CompletionFeature[] = [];
+            for (const elem of element.elements) {
+                features.push(...this.getFirstFeatures(elem, grammarRegistry, visited));
+                if (!this.isOptional(elem)) {
+                    break;
+                }
+            }
+            return features;
+        } else if (GrammarAST.isAlternatives(element) || GrammarAST.isUnorderedGroup(element)) {
+            return element.elements.flatMap(e => this.getFirstFeatures(e, grammarRegistry, visited));
+        } else if (GrammarAST.isAssignment(element)) {
+            const terminal = element.terminal;
+            if (GrammarAST.isCrossReference(terminal)) {
+                return [{
+                    kind: 'crossReference',
+                    value: '',
+                    grammarElement: terminal,
+                    assignment: element,
+                    property: element.feature
+                }];
+            }
+            return this.getFirstFeatures(terminal, grammarRegistry, visited);
+        } else if (GrammarAST.isRuleCall(element)) {
+            const rule = element.rule.ref;
+            if (GrammarAST.isParserRule(rule)) {
+                // Guard against infinite recursion
+                if (visited.has(rule.name)) {
+                    return [];
+                }
+                visited.add(rule.name);
+                return this.getFirstFeatures(rule.definition, grammarRegistry, visited);
+            }
+            // Terminal rules — can't suggest content
+            return [];
+        } else if (GrammarAST.isAction(element)) {
+            // Actions don't produce completable features
+            return [];
+        }
+        return [];
+    }
+
+    /**
+     * Extract partial token text at the cursor by walking backward.
+     */
+    protected getPartialToken(text: string, offset: number): string {
+        let start = offset;
+        while (start > 0 && /[\w]/.test(text[start - 1])) {
+            start--;
+        }
+        return text.slice(start, offset);
+    }
+
+    /**
+     * Check if a grammar element is optional (cardinality ? or *).
+     */
+    protected isOptional(element: GrammarAST.AbstractElement): boolean {
+        return GrammarUtils.isOptionalCardinality(element.cardinality, element);
+    }
+
+    /**
+     * Check if a grammar element can produce empty (nothing mandatory).
+     * Unlike `isOptional`, this recurses into rule calls and groups to detect
+     * cases like fragments whose entire content is optional.
+     */
+    protected canBeEmpty(element: GrammarAST.AbstractElement): boolean {
+        if (this.isOptional(element)) return true;
+        if (GrammarAST.isRuleCall(element)) {
+            const rule = element.rule.ref;
+            if (GrammarAST.isParserRule(rule)) {
+                return this.canBeEmpty(rule.definition);
+            }
+            return false;
+        }
+        if (GrammarAST.isGroup(element)) {
+            return element.elements.every(e => this.canBeEmpty(e));
+        }
+        if (GrammarAST.isAlternatives(element) || GrammarAST.isUnorderedGroup(element)) {
+            return element.elements.some(e => this.canBeEmpty(e));
+        }
+        if (GrammarAST.isAction(element)) return true;
+        if (GrammarAST.isAssignment(element)) {
+            return this.canBeEmpty(element.terminal);
+        }
+        return false;
+    }
+
+    /**
+     * Check if a grammar element repeats (cardinality * or +).
+     */
+    protected isRepeating(element: GrammarAST.AbstractElement): boolean {
+        return element.cardinality === '*' || element.cardinality === '+';
+    }
 }

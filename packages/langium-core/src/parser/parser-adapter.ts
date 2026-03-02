@@ -8,6 +8,7 @@ import type { AstNode } from '../syntax-tree.js';
 import type { AbstractElement, Grammar } from '../languages/generated/ast.js';
 import type { RootSyntaxNode, SyntaxNode } from './syntax-node.js';
 import type { ParseResult } from './parse-result.js';
+import type { CompletionRequest, CompletionResult } from './completion-backend.js';
 
 /**
  * Interface that each parser backend implements.
@@ -49,32 +50,28 @@ export interface ParserAdapter {
     ): AdapterParseResult;
 
     /**
-     * Compute tokens expected at a given offset. Used for code completion.
+     * Compute completion features at a given offset.
+     * Each backend implements its own completion logic:
+     * - Chevrotain: uses CompletionParser + follow-element computation
+     * - Lezer: walks the parse tree + GrammarRegistry
      *
-     * Different backends implement this differently:
-     * - Chevrotain: computeContentAssist()
-     * - Lezer: analyze parse state at position
-     * - Tree-sitter: analyze valid tokens from parse table state
+     * Returns one or more `CompletionResult` contexts (e.g. previous-token,
+     * next-token, data-type-rule contexts).
+     */
+    getCompletionFeatures(request: CompletionRequest): CompletionResult[];
+
+    /**
+     * @deprecated Use `getCompletionFeatures()` instead. Will be removed in a future version.
      */
     getExpectedTokens(text: string, offset: number): ExpectedToken[];
 
     /**
-     * Get completion parse data at an offset.
-     * Returns the token stream and optional feature stack needed by the
-     * completion provider to compute follow-set features.
-     *
-     * - Chevrotain: uses the dedicated CompletionParser to get a feature stack
-     *   and token index, allowing the completion provider to skip already-parsed tokens.
-     * - Lezer: collects leaf nodes from the existing parse tree and converts
-     *   them to tokens. No feature stack (completion replays from the entry rule).
+     * @deprecated Use `getCompletionFeatures()` instead. Will be removed in a future version.
      */
     getCompletionData(root: SyntaxNode, text: string, offset: number): CompletionParseData;
 
     /**
-     * Find token boundaries around the cursor for completion backtracking.
-     *
-     * - Chevrotain: uses the Lexer to tokenize the full text.
-     * - Lezer: walks parse tree leaf nodes.
+     * @deprecated Use `getCompletionFeatures()` instead. Will be removed in a future version.
      */
     getTokenBoundaries(root: SyntaxNode, text: string, offset: number): CompletionBacktrackingInformation;
 

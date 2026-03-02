@@ -7,10 +7,12 @@
 // langium-chevrotain: Chevrotain parser backend for Langium
 
 export * from './parser/chevrotain-adapter.js';
+export * from './parser/chevrotain-completion.js';
 export * from './parser/chevrotain-grammar-translator.js';
 export * from './parser/chevrotain-module.js';
 export * from './parser/chevrotain-services.js';
 export * from './parser/completion-parser-builder.js';
+export * from './parser/follow-element-computation.js';
 export * from './parser/cst-node-builder.js';
 export * from './parser/indentation-aware.js';
 export * from './parser/langium-parser-builder.js';

@@ -4,9 +4,10 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import type { Grammar, LexError, ParseError, RootCstNode, ParseDiagnostic, AdapterParseResult, ExpectedToken, ParserAdapter, ParserAdapterConfig, CompletionParseData, CompletionBacktrackingInformation, SyntaxNode } from 'langium-core';
+import type { Grammar, LexError, ParseError, RootCstNode, ParseDiagnostic, AdapterParseResult, ExpectedToken, ParserAdapter, ParserAdapterConfig, CompletionParseData, CompletionBacktrackingInformation, SyntaxNode, CompletionRequest, CompletionResult } from 'langium-core';
 import { wrapRootCstNode } from 'langium-core';
 import type { LangiumChevrotainServices } from './chevrotain-services.js';
+import { ChevrotainCompletion } from './chevrotain-completion.js';
 
 /**
  * Parser adapter that wraps the existing Chevrotain-based LangiumParser.
@@ -17,9 +18,17 @@ export class ChevrotainAdapter implements ParserAdapter {
     readonly supportsIncremental = false;
 
     protected readonly services: LangiumChevrotainServices;
+    private completion?: ChevrotainCompletion;
 
     constructor(services: LangiumChevrotainServices) {
         this.services = services;
+    }
+
+    getCompletionFeatures(request: CompletionRequest): CompletionResult[] {
+        if (!this.completion) {
+            this.completion = new ChevrotainCompletion(this.services);
+        }
+        return this.completion.getCompletionFeatures(request);
     }
 
     configure(_grammar: Grammar, _config?: ParserAdapterConfig): void {

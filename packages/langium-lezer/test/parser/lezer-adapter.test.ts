@@ -109,13 +109,13 @@ describe('LezerAdapter', () => {
         expect(result2.incrementalState).toBeDefined();
     });
 
-    test('getExpectedTokens returns token array', () => {
+    test('getExpectedTokens returns empty array (deprecated)', () => {
+        // getExpectedTokens is deprecated — completion now uses getCompletionFeatures()
         const tokens = adapter.getExpectedTokens('model ', 6);
         expect(Array.isArray(tokens)).toBe(true);
-        expect(tokens.length).toBeGreaterThan(0);
     });
 
-    test('getExpectedTokens at offset 0 returns tokens', () => {
+    test('getExpectedTokens at offset 0 returns empty array (deprecated)', () => {
         const tokens = adapter.getExpectedTokens('', 0);
         expect(Array.isArray(tokens)).toBe(true);
     });

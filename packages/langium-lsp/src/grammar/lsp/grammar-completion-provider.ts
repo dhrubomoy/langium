@@ -6,10 +6,9 @@
 
 import type { Range } from 'vscode-languageserver-types';
 import { CompletionItemKind } from 'vscode-languageserver-types';
-import type { NextFeature } from '../../lsp/completion/follow-element-computation.js';
 import { DefaultCompletionProvider, type CompletionAcceptor, type CompletionContext } from '../../lsp/completion/completion-provider.js';
-import type { MaybePromise, LangiumDocument, LangiumDocuments } from 'langium-core';
-import { AstUtils, GrammarAST, UriUtils } from 'langium-core';
+import type { MaybePromise, LangiumDocument, LangiumDocuments, CompletionFeature } from 'langium-core';
+import { UriUtils } from 'langium-core';
 import type { LangiumServices } from '../../lsp/lsp-services.js';
 
 export class LangiumGrammarCompletionProvider extends DefaultCompletionProvider {
@@ -21,12 +20,11 @@ export class LangiumGrammarCompletionProvider extends DefaultCompletionProvider 
         this.documents = () => services.shared.workspace.LangiumDocuments;
     }
 
-    protected override completionFor(context: CompletionContext, next: NextFeature<GrammarAST.AbstractElement>, acceptor: CompletionAcceptor): MaybePromise<void> {
-        const assignment = AstUtils.getContainerOfType(next.feature, GrammarAST.isAssignment);
-        if (assignment?.feature === 'path') {
+    protected override completionFor(context: CompletionContext, feature: CompletionFeature, acceptor: CompletionAcceptor): MaybePromise<void> {
+        if (feature.assignment?.feature === 'path') {
             this.completeImportPath(context, acceptor);
         } else {
-            return super.completionFor(context, next, acceptor);
+            return super.completionFor(context, feature, acceptor);
         }
     }
 
