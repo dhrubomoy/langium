@@ -4,7 +4,7 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import type { LangiumCoreServices, ParserAdapter, GrammarTranslator } from 'langium-core';
+import type { LangiumCoreServices, ParserAdapter, GrammarTranslator, GrammarConfig } from 'langium-core';
 
 /**
  * Lezer-specific parser services that extend the core services.
@@ -14,6 +14,7 @@ export type LangiumLezerParserServices = {
     readonly parser: {
         readonly ParserAdapter: ParserAdapter
         readonly GrammarTranslator: GrammarTranslator
+        readonly GrammarConfig: GrammarConfig
     }
 };
 

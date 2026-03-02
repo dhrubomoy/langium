@@ -107,10 +107,12 @@ function translatePattern(pattern: string, start: number): TranslateResult {
             i = groupStart + inner.consumed;
             if (pattern[i] === ')') i++; // skip closing paren
 
-            // Check for quantifier
+            // Check for quantifier (including lazy variants like *?, +?, ??)
             if (i < pattern.length && isQuantifier(pattern[i])) {
                 groupContent += pattern[i];
                 i++;
+                // Skip lazy modifier — Lezer doesn't support lazy quantifiers
+                if (i < pattern.length && pattern[i] === '?') i++;
             }
             parts.push(groupContent);
             continue;
@@ -122,10 +124,11 @@ function translatePattern(pattern: string, start: number): TranslateResult {
             let classContent = classResult.result;
             i = i + classResult.consumed;
 
-            // Check for quantifier
+            // Check for quantifier (including lazy variants)
             if (i < pattern.length && isQuantifier(pattern[i])) {
                 classContent += pattern[i];
                 i++;
+                if (i < pattern.length && pattern[i] === '?') i++;
             }
             parts.push(classContent);
             continue;
@@ -137,10 +140,11 @@ function translatePattern(pattern: string, start: number): TranslateResult {
             let escContent = escResult.result;
             i = i + escResult.consumed;
 
-            // Check for quantifier
+            // Check for quantifier (including lazy variants)
             if (i < pattern.length && isQuantifier(pattern[i])) {
                 escContent += pattern[i];
                 i++;
+                if (i < pattern.length && pattern[i] === '?') i++;
             }
             parts.push(escContent);
             continue;
@@ -153,6 +157,7 @@ function translatePattern(pattern: string, start: number): TranslateResult {
             if (i < pattern.length && isQuantifier(pattern[i])) {
                 wildcardContent += pattern[i];
                 i++;
+                if (i < pattern.length && pattern[i] === '?') i++;
             }
             parts.push(wildcardContent);
             continue;
@@ -170,6 +175,7 @@ function translatePattern(pattern: string, start: number): TranslateResult {
         if (i < pattern.length && isQuantifier(pattern[i])) {
             literal += pattern[i];
             i++;
+            if (i < pattern.length && pattern[i] === '?') i++;
         }
         parts.push(literal);
     }

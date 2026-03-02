@@ -124,7 +124,13 @@ export function getPreviousSyntaxNode(node: SyntaxNode, hidden = true): SyntaxNo
     while (current?.parent) {
         const parent: SyntaxNode = current.parent;
         const siblings = parent.children;
+        // Use indexOf first (works when wrapper identity is stable, e.g., Chevrotain).
+        // Fall back to position-based matching for backends where navigation creates
+        // distinct wrapper instances for the same logical node (e.g., Lezer).
         let index = siblings.indexOf(current);
+        if (index < 0) {
+            index = siblings.findIndex(s => s.offset === current!.offset && s.end === current!.end && s.type === current!.type);
+        }
         while (index > 0) {
             index--;
             const previous = siblings[index];
@@ -146,6 +152,9 @@ export function getNextSyntaxNode(node: SyntaxNode, hidden = true): SyntaxNode |
         const parent: SyntaxNode = current.parent;
         const siblings = parent.children;
         let index = siblings.indexOf(current);
+        if (index < 0) {
+            index = siblings.findIndex(s => s.offset === current!.offset && s.end === current!.end && s.type === current!.type);
+        }
         const last = siblings.length - 1;
         while (index < last) {
             index++;

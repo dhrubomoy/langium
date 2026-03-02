@@ -8,6 +8,13 @@ import type { CompletionRequest, CompletionResult, CompletionFeature, SyntaxNode
 import { GrammarAST, GrammarUtils, SyntaxNodeUtils } from 'langium-core';
 
 /**
+ * Regex matching identifier-like keywords (e.g., "select", "from").
+ * Non-identifier keywords (e.g., "(", ")", "*", ";") are anonymous inline
+ * tokens in Lezer and don't appear as tree nodes.
+ */
+const IDENTIFIER_KEYWORD_RE = /^[_a-zA-Z]\w*$/;
+
+/**
  * Lezer-specific completion logic.
  * Walks the Lezer parse tree to determine where the cursor is in the grammar,
  * then uses GrammarRegistry to compute what grammar features are expected next.
@@ -16,9 +23,24 @@ import { GrammarAST, GrammarUtils, SyntaxNodeUtils } from 'langium-core';
  * tree-walking approach that leverages Lezer's error recovery: Lezer always
  * produces a complete tree, inserting error nodes where input doesn't match.
  *
+ * Key design considerations for the Lezer tree:
+ * - Identifier-like keywords (e.g., "select") are named nodes via @specialize.
+ * - Non-identifier keywords (e.g., "(", ")") are anonymous inline tokens that
+ *   don't appear in the tree. The walk must skip over them.
+ * - Each assignment in the grammar produces a wrapper nonterminal in the Lezer
+ *   tree (e.g., `star?='*'` → `SelectItemStar`). The walk matches these by
+ *   reconstructing the expected wrapper name from the rule and field names.
+ *
  * Used internally by `LezerAdapter.getCompletionFeatures()`.
  */
 export class LezerCompletion {
+
+    /**
+     * The name of the parser rule currently being walked.
+     * Set at the start of `getExpectedFeatures()` and used by `walkAssignment()`
+     * to compute wrapper nonterminal names for matching.
+     */
+    private _currentRuleName = '';
 
     getCompletionFeatures(request: CompletionRequest): CompletionResult[] {
         const { rootSyntaxNode, text, offset, grammar, grammarRegistry } = request;
@@ -126,10 +148,17 @@ export class LezerCompletion {
         offset: number,
         grammarRegistry: GrammarRegistry
     ): CompletionFeature[] {
-        // Collect successfully matched children before the cursor
+        // Store the current rule name for wrapper matching in walkAssignment
+        this._currentRuleName = ruleNode.type;
+
+        // Collect successfully matched children strictly before the cursor.
+        // Use strict `<` so that a token ending exactly at the cursor position
+        // is NOT considered consumed — the user may be typing a partial token
+        // (e.g., "insert into u|" where "u" is a partial cross-reference target).
+        // This ensures the walker offers completion for the token at the cursor.
         const matchedTypes: string[] = [];
         for (const child of ruleNode.children) {
-            if (child.end <= offset && !child.isError) {
+            if (child.end < offset && !child.isError) {
                 if (child.isKeyword) {
                     matchedTypes.push(child.text);
                 } else if (child.type) {
@@ -278,6 +307,18 @@ export class LezerCompletion {
         matchIndex: number,
         grammarRegistry: GrammarRegistry
     ): { features: CompletionFeature[]; consumed: number } {
+        // Check for Lezer wrapper nonterminal match.
+        // The Lezer grammar translator creates a wrapper nonterminal for each assignment,
+        // named "${RuleName}${capitalize(fieldName)}" (e.g., SelectItemStar for star?='*').
+        // These wrappers appear in the tree as direct children, and we need to recognize
+        // them to correctly advance past consumed assignments.
+        if (matchIndex < matchedTypes.length) {
+            const wrapperName = this._currentRuleName + capitalize(assignment.feature);
+            if (matchedTypes[matchIndex] === wrapperName) {
+                return { features: [], consumed: 1 };
+            }
+        }
+
         const terminal = assignment.terminal;
 
         if (GrammarAST.isCrossReference(terminal)) {
@@ -355,6 +396,13 @@ export class LezerCompletion {
         matchedTypes: string[],
         matchIndex: number
     ): { features: CompletionFeature[]; consumed: number } {
+        // Non-identifier keywords (operators, punctuation like "(", ")", ";", "*")
+        // don't appear as nodes in the Lezer tree — they are anonymous inline tokens.
+        // Skip them in the grammar walk so subsequent elements can be matched.
+        if (!IDENTIFIER_KEYWORD_RE.test(keyword.value)) {
+            return { features: [], consumed: 0 };
+        }
+
         if (matchIndex < matchedTypes.length) {
             const matchedType = matchedTypes[matchIndex];
             if (matchedType === keyword.value) {
@@ -501,4 +549,8 @@ export class LezerCompletion {
     protected isRepeating(element: GrammarAST.AbstractElement): boolean {
         return element.cardinality === '*' || element.cardinality === '+';
     }
+}
+
+function capitalize(s: string): string {
+    return s.charAt(0).toUpperCase() + s.slice(1);
 }

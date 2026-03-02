@@ -224,9 +224,7 @@ for (const { name, createServices } of BACKENDS) {
             });
         });
 
-        // Lezer: ML_COMMENT hidden terminal regex is not correctly translated to Lezer grammar,
-        // causing comment text to be parsed as identifiers and breaking token matching.
-        test.skipIf(name === 'Lezer')('Should show documentation on completion items', async () => {
+        test('Should show documentation on completion items', async () => {
             const grammar = `
         grammar g
         entry Model: (elements+=(Person | Greeting))*;
@@ -257,8 +255,7 @@ for (const { name, createServices } of BACKENDS) {
             });
         });
 
-        // This test extends DefaultCompletionProvider directly (Chevrotain-specific)
-        test.skipIf(name === 'Lezer')('Should not remove same named NodeDescriptions', async () => {
+        test('Should not remove same named NodeDescriptions', async () => {
             const grammar = `
         grammar g
         entry Model: (elements+=(Person | Greeting))*;
@@ -747,5 +744,118 @@ for (const { name, createServices } of BACKENDS) {
             });
         });
 
+    });
+}
+
+for (const { name, createServices } of BACKENDS) {
+    describe(`Cross-reference completion after keywords (${name})`, () => {
+
+        test('Should suggest cross-reference targets after keyword sequence', async () => {
+            const grammar = `
+        grammar g
+        entry Model: (tables+=TableDef | inserts+=InsertItem)*;
+        TableDef: 'table' name=ID;
+        InsertItem: 'insert' 'into' target=[TableDef:ID];
+        terminal ID: /\\^?[_a-zA-Z][\\w_]*/;
+        hidden terminal WS: /\\s+/;
+        `;
+
+            const services = await createServices({ grammar });
+            if (!services) return;
+            const completion = expectCompletion(services);
+
+            await completion({
+                text: 'table users insert into <|>',
+                index: 0,
+                expectedItems: ['users']
+            });
+        });
+
+        test('Should suggest cross-reference targets with multiple definitions', async () => {
+            const grammar = `
+        grammar g
+        entry Model: (tables+=TableDef | inserts+=InsertItem)*;
+        TableDef: 'table' name=ID;
+        InsertItem: 'insert' 'into' target=[TableDef:ID];
+        terminal ID: /\\^?[_a-zA-Z][\\w_]*/;
+        hidden terminal WS: /\\s+/;
+        `;
+
+            const services = await createServices({ grammar });
+            if (!services) return;
+            const completion = expectCompletion(services);
+
+            await completion({
+                text: 'table users table orders insert into <|>',
+                index: 0,
+                expectedItems: ['users', 'orders']
+            });
+        });
+
+        test('Should suggest cross-reference targets with partial prefix', async () => {
+            const grammar = `
+        grammar g
+        entry Model: (tables+=TableDef | inserts+=InsertItem)*;
+        TableDef: 'table' name=ID;
+        InsertItem: 'insert' 'into' target=[TableDef:ID];
+        terminal ID: /\\^?[_a-zA-Z][\\w_]*/;
+        hidden terminal WS: /\\s+/;
+        `;
+
+            const services = await createServices({ grammar });
+            if (!services) return;
+            const completion = expectCompletion(services);
+
+            await completion({
+                text: 'table users insert into u<|>',
+                index: 0,
+                expectedItems: ['users']
+            });
+        });
+    });
+}
+
+for (const { name, createServices } of BACKENDS) {
+    describe(`Keyword completion after anonymous tokens (${name})`, () => {
+
+        test('Should suggest keyword after star operator in alternatives', async () => {
+            const grammar = `
+        grammar g
+        entry Model: items+=SelectItem*;
+        SelectItem: 'select' (star?='*' | cols+=ID) 'from' name=ID ';';
+        terminal ID: /\\^?[_a-zA-Z][\\w_]*/;
+        hidden terminal WS: /\\s+/;
+        `;
+
+            const services = await createServices({ grammar });
+            if (!services) return;
+            const completion = expectCompletion(services);
+
+            await completion({
+                text: 'select * <|>from tbl ;',
+                index: 0,
+                expectedItems: ['from']
+            });
+        });
+
+        test('Should suggest keyword after parenthesized group', async () => {
+            const grammar = `
+        grammar g
+        entry Model: items+=Item*;
+        Item: 'begin' '(' name=ID ')' 'end' ';';
+        terminal ID: /\\^?[_a-zA-Z][\\w_]*/;
+        hidden terminal WS: /\\s+/;
+        `;
+
+            const services = await createServices({ grammar });
+            if (!services) return;
+            const completion = expectCompletion(services);
+
+            await completion({
+                text: 'begin ( foo ) <|>end ;',
+                index: 0,
+                expectedItems: ['end']
+            });
+        });
     });
 }

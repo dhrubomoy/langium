@@ -784,7 +784,33 @@ export class LezerGrammarTranslator implements GrammarTranslator {
     // ---- Terminal rule translation ----
 
     private translateTerminalBody(terminal: GrammarAST.TerminalRule): string {
+        // Special-case: block comment pattern (e.g., ML_COMMENT: /\/\*[\s\S]*?\*\//)
+        // The lazy quantifier *? cannot be expressed in Lezer, and greedy matching
+        // would consume past the closing */. Use the standard Lezer idiom instead.
+        const blockCommentBody = this.tryBlockCommentPattern(terminal);
+        if (blockCommentBody) {
+            return blockCommentBody;
+        }
         return this.translateTerminalElement(terminal.definition);
+    }
+
+    /**
+     * Detect common block comment regex patterns and return the idiomatic
+     * Lezer token body: `"/*" (![*] | "*" ![/])* "* /"`.
+     * Returns undefined if the terminal doesn't match a known pattern.
+     */
+    private tryBlockCommentPattern(terminal: GrammarAST.TerminalRule): string | undefined {
+        if (!GrammarAST.isRegexToken(terminal.definition)) return undefined;
+        let pattern = terminal.definition.regex;
+        if (pattern.startsWith('/') && pattern.endsWith('/')) {
+            pattern = pattern.slice(1, -1);
+        }
+        // Detect: starts with \/* (literal /*), ends with \*\/ (literal */),
+        // and has a lazy quantifier (*?) in the middle — standard block comment regex
+        if (pattern.startsWith('\\/\\*') && pattern.endsWith('\\*\\/') && pattern.includes('*?')) {
+            return '"/*" (![*] | "*" ![/])* "*/"';
+        }
+        return undefined;
     }
 
     private translateTerminalElement(element: GrammarAST.AbstractElement): string {
