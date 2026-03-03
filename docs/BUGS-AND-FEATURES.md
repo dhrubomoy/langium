@@ -1,9 +1,10 @@
 - [ ] Run the test for lezer and see if the lezer grammar generation throws any error like "Unused rules". If so need to investigate this and fix this issue.
-- [ ] When lezer backend is selected LezerCompletionProvider should be used by default.
-- [ ] Refactor completion code to delegate parser specific code to their respective adapter classes.
+- [ ] Audit the code and find all workaround we are doing to forcefully fit the langium grammar to lezer grammar. In such cases we should add extensions/features to langium grammar to support such backend specific features, making sure things are backward compatible.
 
 BUGS:
-- [ ] IN PROGRESS: This code in `packages/langium-lezer/src/parser/lezer-module.ts` seems like an workaround.
+*** $cstNode still available in lezer nodes!!!
+
+- [ ] This code in `packages/langium-lezer/src/parser/lezer-module.ts` seems like an workaround.
 ```
     LangiumParser: () => undefined,
     CompletionParser: () => undefined,

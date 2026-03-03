@@ -15,6 +15,21 @@ import { GrammarAST, GrammarUtils, SyntaxNodeUtils } from 'langium-core';
 const IDENTIFIER_KEYWORD_RE = /^[_a-zA-Z]\w*$/;
 
 /**
+ * Result of walking a grammar element against matched tree children.
+ */
+interface WalkResult {
+    features: CompletionFeature[];
+    consumed: number;
+    /**
+     * True when all returned features come from optional grammar elements.
+     * Used to determine whether to bubble up to parent rules: when a rule's
+     * features are all optional, the parent rule's next features should also
+     * be offered (the user can skip the optional part).
+     */
+    optionalOnly?: boolean;
+}
+
+/**
  * Lezer-specific completion logic.
  * Walks the Lezer parse tree to determine where the cursor is in the grammar,
  * then uses GrammarRegistry to compute what grammar features are expected next.
@@ -64,7 +79,30 @@ export class LezerCompletion {
         if (ruleNode) {
             const rule = grammarRegistry.getRuleByName(ruleNode.type);
             if (rule && GrammarAST.isParserRule(rule)) {
-                const features = this.getExpectedFeatures(ruleNode, rule.definition, offset, grammarRegistry);
+                const walkResult = this.getExpectedFeaturesExt(
+                    ruleNode, rule.definition, offset, grammarRegistry
+                );
+                const features = walkResult.features;
+
+                // Bubble up to ancestor rules when the deepest rule is at its
+                // boundary and the cursor might belong to the parent context.
+                // Two cases:
+                // 1. features are empty — the rule is stuck on a terminal it
+                //    can't suggest (e.g., ColumnRef expects ID but got "f")
+                // 2. features are all optional — the rule's required content is
+                //    matched and only optional tail remains (e.g., ColumnExpr
+                //    offers optional 'as' but parent SelectStmt has 'from' next)
+                // Do NOT bubble up when features include required elements
+                // (e.g., cross-reference targets in InsertItem).
+                if (ruleNode.end <= offset && ruleNode !== rootSyntaxNode) {
+                    const shouldBubbleUp = features.length === 0 || walkResult.optionalOnly === true;
+                    if (shouldBubbleUp) {
+                        this.collectAncestorFeatures(
+                            ruleNode, rootSyntaxNode, offset, grammarRegistry, features
+                        );
+                    }
+                }
+
                 results.push({
                     features,
                     contextNode,
@@ -89,6 +127,43 @@ export class LezerCompletion {
             });
         }
         return results;
+    }
+
+    /**
+     * Collect features from ancestor rule nodes by walking up the tree.
+     * At each ancestor rule, uses inclusive boundary for non-leaf wrapper
+     * children so that wrappers ending at the cursor are treated as consumed.
+     * Continues upward as long as ancestor rules are also at their boundary
+     * and return only optional features.
+     */
+    protected collectAncestorFeatures(
+        startNode: SyntaxNode,
+        root: SyntaxNode,
+        offset: number,
+        grammarRegistry: GrammarRegistry,
+        features: CompletionFeature[]
+    ): void {
+        let current: SyntaxNode | null = startNode.parent;
+        while (current && current !== root) {
+            if (!current.isError && !current.isLeaf && current.type !== '') {
+                const rule = grammarRegistry.getRuleByName(current.type);
+                if (rule && GrammarAST.isParserRule(rule)) {
+                    const walkResult = this.getExpectedFeaturesExt(
+                        current, rule.definition, offset, grammarRegistry, true
+                    );
+                    features.push(...walkResult.features);
+
+                    // Continue bubbling up if this ancestor is also at its
+                    // boundary with only optional features remaining
+                    if (current.end <= offset && (walkResult.features.length === 0 || walkResult.optionalOnly === true)) {
+                        current = current.parent;
+                        continue;
+                    }
+                    return;
+                }
+            }
+            current = current.parent;
+        }
     }
 
     /**
@@ -146,19 +221,44 @@ export class LezerCompletion {
         ruleNode: SyntaxNode,
         definition: GrammarAST.AbstractElement,
         offset: number,
-        grammarRegistry: GrammarRegistry
+        grammarRegistry: GrammarRegistry,
+        inclusiveForWrappers = false
     ): CompletionFeature[] {
+        return this.getExpectedFeaturesExt(
+            ruleNode, definition, offset, grammarRegistry, inclusiveForWrappers
+        ).features;
+    }
+
+    /**
+     * Extended version of getExpectedFeatures that also returns the
+     * `optionalOnly` flag from the grammar walk.
+     *
+     * @param inclusiveForWrappers When true, non-leaf children with `end === offset`
+     *   are treated as consumed. Used when walking a parent rule after bubbling up
+     *   from a child rule at its boundary.
+     */
+    protected getExpectedFeaturesExt(
+        ruleNode: SyntaxNode,
+        definition: GrammarAST.AbstractElement,
+        offset: number,
+        grammarRegistry: GrammarRegistry,
+        inclusiveForWrappers = false
+    ): WalkResult {
         // Store the current rule name for wrapper matching in walkAssignment
         this._currentRuleName = ruleNode.type;
 
-        // Collect successfully matched children strictly before the cursor.
-        // Use strict `<` so that a token ending exactly at the cursor position
-        // is NOT considered consumed — the user may be typing a partial token
-        // (e.g., "insert into u|" where "u" is a partial cross-reference target).
-        // This ensures the walker offers completion for the token at the cursor.
+        // Collect successfully matched children before the cursor.
+        // For leaf nodes, use strict `<` so that a token ending exactly at the
+        // cursor is NOT consumed (user may be typing a partial token).
+        // For non-leaf wrapper nodes, optionally use `<=` when bubbling up from
+        // a child rule — the wrapper is structurally complete at the cursor.
         const matchedTypes: string[] = [];
         for (const child of ruleNode.children) {
-            if (child.end < offset && !child.isError) {
+            if (child.isError) continue;
+            const isConsumed = (!child.isLeaf && inclusiveForWrappers)
+                ? child.end <= offset
+                : child.end < offset;
+            if (isConsumed) {
                 if (child.isKeyword) {
                     matchedTypes.push(child.text);
                 } else if (child.type) {
@@ -168,7 +268,7 @@ export class LezerCompletion {
         }
 
         // Walk the grammar definition to find what should come next
-        return this.walkDefinition(definition, matchedTypes, 0, grammarRegistry).features;
+        return this.walkDefinition(definition, matchedTypes, 0, grammarRegistry);
     }
 
     /**
@@ -183,7 +283,7 @@ export class LezerCompletion {
         matchedTypes: string[],
         matchIndex: number,
         grammarRegistry: GrammarRegistry
-    ): { features: CompletionFeature[]; consumed: number } {
+    ): WalkResult {
         // Walk the element once
         let result = this.walkElementOnce(element, matchedTypes, matchIndex, grammarRegistry);
 
@@ -199,7 +299,7 @@ export class LezerCompletion {
 
             if (result.features.length > 0) {
                 // Found features in a subsequent iteration
-                return { features: result.features, consumed: totalConsumed };
+                return { features: result.features, consumed: totalConsumed, optionalOnly: result.optionalOnly };
             }
 
             // All matches consumed — offer first features of this element (it can repeat)
@@ -218,7 +318,7 @@ export class LezerCompletion {
         matchedTypes: string[],
         matchIndex: number,
         grammarRegistry: GrammarRegistry
-    ): { features: CompletionFeature[]; consumed: number } {
+    ): WalkResult {
         if (GrammarAST.isGroup(element)) {
             return this.walkGroup(element, matchedTypes, matchIndex, grammarRegistry);
         } else if (GrammarAST.isAlternatives(element) || GrammarAST.isUnorderedGroup(element)) {
@@ -242,7 +342,7 @@ export class LezerCompletion {
         matchedTypes: string[],
         matchIndex: number,
         grammarRegistry: GrammarRegistry
-    ): { features: CompletionFeature[]; consumed: number } {
+    ): WalkResult {
         let currentIndex = matchIndex;
 
         for (const elem of group.elements) {
@@ -254,12 +354,17 @@ export class LezerCompletion {
                 // But also check if this element can be empty (optional, or rule with optional content)
                 // and collect features from following elements
                 const features = [...result.features];
-                if (this.canBeEmpty(elem)) {
+                const isOptionalFeature = this.canBeEmpty(elem);
+                if (isOptionalFeature) {
                     // Also offer features from the next elements in the group
                     const remaining = this.collectFeaturesFromIndex(group, group.elements.indexOf(elem) + 1, grammarRegistry);
                     features.push(...remaining);
                 }
-                return { features, consumed: currentIndex - matchIndex };
+                return {
+                    features,
+                    consumed: currentIndex - matchIndex,
+                    optionalOnly: isOptionalFeature
+                };
             }
         }
 
@@ -272,7 +377,7 @@ export class LezerCompletion {
         matchedTypes: string[],
         matchIndex: number,
         grammarRegistry: GrammarRegistry
-    ): { features: CompletionFeature[]; consumed: number } {
+    ): WalkResult {
         // If nothing has been matched yet at this position, offer first features of all alternatives
         if (matchIndex >= matchedTypes.length) {
             const allFeatures: CompletionFeature[] = [];
@@ -306,7 +411,7 @@ export class LezerCompletion {
         matchedTypes: string[],
         matchIndex: number,
         grammarRegistry: GrammarRegistry
-    ): { features: CompletionFeature[]; consumed: number } {
+    ): WalkResult {
         // Check for Lezer wrapper nonterminal match.
         // The Lezer grammar translator creates a wrapper nonterminal for each assignment,
         // named "${RuleName}${capitalize(fieldName)}" (e.g., SelectItemStar for star?='*').
@@ -349,7 +454,7 @@ export class LezerCompletion {
         matchedTypes: string[],
         matchIndex: number,
         grammarRegistry: GrammarRegistry
-    ): { features: CompletionFeature[]; consumed: number } {
+    ): WalkResult {
         const rule = ruleCall.rule.ref;
         if (!rule) {
             return { features: [], consumed: 0 };
@@ -395,7 +500,7 @@ export class LezerCompletion {
         keyword: GrammarAST.Keyword,
         matchedTypes: string[],
         matchIndex: number
-    ): { features: CompletionFeature[]; consumed: number } {
+    ): WalkResult {
         // Non-identifier keywords (operators, punctuation like "(", ")", ";", "*")
         // don't appear as nodes in the Lezer tree — they are anonymous inline tokens.
         // Skip them in the grammar walk so subsequent elements can be matched.

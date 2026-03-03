@@ -14,7 +14,7 @@ import { clearDocuments, expectCompletion, parseHelper } from 'langium/test';
 import type { CompletionItem } from 'vscode-languageserver';
 import { MarkupContent } from 'vscode-languageserver';
 import * as assert from 'assert';
-import { BACKENDS } from '../langium-lezer-test.js';
+import { BACKENDS, createLezerServicesForGrammar } from '../langium-lezer-test.js';
 
 describe('Langium completion provider', () => {
 
@@ -859,3 +859,70 @@ for (const { name, createServices } of BACKENDS) {
         });
     });
 }
+
+describe('SQL-like completion with parent rule bubble-up (Lezer)', () => {
+    // SQL-like grammar with sub-rule expressions, demonstrating that completion
+    // correctly bubbles up from a nested rule (ColumnRef/ColumnExpr) to the
+    // parent rule (SelectStmt) when the nested rule is at its boundary.
+    const SQL_GRAMMAR = `
+        grammar SimpleSql
+        entry Program: statements+=SelectStmt*;
+        SelectStmt: 'select' (star?='*' | columns+=ColumnExpr (',' columns+=ColumnExpr)*) 'from' table=ID ';';
+        ColumnExpr: expression=PrimaryExpr ('as' alias=ID)?;
+        PrimaryExpr: ColumnRef | FuncCall;
+        ColumnRef: name=ID;
+        FuncCall: name=ID '(' ')';
+        hidden terminal WS: /\\s+/;
+        terminal ID: /[_a-zA-Z][\\w_]*/;
+    `;
+
+    test('Should suggest "as" after column name with partial prefix', async () => {
+        const services = await createLezerServicesForGrammar({ grammar: SQL_GRAMMAR });
+        if (!services) return;
+        const completion = expectCompletion(services);
+
+        await completion({
+            text: 'select blah a<|>',
+            index: 0,
+            expectedItems: ['as']
+        });
+    });
+
+    test('Should suggest "from" after column name with partial prefix', async () => {
+        const services = await createLezerServicesForGrammar({ grammar: SQL_GRAMMAR });
+        if (!services) return;
+        const completion = expectCompletion(services);
+
+        await completion({
+            text: 'select name f<|>',
+            index: 0,
+            expectedItems: ['from']
+        });
+    });
+
+    test('Should suggest "from" after column with alias and partial prefix', async () => {
+        const services = await createLezerServicesForGrammar({ grammar: SQL_GRAMMAR });
+        if (!services) return;
+        const completion = expectCompletion(services);
+
+        await completion({
+            text: 'select name as user_age f<|>',
+            index: 0,
+            expectedItems: ['from']
+        });
+    });
+
+    test('Should suggest "from" after column name with space', async () => {
+        const services = await createLezerServicesForGrammar({ grammar: SQL_GRAMMAR });
+        if (!services) return;
+        const completion = expectCompletion(services);
+
+        // In a complete parse, the cursor after "name " is at SelectStmt level
+        // (ColumnExpr is already closed), so only "from" is offered.
+        await completion({
+            text: 'select name <|>from tbl ;',
+            index: 0,
+            expectedItems: ['from']
+        });
+    });
+});
