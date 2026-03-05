@@ -145,15 +145,32 @@ export class LezerSyntaxNode implements SyntaxNode {
             const kids: SyntaxNode[] = [];
             // Use cursor with IncludeAnonymous to include keyword literals
             // (Lezer's firstChild/nextSibling skip anonymous leaf nodes by default)
-            const cursor = this.lezerNode.cursor(IterMode.IncludeAnonymous);
-            if (cursor.firstChild()) {
-                do {
-                    kids.push(wrapLezerNode(cursor.node, this.sourceText, this.fieldMap, this.keywordSet));
-                } while (cursor.nextSibling());
-            }
+            this.collectChildren(this.lezerNode, kids);
             this._children = kids;
         }
         return this._children;
+    }
+
+    /**
+     * Recursively collect children, flattening anonymous non-leaf nodes.
+     * Lezer creates anonymous intermediate tree nodes for tree balancing when
+     * content exceeds DefaultBufferLength (1024 bytes). These anonymous wrapper
+     * nodes must be transparent — their children are flattened into the parent.
+     * Anonymous leaf nodes (keyword literals) are kept as-is.
+     */
+    private collectChildren(lezerNode: LezerNode, kids: SyntaxNode[]): void {
+        const cursor = lezerNode.cursor(IterMode.IncludeAnonymous);
+        if (cursor.firstChild()) {
+            do {
+                const node = cursor.node;
+                if (node.type.isAnonymous && node.firstChild !== null) {
+                    // Anonymous non-leaf: tree-balancing node — flatten its children
+                    this.collectChildren(node, kids);
+                } else {
+                    kids.push(wrapLezerNode(node, this.sourceText, this.fieldMap, this.keywordSet));
+                }
+            } while (cursor.nextSibling());
+        }
     }
 
     // --- Node classification ---

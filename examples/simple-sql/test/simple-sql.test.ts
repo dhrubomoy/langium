@@ -440,3 +440,70 @@ describe('Find References with Lezer Backend', () => {
         expect(allRefs).toHaveLength(0);
     });
 });
+
+// ── 6. Error Recovery ────────────────────────────────────────────────────────
+
+describe('Error Recovery with Lezer Backend', () => {
+
+    test('Trailing invalid line should not cause errors on valid preceding statements', async () => {
+        const doc = await parseDocument(`-- Simple SQL example demonstrating the Lezer-backed parser
+-- This file exercises all statement types and expression operators
+
+-- CREATE TABLE: uses @precMarker=TypeAnnotation on column type position
+create table users (
+    id int,
+    name text,
+    age int,
+    score float
+);
+
+create table orders (
+    id int,
+    user_id int,
+    amount float,
+    status text
+);
+
+-- INSERT: provides literal values
+-- insert into users values (1, 'Alice', 30, 95.5);
+-- insert into users values (2, 'Bob', 25, 82.0);
+-- insert into orders values (1, 1, 49.99, 'shipped');
+
+-- SELECT with infix WHERE expressions (operator precedence via infix rule)
+-- select * from users where age > 25 and score >= 90.0;
+
+-- SELECT with function call: uses @dynamicPrecedence + conflicts for
+-- FunctionCall vs ColumnRef disambiguation
+-- select name, count(score) from users where age > 18;
+
+-- Complex expression: tests precedence across multiple levels
+-- select * from users where age + 5 > 30 and score * 2 != 100 or name = 'admin';
+
+-- Parenthesized expression + NOT
+-- select * from users where not (age < 18) and (score > 80 or name = 'special');
+
+-- Column alias
+-- select name as user_name, age as user_age from users;
+select name as user_name, age as user_age from users;
+
+`);
+        const program = doc.parseResult.value;
+        const diagnostics = doc.diagnostics ?? [];
+
+        // This valid SQL document should parse without errors
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        expect(program.statements.length).toBeGreaterThanOrEqual(3);
+
+        const create = program.statements[0];
+        expect(create.$type).toBe('CreateTableStmt');
+        expect((create as CreateTableStmt).name).toBe('users');
+
+        // Cross-references should resolve (select ... from users)
+        const lastStmt = program.statements[program.statements.length - 1] as SelectStmt;
+        expect(lastStmt.$type).toBe('SelectStmt');
+        expect(lastStmt.table.ref).toBeDefined();
+
+        // No diagnostics expected for valid SQL
+        expect(diagnostics).toHaveLength(0);
+    });
+});
