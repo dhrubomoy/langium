@@ -17,6 +17,7 @@ import {
 import { createLezerParserModule, DefaultFieldMap } from 'langium-lezer';
 import type { FieldMapData , LezerAdapter} from 'langium-lezer';
 import { SimpleSQLValidator, registerValidationChecks } from './simple-sql-validator.js';
+import { SimpleSQLScopeProvider } from './simple-sql-scope-provider.js';
 import { SimpleSQLGeneratedModule, SimpleSQLGeneratedSharedModule } from './generated/module.js';
 // Lezer-generated parse tables and data
 import { parser as lezerParser } from './generated/SimpleSQL.parser.js';
@@ -41,6 +42,9 @@ export type SimpleSQLServices = LangiumServices & SimpleSQLAddedServices
  * Custom DI module providing the SimpleSQLValidator.
  */
 export const SimpleSQLModule: Module<SimpleSQLServices, PartialLangiumServices & SimpleSQLAddedServices> = {
+    references: {
+        ScopeProvider: (services) => new SimpleSQLScopeProvider(services)
+    },
     validation: {
         SimpleSQLValidator: () => new SimpleSQLValidator()
     }

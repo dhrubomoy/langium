@@ -542,15 +542,38 @@ describe('Large File Autocomplete Performance', () => {
         astBuilder.buildAst(rawResult.root);
         const astBuildMs = performance.now() - t0b;
 
-        // Now build the document through the full pipeline
+        // Now build the document through the full pipeline with per-phase timing
         const doc = shared.workspace.LangiumDocumentFactory.fromString<Program>(largeText, uri);
         shared.workspace.LangiumDocuments.addDocument(doc);
 
-        // Phase 1: Index content
+        // Track per-phase durations via onDocumentPhase listeners
+        // Each listener fires WHEN a phase completes, so the gap between
+        // consecutive callbacks is the duration of the phase that just finished.
+        const phaseTimes: Record<string, number> = {};
+        let phaseStart = 0;
+        const phases = [
+            { state: 2 /* Parsed */, name: 'parse' },
+            { state: 3 /* IndexedContent */, name: 'indexContent' },
+            { state: 4 /* ComputedScopes */, name: 'computeScopes' },
+            { state: 5 /* Linked */, name: 'linking' },
+            { state: 6 /* IndexedReferences */, name: 'indexRefs' },
+        ];
+        const disposables = phases.map(p =>
+            shared.workspace.DocumentBuilder.onDocumentPhase(p.state, () => {
+                const now = performance.now();
+                if (phaseStart > 0) {
+                    phaseTimes[p.name] = now - phaseStart;
+                }
+                phaseStart = now;
+            })
+        );
+
+        // Phase 1: Full build (no validation)
+        phaseStart = performance.now();
         const t1 = performance.now();
         await shared.workspace.DocumentBuilder.build([doc], { validation: false });
-        // The build runs parse + index + scope + link + index refs (no validation).
         const buildNoValidateMs = performance.now() - t1;
+        disposables.forEach(d => d.dispose());
 
         // Phase 2: Validation only (reset to IndexedReferences, then validate)
         const t2 = performance.now();
@@ -585,6 +608,9 @@ describe('Large File Autocomplete Performance', () => {
         console.log(`  Lezer parse (adapter.parse):     ${rawParseMs.toFixed(1)}ms`);
         console.log(`  AST build (SyntaxNodeAstBuilder): ${astBuildMs.toFixed(1)}ms`);
         console.log(`  Full build (no validation):       ${buildNoValidateMs.toFixed(1)}ms`);
+        for (const [phase, ms] of Object.entries(phaseTimes)) {
+            console.log(`    └─ ${phase.padEnd(20)} ${ms.toFixed(1)}ms`);
+        }
         console.log(`  Validation:                       ${validateMs.toFixed(1)}ms`);
         console.log(`  Completion:                       ${completionMs.toFixed(1)}ms`);
         console.log(`  Returned ${completions!.items.length} completion items`);

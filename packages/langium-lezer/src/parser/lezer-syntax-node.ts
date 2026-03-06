@@ -48,25 +48,54 @@ export function wrapLezerTree(
 }
 
 /**
- * Computes line/column Range from byte offsets.
- * Lazily computes a line start offset index on first use.
+ * Cached line start offsets for O(log N) offset-to-position lookups.
+ * The cache stores the last used source text and its line index. Since all
+ * LezerSyntaxNodes in a document share the same sourceText string reference,
+ * a single-entry cache with identity check is sufficient.
+ */
+let cachedText: string | undefined;
+let cachedLineStarts: number[] | undefined;
+
+function getLineStarts(text: string): number[] {
+    if (cachedText === text && cachedLineStarts) {
+        return cachedLineStarts;
+    }
+    const lineStarts = [0];
+    for (let i = 0; i < text.length; i++) {
+        if (text.charCodeAt(i) === 10) { // '\n'
+            lineStarts.push(i + 1);
+        }
+    }
+    cachedText = text;
+    cachedLineStarts = lineStarts;
+    return lineStarts;
+}
+
+/**
+ * Computes line/column Range from byte offsets using a cached line index.
+ * First call for a given source text builds the index in O(N); subsequent calls are O(log N).
  */
 function computeRange(text: string, offset: number, end: number): Range {
-    const startPos = offsetToPosition(text, offset);
-    const endPos = offsetToPosition(text, end);
+    const lineStarts = getLineStarts(text);
+    const startPos = offsetToPosition(lineStarts, offset);
+    const endPos = offsetToPosition(lineStarts, end);
     return { start: startPos, end: endPos };
 }
 
-function offsetToPosition(text: string, offset: number): { line: number; character: number } {
-    let line = 0;
-    let lastLineStart = 0;
-    for (let i = 0; i < offset; i++) {
-        if (text.charCodeAt(i) === 10) { // '\n'
-            line++;
-            lastLineStart = i + 1;
+function offsetToPosition(lineStarts: number[], offset: number): { line: number; character: number } {
+    // Binary search for the line containing offset
+    let lo = 0;
+    let hi = lineStarts.length - 1;
+    while (lo < hi) {
+        // eslint-disable-next-line no-bitwise
+        const mid = (lo + hi + 1) >>> 1;
+        if (lineStarts[mid] <= offset) {
+            lo = mid;
+        } else {
+            hi = mid - 1;
         }
     }
-    return { line, character: offset - lastLineStart };
+    return { line: lo, character: offset - lineStarts[lo] };
 }
 
 /**
