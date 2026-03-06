@@ -4,14 +4,15 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import { type Module, inject } from 'langium';
+import { type Module, inject, DefaultLangiumProfiler } from 'langium';
 import {
     createDefaultModule,
     createDefaultSharedModule,
     type DefaultSharedModuleContext,
     type LangiumServices,
     type LangiumSharedServices,
-    type PartialLangiumServices
+    type PartialLangiumServices,
+    type PartialLangiumSharedServices
 } from 'langium/lsp';
 import { createLezerParserModule, DefaultFieldMap } from 'langium-lezer';
 import type { FieldMapData , LezerAdapter} from 'langium-lezer';
@@ -55,9 +56,15 @@ export function createSimpleSqlServices(context: DefaultSharedModuleContext): {
     shared: LangiumSharedServices,
     sql: SimpleSQLServices
 } {
+    const SimpleSQLProfilerModule: Module<LangiumSharedServices, PartialLangiumSharedServices> = {
+        profilers: {
+            LangiumProfiler: () => new DefaultLangiumProfiler()
+        }
+    };
     const shared = inject(
         createDefaultSharedModule(context),
-        SimpleSQLGeneratedSharedModule
+        SimpleSQLGeneratedSharedModule,
+        SimpleSQLProfilerModule
     );
     const sql = inject(
         createDefaultModule({ shared }),

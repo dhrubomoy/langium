@@ -4,7 +4,7 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import type { Module, LangiumCoreServices } from 'langium-core';
+import type { Module } from 'langium-core';
 import { createGrammarConfig } from 'langium-core';
 import type { LangiumLezerParserServices, LangiumLezerServices } from './lezer-services.js';
 import { LezerAdapter } from './lezer-adapter.js';
@@ -44,9 +44,16 @@ const LANGIUM_TO_LEZER_TERMINAL_NAMES: Record<string, string> = {
 export function createLezerParserModule(): Module<LangiumLezerServices, LangiumLezerParserServices> {
     return {
         parser: {
-            ParserAdapter: () => new LezerAdapter(),
+            ParserAdapter: (services: LangiumLezerServices) => {
+                const adapter = new LezerAdapter();
+                const profiler = services.shared.profilers.LangiumProfiler;
+                if (profiler?.isActive('parsing')) {
+                    adapter.setProfilingTask(profiler.createTask('parsing', services.LanguageMetaData.languageId));
+                }
+                return adapter;
+            },
             GrammarTranslator: () => new LezerGrammarTranslator(),
-            GrammarConfig: (services: LangiumCoreServices) => {
+            GrammarConfig: (services: LangiumLezerServices) => {
                 const config = createGrammarConfig(services);
                 // Map Langium terminal names to Lezer tree type names so that
                 // CommentProvider can find comment nodes in the Lezer parse tree.

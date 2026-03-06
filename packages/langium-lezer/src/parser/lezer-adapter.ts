@@ -22,6 +22,7 @@ import type {
     CompletionRequest,
     CompletionResult
 } from 'langium-core';
+import type { ProfilingTask } from 'langium-core';
 import type { FieldMap } from './field-map.js';
 import { EMPTY_FIELD_MAP } from './field-map.js';
 import { LezerRootSyntaxNode } from './lezer-syntax-node.js';
@@ -51,6 +52,7 @@ export class LezerAdapter implements ParserAdapter {
     private fieldMap: FieldMap = EMPTY_FIELD_MAP;
     private keywordSet: Set<string> = new Set();
     private completion = new LezerCompletion();
+    private profilingTask?: ProfilingTask;
 
     configure(_grammar: Grammar, _config?: ParserAdapterConfig): void {
         // Parse tables are loaded via loadParseTables(), not from grammar.
@@ -70,11 +72,35 @@ export class LezerAdapter implements ParserAdapter {
         }
     }
 
+    /**
+     * Set a profiling task to instrument parse calls.
+     */
+    setProfilingTask(task: ProfilingTask): void {
+        this.profilingTask = task;
+    }
+
     parse(text: string, _entryRule?: string): AdapterParseResult {
         this.ensureConfigured();
+        const task = this.profilingTask;
+        if (task) {
+            task.start();
+            task.startSubTask('lezer.parse');
+        }
         const tree = this.parser.parse(text);
+        if (task) {
+            task.stopSubTask('lezer.parse');
+            task.startSubTask('lezer.syntaxNode');
+        }
         const root = new LezerRootSyntaxNode(tree.topNode, text, this.fieldMap, this.keywordSet);
+        if (task) {
+            task.stopSubTask('lezer.syntaxNode');
+            task.startSubTask('lezer.diagnostics');
+        }
         root.setDiagnostics(this.extractDiagnostics(tree, text));
+        if (task) {
+            task.stopSubTask('lezer.diagnostics');
+            task.stop();
+        }
 
         return {
             root,
@@ -91,6 +117,7 @@ export class LezerAdapter implements ParserAdapter {
         changes: readonly TextChange[]
     ): AdapterParseResult {
         this.ensureConfigured();
+        const task = this.profilingTask;
         const prev = previousState as LezerIncrementalState;
 
         // Convert TextChange[] to Lezer's change format
@@ -104,10 +131,26 @@ export class LezerAdapter implements ParserAdapter {
         // Apply changes to fragments for tree reuse
         const fragments = TreeFragment.applyChanges(prev.fragments, lezerChanges);
 
+        if (task) {
+            task.start();
+            task.startSubTask('lezer.parseIncremental');
+        }
         // Parse with fragment reuse — Lezer reuses unchanged subtrees
         const tree = this.parser.parse(text, fragments);
+        if (task) {
+            task.stopSubTask('lezer.parseIncremental');
+            task.startSubTask('lezer.syntaxNode');
+        }
         const root = new LezerRootSyntaxNode(tree.topNode, text, this.fieldMap, this.keywordSet);
+        if (task) {
+            task.stopSubTask('lezer.syntaxNode');
+            task.startSubTask('lezer.diagnostics');
+        }
         root.setDiagnostics(this.extractDiagnostics(tree, text));
+        if (task) {
+            task.stopSubTask('lezer.diagnostics');
+            task.stop();
+        }
 
         return {
             root,

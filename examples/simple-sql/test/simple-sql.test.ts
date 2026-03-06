@@ -516,26 +516,11 @@ select name as user_name, age as user_age from users;
 describe('Large File Autocomplete Performance', () => {
 
     test('Autocomplete should respond quickly on a 6000+ line file', async () => {
-        // Read the sample SQL file and repeat it to create a large document
+        // Read the pre-generated large sample file directly
         const __filename = fileURLToPath(import.meta.url);
         const __dirname = dirname(__filename);
-        const samplePath = join(__dirname, '..', 'example', 'sample.ssql');
-        const sampleText = readFileSync(samplePath, 'utf-8');
-
-        // sample.ssql is ~39 lines. Repeat it enough times to reach 6000-7000 lines.
-        // Each repetition gets unique table names to avoid duplicate definitions.
-        const sampleLines = sampleText.split('\n').length;
-        const targetLines = 6500;
-        const repetitions = Math.ceil(targetLines / sampleLines);
-
-        const chunks: string[] = [];
-        for (let i = 0; i < repetitions; i++) {
-            const chunk = sampleText
-                .replace(/\busers\b/g, `users_${i}`)
-                .replace(/\borders\b/g, `orders_${i}`);
-            chunks.push(chunk);
-        }
-        const largeText = chunks.join('\n');
+        const largeSamplePath = join(__dirname, '..', 'example', 'large-sample.ssql');
+        const largeText = readFileSync(largeSamplePath, 'utf-8');
         const totalLines = largeText.split('\n').length;
 
         expect(totalLines).toBeGreaterThanOrEqual(6000);
