@@ -16,6 +16,7 @@ export { TextDocument } from 'vscode-languageserver-textdocument';
 import type { Diagnostic, Range } from 'vscode-languageserver-types';
 import type { FileSystemProvider } from './file-system-provider.js';
 import type { ParseResult, ParserOptions } from '../parser/parse-result.js';
+import type { AdapterParseResult, TextChange } from '../parser/parser-adapter.js';
 import type { RootSyntaxNode } from '../parser/syntax-node.js';
 import type { ServiceRegistry } from '../service-registry.js';
 import type { LangiumSharedCoreServices } from '../services.js';
@@ -51,6 +52,25 @@ export interface LangiumDocument<T extends AstNode = AstNode> {
      * by parser backends that support it (e.g., Lezer, Tree-sitter).
      */
     incrementalParseState?: unknown;
+    /**
+     * Pending text changes from the last `onDidChangeTextDocument` event.
+     * Used by the document factory to perform incremental parsing when the
+     * parser backend supports it. Cleared after each parse.
+     */
+    textChanges?: TextChangeEvent[];
+}
+
+/**
+ * Describes a text change event from the LSP client.
+ * Compatible with `TextDocumentContentChangeEvent` from vscode-languageserver.
+ */
+export interface TextChangeEvent {
+    /** Start offset in the OLD text. */
+    readonly rangeOffset: number;
+    /** Number of characters removed from OLD text. */
+    readonly rangeLength: number;
+    /** New text inserted at rangeOffset. */
+    readonly text: string;
 }
 
 /**
@@ -126,6 +146,12 @@ export interface DocumentSegment {
  */
 export type TextDocumentProvider = {
     get(uri: string | URI): TextDocument | undefined
+    /**
+     * Retrieve and consume pending text changes for the given URI.
+     * Returns `undefined` if no changes are pending or the provider doesn't support change tracking.
+     * The changes are cleared after retrieval.
+     */
+    consumeTextChanges?(uri: string | URI): TextChangeEvent[] | undefined
 }
 
 /**
@@ -275,16 +301,22 @@ export class DefaultLangiumDocumentFactory implements LangiumDocumentFactory {
             };
         }
         (parseResult.value as Mutable<AstNode>).$document = document;
+        // Transfer incremental parse state from the last parse() call to the document
+        if (this._lastIncrementalState !== undefined) {
+            (document as Mutable<LangiumDocument<T>>).incrementalParseState = this._lastIncrementalState;
+            this._lastIncrementalState = undefined;
+        }
         return document;
     }
 
-    async update<T extends AstNode = AstNode>(document: Mutable<LangiumDocument<T>>, cancellationToken: CancellationToken): Promise<LangiumDocument<T>> {
+    async update<T extends AstNode = AstNode>(document: Mutable<LangiumDocument<T>>, _cancellationToken: CancellationToken): Promise<LangiumDocument<T>> {
         // The syntax node's fullText property contains the original text that was used to create the AST.
         const rootSyntaxNode = document.parseResult.value.$syntaxNode;
         const oldText = rootSyntaxNode && 'fullText' in rootSyntaxNode
             ? (rootSyntaxNode as RootSyntaxNode).fullText
             : document.parseResult.value.$cstNode?.root.fullText;
-        const textDocument = this.textDocuments?.get(document.uri.toString());
+        const uriString = document.uri.toString();
+        const textDocument = this.textDocuments?.get(uriString);
         const text = textDocument ? textDocument.getText() : await this.fileSystemProvider.readFile(document.uri);
 
         if (textDocument) {
@@ -309,17 +341,80 @@ export class DefaultLangiumDocumentFactory implements LangiumDocumentFactory {
         // Some of these documents can be pretty large, so parsing them again can be quite expensive.
         // Therefore, we only parse if the text has actually changed.
         if (oldText !== text) {
-            document.parseResult = await this.parseAsync(document.uri, text, cancellationToken);
+            // Try incremental parsing first — much faster for large files with small edits.
+            // Requires: (1) backend supports it, (2) we have previous parse state,
+            // (3) we have the text changes from the LSP client.
+            const textChanges = this.textDocuments?.consumeTextChanges?.(uriString);
+            let parseResult = this.tryParseIncremental<T>(document, text, textChanges);
+            if (!parseResult) {
+                // Fall back to full parse. Use the sync parse() path so we can capture
+                // incremental state for future incremental parses.
+                parseResult = this.parse<T>(document.uri, text);
+                if (this._lastIncrementalState !== undefined) {
+                    (document as Mutable<LangiumDocument<T>>).incrementalParseState = this._lastIncrementalState;
+                    this._lastIncrementalState = undefined;
+                }
+            }
+            document.parseResult = parseResult;
             (document.parseResult.value as Mutable<AstNode>).$document = document;
         }
         document.state = DocumentState.Parsed;
         return document;
     }
 
+    /**
+     * Attempt incremental parsing using the parser backend's `parseIncremental()` method.
+     * Returns the parse result if successful, or `undefined` to fall back to full parsing.
+     */
+    protected tryParseIncremental<T extends AstNode>(
+        document: LangiumDocument<T>,
+        text: string,
+        textChanges: TextChangeEvent[] | undefined
+    ): ParseResult<T> | undefined {
+        if (!textChanges || textChanges.length === 0 || !document.incrementalParseState) {
+            return undefined;
+        }
+        const services = this.serviceRegistry.getServices(document.uri);
+        const adapter = services.parser.ParserAdapter;
+        if (!adapter.supportsIncremental || !adapter.parseIncremental) {
+            return undefined;
+        }
+        // Convert TextChangeEvent[] to TextChange[] (same shape, different origin)
+        const changes: TextChange[] = textChanges.map(c => ({
+            rangeOffset: c.rangeOffset,
+            rangeLength: c.rangeLength,
+            text: c.text
+        }));
+        const adapterResult = adapter.parseIncremental(text, document.incrementalParseState, changes);
+        return this.buildParseResult<T>(services, adapterResult, document);
+    }
+
+    /**
+     * Last incremental state from a `parse()` or `tryParseIncremental()` call.
+     * Temporarily stored here until `createLangiumDocument()` transfers it to the document.
+     */
+    private _lastIncrementalState: unknown;
+
     protected parse<T extends AstNode>(uri: URI, text: string, options?: ParserOptions): ParseResult<T> {
         const services = this.serviceRegistry.getServices(uri);
         const adapter = services.parser.ParserAdapter;
         const adapterResult = adapter.parse(text, options?.rule);
+        this._lastIncrementalState = adapterResult.incrementalState;
+        return this.buildParseResult<T>(services, adapterResult);
+    }
+
+    /**
+     * Convert an AdapterParseResult into a ParseResult, storing incremental state on the document.
+     */
+    private buildParseResult<T extends AstNode>(
+        services: { parser: { SyntaxNodeAstBuilder: { buildAst(root: RootSyntaxNode): ParseResult<AstNode> } } },
+        adapterResult: AdapterParseResult,
+        document?: LangiumDocument<T>
+    ): ParseResult<T> {
+        // Store incremental state for future incremental parses
+        if (document && adapterResult.incrementalState !== undefined) {
+            (document as Mutable<LangiumDocument<T>>).incrementalParseState = adapterResult.incrementalState;
+        }
         // Use pre-built AST if the backend built it during parsing (e.g. Chevrotain's one-pass approach)
         if (adapterResult.builtAst) {
             return adapterResult.builtAst as ParseResult<T>;

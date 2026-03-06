@@ -10,6 +10,9 @@ import { EmptyFileSystem, URI } from 'langium';
 import { LezerSyntaxNode } from 'langium-lezer';
 import { createSimpleSqlServices } from '../src/language-server/simple-sql-module.js';
 import type { CreateTableStmt, Program, SelectStmt, InsertStmt } from '../src/language-server/generated/ast.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { join, dirname } from 'node:path';
 
 // ── Service setup ───────────────────────────────────────────────────────────
 
@@ -505,5 +508,102 @@ select name as user_name, age as user_age from users;
 
         // No diagnostics expected for valid SQL
         expect(diagnostics).toHaveLength(0);
+    });
+});
+
+// ── 7. Large File Autocomplete Performance ──────────────────────────────────
+
+describe('Large File Autocomplete Performance', () => {
+
+    test('Autocomplete should respond quickly on a 6000+ line file', async () => {
+        // Read the sample SQL file and repeat it to create a large document
+        const __filename = fileURLToPath(import.meta.url);
+        const __dirname = dirname(__filename);
+        const samplePath = join(__dirname, '..', 'example', 'sample.ssql');
+        const sampleText = readFileSync(samplePath, 'utf-8');
+
+        // sample.ssql is ~39 lines. Repeat it enough times to reach 6000-7000 lines.
+        // Each repetition gets unique table names to avoid duplicate definitions.
+        const sampleLines = sampleText.split('\n').length;
+        const targetLines = 6500;
+        const repetitions = Math.ceil(targetLines / sampleLines);
+
+        const chunks: string[] = [];
+        for (let i = 0; i < repetitions; i++) {
+            const chunk = sampleText
+                .replace(/\busers\b/g, `users_${i}`)
+                .replace(/\borders\b/g, `orders_${i}`);
+            chunks.push(chunk);
+        }
+        const largeText = chunks.join('\n');
+        const totalLines = largeText.split('\n').length;
+
+        expect(totalLines).toBeGreaterThanOrEqual(6000);
+        expect(totalLines).toBeLessThanOrEqual(7500);
+
+        // ── Phase-by-phase pipeline breakdown ──
+        // Measure each pipeline phase individually to find the bottleneck.
+        const uri = URI.parse(`memory:/perf-test-${docCounter++}.ssql`);
+
+        // Phase 0a: Raw Lezer parse (adapter.parse only, no AST building)
+        const adapter = services.parser.ParserAdapter;
+        const t0a = performance.now();
+        const rawResult = adapter.parse(largeText);
+        const rawParseMs = performance.now() - t0a;
+
+        // Phase 0b: AST building from SyntaxNode (SyntaxNodeAstBuilder)
+        const astBuilder = services.parser.SyntaxNodeAstBuilder;
+        const t0b = performance.now();
+        astBuilder.buildAst(rawResult.root);
+        const astBuildMs = performance.now() - t0b;
+
+        // Now build the document through the full pipeline
+        const doc = shared.workspace.LangiumDocumentFactory.fromString<Program>(largeText, uri);
+        shared.workspace.LangiumDocuments.addDocument(doc);
+
+        // Phase 1: Index content
+        const t1 = performance.now();
+        await shared.workspace.DocumentBuilder.build([doc], { validation: false });
+        // The build runs parse + index + scope + link + index refs (no validation).
+        const buildNoValidateMs = performance.now() - t1;
+
+        // Phase 2: Validation only (reset to IndexedReferences, then validate)
+        const t2 = performance.now();
+        await shared.workspace.DocumentBuilder.build([doc], { validation: true });
+        const validateMs = performance.now() - t2;
+
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+
+        // ── Completion on the large document ──
+        const completionSuffix = '\nselect id from ';
+        const textWithCursor = largeText + completionSuffix;
+        const cursorDoc = await parseDocument(textWithCursor);
+
+        const provider = services.lsp.CompletionProvider!;
+        const offset = textWithCursor.length;
+        const position = cursorDoc.textDocument.positionAt(offset);
+
+        const t3 = performance.now();
+        const completions = await provider.getCompletion(cursorDoc, {
+            textDocument: { uri: cursorDoc.textDocument.uri },
+            position,
+        });
+        const completionMs = performance.now() - t3;
+
+        expect(completions).toBeDefined();
+        expect(completions!.items.length).toBeGreaterThan(0);
+
+        const stmtCount = (doc.parseResult.value as Program).statements.length;
+        const refCount = doc.references.length;
+
+        console.log(`\n── Pipeline Breakdown (${totalLines} lines, ${stmtCount} statements, ${refCount} cross-refs) ──`);
+        console.log(`  Lezer parse (adapter.parse):     ${rawParseMs.toFixed(1)}ms`);
+        console.log(`  AST build (SyntaxNodeAstBuilder): ${astBuildMs.toFixed(1)}ms`);
+        console.log(`  Full build (no validation):       ${buildNoValidateMs.toFixed(1)}ms`);
+        console.log(`  Validation:                       ${validateMs.toFixed(1)}ms`);
+        console.log(`  Completion:                       ${completionMs.toFixed(1)}ms`);
+        console.log(`  Returned ${completions!.items.length} completion items`);
+
+        expect(completionMs).toBeLessThan(500);
     });
 });

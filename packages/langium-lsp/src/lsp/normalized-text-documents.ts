@@ -13,7 +13,7 @@ import type {
     NotificationHandler
 } from 'vscode-languageserver';
 import { TextDocumentSyncKind, Disposable, Emitter } from 'vscode-languageserver';
-import type { URI } from 'langium-core';
+import type { URI, TextChangeEvent } from 'langium-core';
 import { UriUtils } from 'langium-core';
 // For some reason, this isn't exported by vscode-languageserver
 import type { NotebookDocumentChangeEvent } from 'vscode-languageserver/lib/common/notebook.js';
@@ -125,6 +125,11 @@ export class NormalizedTextDocuments<T extends { uri: string }> implements TextD
     private readonly _configuration: TextDocumentsConfiguration<T>;
 
     private readonly _syncedDocuments: Map<string, T>;
+    /**
+     * Pending text changes per normalized URI, accumulated from `onDidChangeTextDocument`.
+     * Consumed by `consumeTextChanges()` during the document update pipeline.
+     */
+    private readonly _pendingChanges: Map<string, TextChangeEvent[]>;
 
     private readonly _onDidChangeContent: Emitter<TextDocumentChangeEvent<T>>;
     private readonly _onDidOpen: Emitter<TextDocumentChangeEvent<T>>;
@@ -136,6 +141,7 @@ export class NormalizedTextDocuments<T extends { uri: string }> implements TextD
     public constructor(configuration: TextDocumentsConfiguration<T>) {
         this._configuration = configuration;
         this._syncedDocuments = new Map();
+        this._pendingChanges = new Map();
 
         this._onDidChangeContent = new Emitter<TextDocumentChangeEvent<T>>();
         this._onDidOpen = new Emitter<TextDocumentChangeEvent<T>>();
@@ -202,6 +208,60 @@ export class NormalizedTextDocuments<T extends { uri: string }> implements TextD
         return Array.from(this._syncedDocuments.keys());
     }
 
+    /**
+     * Retrieve and consume pending text changes for the given URI.
+     * Returns `undefined` if no changes are pending.
+     * Changes are cleared after retrieval so they are only consumed once.
+     */
+    public consumeTextChanges(uri: string | URI): TextChangeEvent[] | undefined {
+        const normalized = UriUtils.normalize(uri);
+        const changes = this._pendingChanges.get(normalized);
+        if (changes) {
+            this._pendingChanges.delete(normalized);
+        }
+        return changes;
+    }
+
+    /**
+     * Convert LSP content changes to offset-based TextChangeEvents and store them.
+     * Must be called BEFORE `_configuration.update()` so that range-to-offset
+     * conversion uses the old document text.
+     */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    private captureTextChanges(uri: string, oldDocument: T, contentChanges: readonly any[]): void {
+        const textChanges: TextChangeEvent[] = [];
+        for (const change of contentChanges) {
+            if ('range' in change && change.range) {
+                // Range-based incremental change — convert to offset using old document
+                // The old document must have offsetAt (TextDocument interface)
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const doc = oldDocument as any;
+                if (typeof doc.offsetAt === 'function') {
+                    const rangeOffset = doc.offsetAt(change.range.start);
+                    const rangeEnd = doc.offsetAt(change.range.end);
+                    textChanges.push({
+                        rangeOffset,
+                        rangeLength: rangeEnd - rangeOffset,
+                        text: change.text
+                    });
+                }
+            }
+            // Full-text replacement changes have no range — skip them (forces full re-parse)
+        }
+        if (textChanges.length > 0) {
+            // Accumulate changes (multiple didChange events can fire before a build)
+            const existing = this._pendingChanges.get(uri);
+            if (existing) {
+                existing.push(...textChanges);
+            } else {
+                this._pendingChanges.set(uri, textChanges);
+            }
+        } else {
+            // No offset-based changes available — clear any pending to force full re-parse
+            this._pendingChanges.delete(uri);
+        }
+    }
+
     public listen(connection: Connection): Disposable {
         // Required for interoperability with the the vscode-languageserver package
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -232,6 +292,10 @@ export class NormalizedTextDocuments<T extends { uri: string }> implements TextD
 
             let syncedDocument = this._syncedDocuments.get(uri);
             if (syncedDocument !== undefined) {
+                // Capture offset-based text changes BEFORE applying them to the document.
+                // The old document is needed to convert range positions to byte offsets.
+                this.captureTextChanges(uri, syncedDocument, changes);
+
                 syncedDocument = this._configuration.update(syncedDocument, changes, version);
                 this._syncedDocuments.set(uri, syncedDocument);
                 this._onDidChangeContent.fire(Object.freeze({ document: syncedDocument }));

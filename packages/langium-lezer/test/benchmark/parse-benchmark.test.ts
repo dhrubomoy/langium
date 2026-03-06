@@ -6,13 +6,61 @@
 
 import { describe, test, expect, beforeAll } from 'vitest';
 import type { ParserAdapter, TextChange } from 'langium-core';
+import { EmptyFileSystem, inject } from 'langium-core';
+import { interpretAstReflection } from 'langium-core/grammar';
+import type { LangiumServices, LangiumSharedServices } from 'langium-lsp';
+import { createServicesForGrammar, createDefaultModule, createDefaultSharedModule } from 'langium-lsp';
+import { parseDocument, textDocumentPositionParams } from 'langium-lsp/test';
 import type { LezerAdapter } from 'langium-lezer';
+import { LezerGrammarTranslator, DefaultFieldMap, createLezerParserModule, LezerAdapter as LezerAdapterImpl } from 'langium-lezer';
+import { buildParser } from '@lezer/generator';
 import {
     LIST_GRAMMAR,
     createLezerAdapterForGrammar,
     createChevrotainAdapterForGrammar,
+    parseGrammarString,
     generateLargeDocument
 } from '../test-helper.js';
+
+/**
+ * Create full LangiumServices (core + LSP) backed by the Lezer parser.
+ * Similar to createLezerServicesForGrammar in langium-lezer-test.ts but local to this file.
+ */
+async function createLezerLspServicesForGrammar(grammarString: string): Promise<LangiumServices> {
+    const grammar = await parseGrammarString(grammarString);
+    const translator = new LezerGrammarTranslator();
+    const { grammarText, fieldMapData, keywords } = translator.generateGrammarInMemory(grammar);
+    const parser = buildParser(grammarText);
+    const fieldMap = new DefaultFieldMap(fieldMapData);
+    const lezerAdapter = new LezerAdapterImpl();
+    lezerAdapter.loadParseTables(parser, fieldMap, keywords);
+
+    const shared = inject(
+        createDefaultSharedModule(EmptyFileSystem),
+        { AstReflection: () => interpretAstReflection(grammar) }
+    ) as LangiumSharedServices;
+    const services = inject(
+        createDefaultModule({ shared }),
+        {
+            Grammar: () => grammar,
+            LanguageMetaData: () => ({
+                caseInsensitive: false,
+                fileExtensions: ['.txt'],
+                languageId: grammar.name ?? 'test',
+                mode: 'development' as const
+            }),
+            parser: {
+                ParserConfig: () => ({})
+            }
+        },
+        createLezerParserModule(),
+        // Override with pre-loaded adapter AFTER createLezerParserModule
+        { parser: { ParserAdapter: () => lezerAdapter } }
+    ) as LangiumServices;
+    shared.ServiceRegistry.register(services);
+
+    return services;
+}
 
 // ---- Arithmetics-style grammar for realistic benchmarks ----
 
@@ -862,6 +910,169 @@ describe('Parse benchmarks — Infix grammar with Lezer features (Lezer-only)', 
         // Both should parse without errors
         expect(infixBase.root.diagnostics).toHaveLength(0);
         expect(complexBase.root.diagnostics).toHaveLength(0);
+    });
+});
+
+// ---- Autocomplete performance comparison (full LSP pipeline) ----
+
+/**
+ * Async version of measure() for benchmarking async functions.
+ */
+async function measureAsync(fn: () => unknown, iterations: number, warmup = 3): Promise<number> {
+    for (let i = 0; i < warmup; i++) {
+        await fn();
+    }
+    const times: number[] = [];
+    for (let i = 0; i < iterations; i++) {
+        const start = performance.now();
+        await fn();
+        times.push(performance.now() - start);
+    }
+    return median(times);
+}
+
+describe('Autocomplete benchmarks — Chevrotain vs Lezer (full LSP pipeline)', () => {
+    let chevServices: LangiumServices;
+    let lezerLspServices: LangiumServices;
+
+    beforeAll(async () => {
+        chevServices = await createServicesForGrammar({ grammar: COMPLEX_GRAMMAR });
+        lezerLspServices = await createLezerLspServicesForGrammar(COMPLEX_GRAMMAR);
+    });
+
+    test('autocomplete at various positions in large document', { timeout: 30000 }, async () => {
+        const doc = generateComplexDocument(500); // ~7500 lines
+        const lineCount = doc.split('\n').length;
+        const iterations = 10;
+
+        // Parse documents through the full pipeline (parse + link + scope + index)
+        const chevDoc = await parseDocument(chevServices, doc);
+        const lezerDoc = await parseDocument(lezerLspServices, doc);
+
+        const chevCompletion = chevServices.lsp.CompletionProvider!;
+        const lezerCompletion = lezerLspServices.lsp.CompletionProvider!;
+
+        // Pick completion positions: start, 25%, 50%, 75%, near end
+        const positions = [
+            { label: 'start', offset: 10 },
+            { label: '25%', offset: Math.floor(doc.length * 0.25) },
+            { label: '50%', offset: Math.floor(doc.length * 0.5) },
+            { label: '75%', offset: Math.floor(doc.length * 0.75) },
+            { label: 'near-end', offset: doc.length - 20 },
+        ];
+
+        const results: Array<{
+            position: string;
+            offset: number;
+            chevrotainMs: number;
+            lezerMs: number;
+            speedup: string;
+        }> = [];
+
+        for (const pos of positions) {
+            const chevParams = textDocumentPositionParams(chevDoc, pos.offset);
+            const lezerParams = textDocumentPositionParams(lezerDoc, pos.offset);
+
+            const chevMs = await measureAsync(
+                () => chevCompletion.getCompletion(chevDoc, chevParams),
+                iterations
+            );
+
+            const lezerMs = await measureAsync(
+                () => lezerCompletion.getCompletion(lezerDoc, lezerParams),
+                iterations
+            );
+
+            results.push({
+                position: pos.label,
+                offset: pos.offset,
+                chevrotainMs: Math.round(chevMs * 100) / 100,
+                lezerMs: Math.round(lezerMs * 100) / 100,
+                speedup: (chevMs / lezerMs).toFixed(1) + 'x',
+            });
+        }
+
+        console.log(`\n=== Autocomplete Benchmarks (LSP pipeline) — ${lineCount} lines ===`);
+        console.table(results.map(r => ({
+            'Position': r.position,
+            'Offset': r.offset,
+            'Chevrotain (ms)': r.chevrotainMs,
+            'Lezer (ms)': r.lezerMs,
+            'Lezer speedup': r.speedup,
+        })));
+
+        // Both should return completion results
+        for (const pos of positions) {
+            const chevResult = await chevCompletion.getCompletion(
+                chevDoc, textDocumentPositionParams(chevDoc, pos.offset)
+            );
+            const lezerResult = await lezerCompletion.getCompletion(
+                lezerDoc, textDocumentPositionParams(lezerDoc, pos.offset)
+            );
+            expect(chevResult).toBeDefined();
+            expect(lezerResult).toBeDefined();
+        }
+    });
+
+    test('autocomplete scaling across document sizes', { timeout: 30000 }, async () => {
+        const blockCounts = [100, 300, 500];
+        const iterations = 5;
+
+        const results: Array<{
+            blocks: number;
+            lines: number;
+            chevrotainMs: number;
+            lezerMs: number;
+            speedup: string;
+        }> = [];
+
+        for (const blocks of blockCounts) {
+            const doc = generateComplexDocument(blocks);
+            const lineCount = doc.split('\n').length;
+            const midOffset = Math.floor(doc.length / 2);
+
+            const chevDoc = await parseDocument(chevServices, doc);
+            const lezerDoc = await parseDocument(lezerLspServices, doc);
+
+            const chevParams = textDocumentPositionParams(chevDoc, midOffset);
+            const lezerParams = textDocumentPositionParams(lezerDoc, midOffset);
+
+            const chevCompletion = chevServices.lsp.CompletionProvider!;
+            const lezerCompletion = lezerLspServices.lsp.CompletionProvider!;
+
+            const chevMs = await measureAsync(
+                () => chevCompletion.getCompletion(chevDoc, chevParams),
+                iterations
+            );
+
+            const lezerMs = await measureAsync(
+                () => lezerCompletion.getCompletion(lezerDoc, lezerParams),
+                iterations
+            );
+
+            results.push({
+                blocks,
+                lines: lineCount,
+                chevrotainMs: Math.round(chevMs * 100) / 100,
+                lezerMs: Math.round(lezerMs * 100) / 100,
+                speedup: (chevMs / lezerMs).toFixed(1) + 'x',
+            });
+        }
+
+        console.log('\n=== Autocomplete Scaling (LSP pipeline) — Chevrotain vs Lezer ===');
+        console.table(results.map(r => ({
+            'Blocks': r.blocks,
+            'Lines': r.lines,
+            'Chevrotain (ms)': r.chevrotainMs,
+            'Lezer (ms)': r.lezerMs,
+            'Lezer speedup': r.speedup,
+        })));
+
+        // Sanity: completion should be reasonably fast (under 500ms) for all sizes
+        for (const r of results) {
+            expect(r.chevrotainMs).toBeLessThan(500);
+            expect(r.lezerMs).toBeLessThan(500);
+        }
     });
 });
 
