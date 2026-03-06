@@ -10,48 +10,48 @@ architecture that supports multiple backends (Chevrotain, Lezer) through a commo
       │
       ▼
 ┌──────────────────┐
-│ Grammar Parser    │  (unchanged — Langium parses its own grammar)
+│ Grammar Parser   │  (unchanged — Langium parses its own grammar)
 └────────┬─────────┘
          │ Grammar AST
          ├────────────────────────────────────────────────┐
          │                                                │
          ▼                                                ▼
 ┌──────────────────┐                           ┌────────────────────┐
-│ AST Type Gen      │ (ast.ts — unchanged)      │ GrammarTranslator  │
-└──────────────────┘                           │ (per backend)       │
+│ AST Type Gen     │ (ast.ts — unchanged)      │ GrammarTranslator  │
+└──────────────────┘                           │ (per backend)      │
                                                └────────┬───────────┘
                                                         │
                                   ┌─────────────────────┘
                                   │                      │
                                   ▼                      ▼
-                           ┌─────────────┐        ┌──────────────┐
+                           ┌──────────────┐        ┌───────────────┐
                            │ Chevrotain   │        │ Lezer         │
                            │ (in-memory   │        │ (.grammar →   │
                            │  interpreted)│        │  parse tables)│
-                           └──────┬──────┘        └──────┬───────┘
+                           └──────┬───────┘        └──────┬────────┘
                                   │                      │
                                   │         ┌────────────┘
                                   │         │
                                   ▼         ▼
                  ┌───────────────────────────────────────────────┐
-                 │              SyntaxNode Interface              │
+                 │              SyntaxNode Interface             │
                  │  (thin wrapper — each backend wraps its       │
                  │   native tree nodes, zero copy)               │
                  └─────────────────────┬─────────────────────────┘
                                        │
                                        ▼
                          ┌──────────────────────────┐
-                         │   AST Builder              │
-                         │   (walks SyntaxNode tree,  │
-                         │    constructs typed AST)    │
-                         └─────────────┬──────────────┘
+                         │   AST Builder            │
+                         │   (walks SyntaxNode tree,│
+                         │    constructs typed AST) │
+                         └─────────────┬────────────┘
                                        │
                                        ▼
-                         ┌──────────────────────────┐
-                         │   LSP Services             │
-                         │   (operate on AST +        │
+                         ┌─────────────────────────────┐
+                         │   LSP Services              │
+                         │   (operate on AST +         │
                          │    SyntaxNode for position) │
-                         └────────────────────────────┘
+                         └─────────────────────────────┘
 ```
 
 ## Package Structure

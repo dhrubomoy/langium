@@ -211,9 +211,9 @@ describe('Parse benchmarks — LIST_GRAMMAR', () => {
                 lezerIncrCharMs: Math.round(lezerIncrCharMs * 100) / 100,
                 lezerIncrLineMs: Math.round(lezerIncrLineMs * 100) / 100,
                 lezerIncrBlockMs: Math.round(lezerIncrBlockMs * 100) / 100,
-                speedupChar: (lezerFullMs / lezerIncrCharMs).toFixed(1) + 'x',
-                speedupLine: (lezerFullMs / lezerIncrLineMs).toFixed(1) + 'x',
-                speedupBlock: (lezerFullMs / lezerIncrBlockMs).toFixed(1) + 'x',
+                speedupChar: (chevrotainMs / lezerIncrCharMs).toFixed(1) + 'x',
+                speedupLine: (chevrotainMs / lezerIncrLineMs).toFixed(1) + 'x',
+                speedupBlock: (chevrotainMs / lezerIncrBlockMs).toFixed(1) + 'x',
             });
         }
 
@@ -226,9 +226,9 @@ describe('Parse benchmarks — LIST_GRAMMAR', () => {
             'Incr Char (ms)': r.lezerIncrCharMs,
             'Incr Line (ms)': r.lezerIncrLineMs,
             'Incr Block (ms)': r.lezerIncrBlockMs,
-            'Speedup (char)': r.speedupChar,
-            'Speedup (line)': r.speedupLine,
-            'Speedup (block)': r.speedupBlock,
+            'vs Chev (char)': r.speedupChar,
+            'vs Chev (line)': r.speedupLine,
+            'vs Chev (block)': r.speedupBlock,
         })));
 
         // Assertions: for large documents, incremental should be faster than full
@@ -319,9 +319,9 @@ describe('Parse benchmarks — Arithmetics grammar', () => {
                 lezerIncrCharMs: Math.round(lezerIncrCharMs * 100) / 100,
                 lezerIncrLineMs: Math.round(lezerIncrLineMs * 100) / 100,
                 lezerIncrBlockMs: Math.round(lezerIncrBlockMs * 100) / 100,
-                speedupChar: (lezerFullMs / lezerIncrCharMs).toFixed(1) + 'x',
-                speedupLine: (lezerFullMs / lezerIncrLineMs).toFixed(1) + 'x',
-                speedupBlock: (lezerFullMs / lezerIncrBlockMs).toFixed(1) + 'x',
+                speedupChar: (chevrotainMs / lezerIncrCharMs).toFixed(1) + 'x',
+                speedupLine: (chevrotainMs / lezerIncrLineMs).toFixed(1) + 'x',
+                speedupBlock: (chevrotainMs / lezerIncrBlockMs).toFixed(1) + 'x',
             });
         }
 
@@ -333,9 +333,9 @@ describe('Parse benchmarks — Arithmetics grammar', () => {
             'Incr Char (ms)': r.lezerIncrCharMs,
             'Incr Line (ms)': r.lezerIncrLineMs,
             'Incr Block (ms)': r.lezerIncrBlockMs,
-            'Speedup (char)': r.speedupChar,
-            'Speedup (line)': r.speedupLine,
-            'Speedup (block)': r.speedupBlock,
+            'vs Chev (char)': r.speedupChar,
+            'vs Chev (line)': r.speedupLine,
+            'vs Chev (block)': r.speedupBlock,
         })));
 
         // Assertions: for larger expression-heavy grammars, incremental should win
@@ -566,9 +566,9 @@ describe('Parse benchmarks — Complex grammar (15000 lines)', () => {
             'Incr Char (ms)': r(lezerIncrCharMs),
             'Incr Line (ms)': r(lezerIncrLineMs),
             'Incr Block (ms)': r(lezerIncrBlockMs),
-            'Speedup (char)': (lezerFullMs / lezerIncrCharMs).toFixed(1) + 'x',
-            'Speedup (line)': (lezerFullMs / lezerIncrLineMs).toFixed(1) + 'x',
-            'Speedup (block)': (lezerFullMs / lezerIncrBlockMs).toFixed(1) + 'x',
+            'vs Chev (char)': (chevrotainMs / lezerIncrCharMs).toFixed(1) + 'x',
+            'vs Chev (line)': (chevrotainMs / lezerIncrLineMs).toFixed(1) + 'x',
+            'vs Chev (block)': (chevrotainMs / lezerIncrBlockMs).toFixed(1) + 'x',
         }]);
 
         // Incremental must beat full for a 15k-line document
@@ -584,15 +584,17 @@ describe('Parse benchmarks — Complex grammar (15000 lines)', () => {
         const results: Array<{
             blocks: number;
             lines: number;
+            chevrotainMs: number;
             lezerFullMs: number;
             lezerIncrMs: number;
-            speedup: string;
+            vsChev: string;
         }> = [];
 
         for (const blocks of blockCounts) {
             const doc = generateComplexDocument(blocks);
             const lineCount = doc.split('\n').length;
 
+            const chevrotainMs = measure(() => chevrotainAdapter.parse(doc), iterations);
             const lezerFullMs = measure(() => lezerAdapter.parse(doc), iterations);
 
             const baseResult = lezerAdapter.parse(doc);
@@ -612,9 +614,10 @@ describe('Parse benchmarks — Complex grammar (15000 lines)', () => {
             results.push({
                 blocks,
                 lines: lineCount,
+                chevrotainMs: Math.round(chevrotainMs * 100) / 100,
                 lezerFullMs: Math.round(lezerFullMs * 100) / 100,
                 lezerIncrMs: Math.round(lezerIncrMs * 100) / 100,
-                speedup: (lezerFullMs / lezerIncrMs).toFixed(1) + 'x',
+                vsChev: (chevrotainMs / lezerIncrMs).toFixed(1) + 'x',
             });
         }
 
@@ -622,13 +625,14 @@ describe('Parse benchmarks — Complex grammar (15000 lines)', () => {
         console.table(results.map(r => ({
             'Blocks': r.blocks,
             'Lines': r.lines,
-            'Full (ms)': r.lezerFullMs,
-            'Incr (ms)': r.lezerIncrMs,
-            'Speedup': r.speedup,
+            'Chevrotain (ms)': r.chevrotainMs,
+            'Lezer Full (ms)': r.lezerFullMs,
+            'Lezer Incr (ms)': r.lezerIncrMs,
+            'vs Chevrotain': r.vsChev,
         })));
 
         // Speedup should grow: larger doc → bigger advantage
-        const speedups = results.map(r => r.lezerFullMs / r.lezerIncrMs);
+        const speedups = results.map(r => r.chevrotainMs / r.lezerIncrMs);
         for (let i = 1; i < speedups.length; i++) {
             // Each larger size should have at least as good a speedup ratio
             // (use 0.8x tolerance for timing variance)
@@ -757,12 +761,15 @@ function generateInfixDocument(blockCount: number): string {
     return lines.join('\n');
 }
 
-describe('Parse benchmarks — Infix grammar with Lezer features (Lezer-only)', () => {
+describe('Parse benchmarks — Infix grammar with Lezer features', () => {
     let lezerAdapter: LezerAdapter;
+    let chevrotainAdapter: ParserAdapter;
 
     beforeAll(async () => {
         const lezerResult = await createLezerAdapterForGrammar(INFIX_GRAMMAR);
         lezerAdapter = lezerResult.adapter;
+        const chevResult = await createChevrotainAdapterForGrammar(INFIX_GRAMMAR);
+        chevrotainAdapter = chevResult.adapter;
     });
 
     test('full parse + incremental at ~15000 lines', () => {
@@ -771,9 +778,12 @@ describe('Parse benchmarks — Infix grammar with Lezer features (Lezer-only)', 
         const charCount = doc.length;
         const iterations = 5;
 
-        console.log(`\n=== Infix Grammar (Lezer-only) — ${lineCount} lines, ${(charCount / 1024).toFixed(0)} KB ===`);
+        // Full parse — Chevrotain
+        const chevrotainMs = measure(() => chevrotainAdapter.parse(doc), iterations);
 
-        // Full parse
+        console.log(`\n=== Infix Grammar — ${lineCount} lines, ${(charCount / 1024).toFixed(0)} KB ===`);
+
+        // Full parse — Lezer
         const lezerFullMs = measure(() => lezerAdapter.parse(doc), iterations);
 
         // Set up incremental base
@@ -836,13 +846,14 @@ describe('Parse benchmarks — Infix grammar with Lezer features (Lezer-only)', 
         console.table([{
             'Lines': lineCount,
             'KB': (charCount / 1024).toFixed(0),
-            'Full (ms)': r(lezerFullMs),
+            'Chevrotain (ms)': r(chevrotainMs),
+            'Lezer Full (ms)': r(lezerFullMs),
             'Incr Char (ms)': r(lezerIncrCharMs),
             'Incr Line (ms)': r(lezerIncrLineMs),
             'Incr Block (ms)': r(lezerIncrBlockMs),
-            'Speedup (char)': (lezerFullMs / lezerIncrCharMs).toFixed(1) + 'x',
-            'Speedup (line)': (lezerFullMs / lezerIncrLineMs).toFixed(1) + 'x',
-            'Speedup (block)': (lezerFullMs / lezerIncrBlockMs).toFixed(1) + 'x',
+            'vs Chev (char)': (chevrotainMs / lezerIncrCharMs).toFixed(1) + 'x',
+            'vs Chev (line)': (chevrotainMs / lezerIncrLineMs).toFixed(1) + 'x',
+            'vs Chev (block)': (chevrotainMs / lezerIncrBlockMs).toFixed(1) + 'x',
         }]);
 
         // Incremental must beat full parse
@@ -851,22 +862,28 @@ describe('Parse benchmarks — Infix grammar with Lezer features (Lezer-only)', 
         expect(lezerIncrBlockMs).toBeLessThan(lezerFullMs);
     });
 
-    test('compare: infix grammar vs manual-chain grammar (Lezer only)', async () => {
-        // Also build adapter for the manual-chain COMPLEX_GRAMMAR
-        const complexResult = await createLezerAdapterForGrammar(COMPLEX_GRAMMAR);
-        const complexAdapter = complexResult.adapter;
+    test('compare: infix grammar vs manual-chain grammar', async () => {
+        // Build adapters for the manual-chain COMPLEX_GRAMMAR
+        const complexLezerResult = await createLezerAdapterForGrammar(COMPLEX_GRAMMAR);
+        const complexLezerAdapter = complexLezerResult.adapter;
+        const complexChevResult = await createChevrotainAdapterForGrammar(COMPLEX_GRAMMAR);
+        const complexChevAdapter = complexChevResult.adapter;
 
         const blockCount = 1000;
         const infixDoc = generateInfixDocument(blockCount);
         const complexDoc = generateComplexDocument(blockCount);
         const iterations = 5;
 
+        // Chevrotain baselines
+        const infixChevMs = measure(() => chevrotainAdapter.parse(infixDoc), iterations);
+        const complexChevMs = measure(() => complexChevAdapter.parse(complexDoc), iterations);
+
         const infixFullMs = measure(() => lezerAdapter.parse(infixDoc), iterations);
-        const complexFullMs = measure(() => complexAdapter.parse(complexDoc), iterations);
+        const complexFullMs = measure(() => complexLezerAdapter.parse(complexDoc), iterations);
 
         // Incremental comparison
         const infixBase = lezerAdapter.parse(infixDoc);
-        const complexBase = complexAdapter.parse(complexDoc);
+        const complexBase = complexLezerAdapter.parse(complexDoc);
 
         const infixMid = Math.floor(infixDoc.length / 2);
         const complexMid = Math.floor(complexDoc.length / 2);
@@ -881,7 +898,7 @@ describe('Parse benchmarks — Infix grammar with Lezer features (Lezer-only)', 
             iterations
         );
         const complexIncrMs = measure(
-            () => complexAdapter.parseIncremental!(complexEdited, complexBase.incrementalState!, [
+            () => complexLezerAdapter.parseIncremental!(complexEdited, complexBase.incrementalState!, [
                 { rangeOffset: complexMid, rangeLength: 0, text: 'x' }
             ]),
             iterations
@@ -889,21 +906,23 @@ describe('Parse benchmarks — Infix grammar with Lezer features (Lezer-only)', 
 
         const r = (n: number) => Math.round(n * 100) / 100;
 
-        console.log('\n=== Infix vs Manual-Chain (Lezer only) ===');
+        console.log('\n=== Infix vs Manual-Chain ===');
         console.table([
             {
                 'Grammar': 'Infix (BinaryExpr)',
                 'Lines': infixDoc.split('\n').length,
-                'Full (ms)': r(infixFullMs),
-                'Incr (ms)': r(infixIncrMs),
-                'Speedup': (infixFullMs / infixIncrMs).toFixed(1) + 'x',
+                'Chevrotain (ms)': r(infixChevMs),
+                'Lezer Full (ms)': r(infixFullMs),
+                'Lezer Incr (ms)': r(infixIncrMs),
+                'vs Chevrotain': (infixChevMs / infixIncrMs).toFixed(1) + 'x',
             },
             {
                 'Grammar': 'Manual Chain (5-level)',
                 'Lines': complexDoc.split('\n').length,
-                'Full (ms)': r(complexFullMs),
-                'Incr (ms)': r(complexIncrMs),
-                'Speedup': (complexFullMs / complexIncrMs).toFixed(1) + 'x',
+                'Chevrotain (ms)': r(complexChevMs),
+                'Lezer Full (ms)': r(complexFullMs),
+                'Lezer Incr (ms)': r(complexIncrMs),
+                'vs Chevrotain': (complexChevMs / complexIncrMs).toFixed(1) + 'x',
             },
         ]);
 
