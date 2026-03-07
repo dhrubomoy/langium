@@ -309,6 +309,7 @@ export const RequirementsGrammar = (): Grammar => loadedRequirementsGrammar ?? (
   "localTokenBlocks": [],
   "precedenceBlocks": [],
   "specializeBlocks": [],
+  "tokenPrecedenceBlocks": [],
   "types": []
 }`));
 
@@ -811,5 +812,6 @@ export const TestsGrammar = (): Grammar => loadedTestsGrammar ?? (loadedTestsGra
   "localTokenBlocks": [],
   "precedenceBlocks": [],
   "specializeBlocks": [],
+  "tokenPrecedenceBlocks": [],
   "types": []
 }`));

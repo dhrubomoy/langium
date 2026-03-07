@@ -10,7 +10,7 @@
     },
     {
       "name": "keyword.control.simple-sql",
-      "match": "\\b(and|as|bool|create|false|float|from|insert|int|into|not|null|or|select|table|text|true|values|where)\\b"
+      "match": "(?i)\\b(and|as|bool|create|false|float|from|insert|int|into|not|null|or|select|table|text|true|values|where)\\b"
     },
     {
       "name": "string.quoted.single.simple-sql",

@@ -339,5 +339,6 @@ export const StatemachineModelGrammar = (): Grammar => loadedStatemachineModelGr
   "localTokenBlocks": [],
   "precedenceBlocks": [],
   "specializeBlocks": [],
+  "tokenPrecedenceBlocks": [],
   "types": []
 }`));

@@ -389,5 +389,6 @@ export const DomainModelGrammar = (): Grammar => loadedDomainModelGrammar ?? (lo
   "localTokenBlocks": [],
   "precedenceBlocks": [],
   "specializeBlocks": [],
+  "tokenPrecedenceBlocks": [],
   "types": []
 }`));

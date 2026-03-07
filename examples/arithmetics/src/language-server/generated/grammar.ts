@@ -521,5 +521,6 @@ export const ArithmeticsGrammar = (): Grammar => loadedArithmeticsGrammar ?? (lo
   "interfaces": [],
   "localTokenBlocks": [],
   "precedenceBlocks": [],
-  "specializeBlocks": []
+  "specializeBlocks": [],
+  "tokenPrecedenceBlocks": []
 }`));

@@ -324,7 +324,18 @@ export async function runGenerator(config: LangiumConfig, options: GenerateOptio
     const output = path.resolve(relPath, config.out ?? 'src/generated');
     log('log', options, `Writing generated files to ${chalk.white.bold(output)}`);
 
-    if (await rmdirWithFail(output, ['ast.ts', 'grammar.ts', 'module.ts'], options)) {
+    const expectedFiles = ['ast.ts', 'grammar.ts', 'module.ts'];
+    const backend = options.backend ?? config.parserBackend ?? 'chevrotain';
+    if (backend === 'lezer') {
+        for (const lang of languages) {
+            const id = lang.entryGrammar.name ?? '';
+            expectedFiles.push(
+                `${id}.grammar`, `${id}.field-map.json`, `${id}.keywords.json`,
+                `${id}.parser.ts`, `${id}.terms.ts`, `${id}.keywords.ts`
+            );
+        }
+    }
+    if (await rmdirWithFail(output, expectedFiles, options)) {
         return buildResult(false);
     }
     if (await mkdirWithFail(output, options)) {
@@ -354,7 +365,6 @@ export async function runGenerator(config: LangiumConfig, options: GenerateOptio
     await writeWithFail(path.resolve(output, 'module.ts'), genModule, options);
 
     // Lezer backend: generate Lezer grammar and parse tables
-    const backend = options.backend ?? config.parserBackend ?? 'chevrotain';
     if (backend === 'lezer') {
         try {
             const { LezerGrammarTranslator } = await import('langium-lezer');
