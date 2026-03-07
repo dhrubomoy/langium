@@ -500,12 +500,15 @@ export async function embedGrammars(languages: LanguageInfo[], config: LangiumCo
     // We need to rescope the grammars again
     // They need to pick up on the embedded references
     await relinkGrammars(languages.map(l => l.embeddedGrammar));
-    // Create and validate the in-memory parser
-    for (const language of languages) {
-        const parserAnalysis = await validateParser(language.embeddedGrammar, config, language.languageConfig, grammarServices);
-        if (parserAnalysis instanceof Error) {
-            log('error', options, chalk.red(parserAnalysis.toString()));
-            return false;
+    // Create and validate the in-memory parser (Chevrotain only)
+    const backend = options.backend ?? config.parserBackend ?? 'chevrotain';
+    if (backend !== 'lezer') {
+        for (const language of languages) {
+            const parserAnalysis = await validateParser(language.embeddedGrammar, config, language.languageConfig, grammarServices);
+            if (parserAnalysis instanceof Error) {
+                log('error', options, chalk.red(parserAnalysis.toString()));
+                return false;
+            }
         }
     }
     return true;

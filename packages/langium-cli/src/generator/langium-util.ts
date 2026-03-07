@@ -41,6 +41,9 @@ export function collectTerminalRegexps(grammar: Grammar): Record<string, RegExp>
     const result: Record<string, RegExp> = {};
     const reachableRules = GrammarUtils.getAllReachableRules(grammar, false);
     for (const terminalRule of stream(reachableRules).filter(GrammarAST.isTerminalRule)) {
+        if (terminalRule.nativeBody || !terminalRule.definition) {
+            continue;
+        }
         const name = terminalRule.name;
         const regexp = GrammarUtils.terminalRegex(terminalRule);
         result[name] = regexp;

@@ -35,7 +35,7 @@ export function generatePrismHighlighting(grammar: Grammar, config: LangiumLangu
         }));
     }
     const stringTerminal = terminals.find(e => e.name.toLowerCase() === 'string');
-    if (stringTerminal) {
+    if (stringTerminal && !stringTerminal.nativeBody && stringTerminal.definition) {
         highlighter.string = {
             pattern: GrammarUtils.terminalRegex(stringTerminal).toString(),
             greedy: true

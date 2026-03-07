@@ -44,6 +44,7 @@ export type LangiumGrammarKeywordNames =
     | "@"
     | "@dynamicPrecedence"
     | "@precMarker"
+    | "@skip"
     | "Date"
     | "EOF"
     | "["
@@ -71,6 +72,7 @@ export type LangiumGrammarKeywordNames =
     | "interface"
     | "left"
     | "local"
+    | "native"
     | "number"
     | "on"
     | "precedence"
@@ -758,7 +760,7 @@ export function isParameterReference(item: unknown): item is ParameterReference 
 }
 
 export interface ParserRule extends langium.AstNode {
-    readonly $container: Grammar;
+    readonly $container: Grammar | SkipBlock;
     readonly $type: 'ParserRule';
     dataType?: PrimitiveType;
     definition: AbstractElement;
@@ -1017,7 +1019,7 @@ export function isTerminalGroup(item: unknown): item is TerminalGroup {
 }
 
 export interface TerminalRule extends langium.AstNode {
-    readonly $container: Grammar | LocalTokenBlock;
+    readonly $container: Grammar | LocalTokenBlock | TokensBlock;
     readonly $type: 'TerminalRule';
     definition?: TerminalElement;
     fragment: boolean;
