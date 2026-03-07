@@ -74,7 +74,7 @@ function getRepository(grammar: Grammar, config: LangiumLanguageConfig): Reposit
     const commentPatterns: Pattern[] = [];
     let stringEscapePattern: Pattern | undefined;
     for (const rule of grammar.rules) {
-        if (GrammarAST.isTerminalRule(rule) && GrammarUtils.isCommentTerminal(rule)) {
+        if (GrammarAST.isTerminalRule(rule) && !rule.nativeBody && rule.definition && GrammarUtils.isCommentTerminal(rule)) {
             const parts = RegExpUtils.getTerminalParts(GrammarUtils.terminalRegex(rule));
             for (const part of parts) {
                 if (part.end) {
@@ -172,7 +172,7 @@ function getStringPatterns(grammar: Grammar, pack: LangiumLanguageConfig): Patte
     const terminals = stream(grammar.rules).filter(GrammarAST.isTerminalRule);
     const stringTerminal = terminals.find(e => e.name.toLowerCase() === 'string');
     const stringPatterns: Pattern[] = [];
-    if (stringTerminal) {
+    if (stringTerminal && !stringTerminal.nativeBody && stringTerminal.definition) {
         const parts = RegExpUtils.getTerminalParts(GrammarUtils.terminalRegex(stringTerminal));
         for (const part of parts) {
             if (part.end) {

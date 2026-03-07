@@ -4,24 +4,20 @@
  * terms of the MIT License, which is available in the project root.
  *
  * @module langium
- */
+ ******************************************************************************/
 
-export * from './default-module.js';
-export * from './dependency-injection.js';
-export * from './service-registry.js';
-export * from './services.js';
-export * from './syntax-tree.js';
-export * from './documentation/index.js';
-export * from './languages/index.js';
-export * from './parser/index.js';
-export * from './references/index.js';
-export * from './serializer/index.js';
-export * from './utils/index.js';
-export * from './validation/index.js';
-export * from './workspace/index.js';
+// Re-export everything from core and chevrotain packages
+export * from 'langium-core';
+export * from 'langium-chevrotain';
 
-// Export the Langium Grammar AST definitions in the `GrammarAST` namespace
-import * as GrammarAST from './languages/generated/ast.js';
-import type { Grammar } from './languages/generated/ast.js';
-export type { Grammar };
-export { GrammarAST };
+// Explicit named exports from default-module override the core-only versions
+// from langium-core (explicit exports take precedence over export * wildcards).
+// The meta-package versions include Chevrotain services for backward compatibility.
+export { createDefaultCoreModule, createDefaultSharedCoreModule } from './default-module.js';
+export type { DefaultCoreModuleContext, DefaultSharedCoreModuleContext } from './default-module.js';
+
+// Override RegExpUtils to include Chevrotain-specific functions (getTerminalParts, etc.)
+export { RegExpUtils } from './utils-override.js';
+
+// Side-effect import: registers the grammar services factory
+import './default-module.js';

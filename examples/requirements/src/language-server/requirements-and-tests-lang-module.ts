@@ -4,7 +4,7 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import { inject } from 'langium';
+import { inject, createChevrotainModule } from 'langium';
 import { createDefaultModule, createDefaultSharedModule, type DefaultSharedModuleContext, type LangiumSharedServices } from 'langium/lsp';
 import { RequirementsAndTestsGeneratedSharedModule, RequirementsGeneratedModule, TestsGeneratedModule } from './generated/module.js';
 import type { RequirementsLangServices } from './requirements-lang-module.js';
@@ -40,11 +40,13 @@ export function createRequirementsAndTestsLangServices(context: DefaultSharedMod
     );
     const requirements = inject(
         createDefaultModule({ shared }),
+        createChevrotainModule(),
         RequirementsGeneratedModule,
         RequirementsLangModule
     );
     const tests = inject(
         createDefaultModule({ shared }),
+        createChevrotainModule(),
         TestsGeneratedModule,
         TestsLangModule
     );

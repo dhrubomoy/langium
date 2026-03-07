@@ -75,6 +75,20 @@
             ]
         },
         {
+            "name": "Run Simple SQL Extension",
+            "type": "extensionHost",
+            "request": "launch",
+            "runtimeExecutable": "${execPath}",
+            "args": [
+                "${workspaceFolder}/examples/simple-sql/example",
+                "--extensionDevelopmentPath=${workspaceFolder}/examples/simple-sql"
+            ],
+            "sourceMaps": true,
+            "outFiles": [
+                "${workspaceFolder}/{packages,examples}/*/{lib,out}/**/*.js"
+            ]
+        },
+        {
             "name": "Attach to Language Server",
             "type": "node",
             "port": 6009,

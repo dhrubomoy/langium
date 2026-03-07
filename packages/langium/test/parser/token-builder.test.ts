@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 import type { TokenPattern, TokenType } from '@chevrotain/types';
-import type { Grammar } from 'langium';
+import type { Grammar, LangiumChevrotainServices } from 'langium';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { EmptyFileSystem } from 'langium';
 import { createLangiumGrammarServices } from 'langium/grammar';
@@ -13,7 +13,7 @@ import { parseHelper } from 'langium/test';
 
 const grammarServices = createLangiumGrammarServices(EmptyFileSystem).grammar;
 const helper = parseHelper<Grammar>(grammarServices);
-const tokenBuilder = grammarServices.parser.TokenBuilder;
+const tokenBuilder = (grammarServices as unknown as LangiumChevrotainServices).parser.TokenBuilder;
 
 async function getTokens(grammarString: string): Promise<TokenType[]> {
     const grammar = (await helper(grammarString)).parseResult.value;

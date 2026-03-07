@@ -10,7 +10,8 @@ import { expandToString } from 'langium/generate';
 import { createLangiumGrammarServices } from 'langium/grammar';
 import { parseHelper } from 'langium/test';
 import { describe, expect, test } from 'vitest';
-import { RangeComparison, compareRange } from '../../src/utils/cst-utils.js';
+
+const { RangeComparison, compareRange } = CstUtils;
 
 const { findLeafNodeAtOffset, findLeafNodeBeforeOffset } = CstUtils;
 

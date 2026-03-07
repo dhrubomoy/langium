@@ -3,11 +3,8 @@
  * DO NOT EDIT MANUALLY!
  ******************************************************************************/
 
-import type { LanguageMetaData } from '../../languages/language-meta-data.js';
+import type { LanguageMetaData, Module, LangiumSharedCoreServices, LangiumCoreServices, LangiumGeneratedCoreServices, LangiumGeneratedSharedCoreServices, ParserConfig } from 'langium-core';
 import { LangiumGrammarAstReflection } from '../../languages/generated/ast.js';
-import type { Module } from '../../dependency-injection.js';
-import type { LangiumSharedCoreServices, LangiumCoreServices, LangiumGeneratedCoreServices, LangiumGeneratedSharedCoreServices } from '../../services.js';
-import type { IParserConfig } from '../../parser/parser-config.js';
 import { LangiumGrammarGrammar } from './grammar.js';
 
 export const LangiumGrammarLanguageMetaData = {
@@ -17,7 +14,7 @@ export const LangiumGrammarLanguageMetaData = {
     mode: 'development'
 } as const satisfies LanguageMetaData;
 
-export const LangiumGrammarParserConfig: IParserConfig = {
+export const LangiumGrammarParserConfig: ParserConfig = {
     maxLookahead: 3,
 };
 

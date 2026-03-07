@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 import { describe, expectTypeOf, test } from 'vitest';
-import type { AstNode, AstNodeTypesWithCrossReferences, AstTypeList, CrossReferencesOfAstNodeType, Reference } from '../src/syntax-tree.js';
+import type { AstNode, AstNodeTypesWithCrossReferences, AstTypeList, CrossReferencesOfAstNodeType, Reference } from 'langium';
 
 describe('Utility types revealing cross-reference properties', () => {
 
