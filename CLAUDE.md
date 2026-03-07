@@ -129,6 +129,7 @@ Phase file: [docs/phases/PHASE-2.md](docs/phases/PHASE-2.md)
 - [x] Implement a Lezer-compatible completion provider (`LezerCompletionProvider` in langium-lsp)
 - [x] Add cross-reference position navigation support for Lezer SyntaxNodes
 - [ ] Add comment folding support for Lezer (detect comment nodes by type name)
+- [x] Add case-insensitive keyword support for Lezer backend (uses `@external specialize` with a generated keywords module that lowercases input before matching)
 
 ## Conventions
 

@@ -9,27 +9,27 @@
 // precedence 2: =, !=, <, >, <=, >= (left)
 // precedence 3: +, - (left)
 // precedence 4: *, / (left)
-Expr { Expr !prec_Expr_0 kw<"or"> Expr | Expr !prec_Expr_1 kw<"and"> Expr | Expr !prec_Expr_2 "=" Expr | Expr !prec_Expr_2 "!=" Expr | Expr !prec_Expr_2 "<" Expr | Expr !prec_Expr_2 ">" Expr | Expr !prec_Expr_2 "<=" Expr | Expr !prec_Expr_2 ">=" Expr | Expr !prec_Expr_3 "+" Expr | Expr !prec_Expr_3 "-" Expr | Expr !prec_Expr_4 "*" Expr | Expr !prec_Expr_4 "/" Expr | PrimaryExpr }
+Expr { Expr !prec_Expr_0 or Expr | Expr !prec_Expr_1 and Expr | Expr !prec_Expr_2 "=" Expr | Expr !prec_Expr_2 "!=" Expr | Expr !prec_Expr_2 "<" Expr | Expr !prec_Expr_2 ">" Expr | Expr !prec_Expr_2 "<=" Expr | Expr !prec_Expr_2 ">=" Expr | Expr !prec_Expr_3 "+" Expr | Expr !prec_Expr_3 "-" Expr | Expr !prec_Expr_4 "*" Expr | Expr !prec_Expr_4 "/" Expr | PrimaryExpr }
 
 Statement { (SelectStmt | CreateTableStmt | InsertStmt) }
 
-SelectStmt { kw<"select"> (SelectStmtStar | SelectStmtColumns ("," SelectStmtColumns)*) kw<"from"> SelectStmtTable (kw<"where"> SelectStmtCondition)? ";" }
+SelectStmt { select (SelectStmtStar | SelectStmtColumns ("," SelectStmtColumns)*) from SelectStmtTable (where SelectStmtCondition)? ";" }
 
-ColumnExpr { ColumnExprExpression (kw<"as"> ColumnExprAlias)? }
+ColumnExpr { ColumnExprExpression (as ColumnExprAlias)? }
 
-CreateTableStmt { kw<"create"> kw<"table"> CreateTableStmtName "(" CreateTableStmtColumns ("," CreateTableStmtColumns)* ")" ";" }
+CreateTableStmt { create table CreateTableStmtName "(" CreateTableStmtColumns ("," CreateTableStmtColumns)* ")" ";" }
 
 ColumnDef { ColumnDefName !TypeAnnotation ColumnDefType }
 
-DataType { (kw<"int"> | kw<"text"> | kw<"float"> | kw<"bool">) }
+DataType { (int | text | float | bool) }
 
-InsertStmt { kw<"insert"> kw<"into"> InsertStmtTable kw<"values"> "(" InsertStmtValues ("," InsertStmtValues)* ")" ";" }
+InsertStmt { insert into InsertStmtTable values "(" InsertStmtValues ("," InsertStmtValues)* ")" ";" }
 
 PrimaryExpr { (NumberLit | StringLit | BoolLit | NullLit | FunctionCall | ColumnRef | ParenExpr | NotExpr) }
 
 ParenExpr { "(" ParenExprInner ")" }
 
-NotExpr { kw<"not"> NotExprOperand }
+NotExpr { not NotExprOperand }
 
 FunctionCall[@dynamicPrecedence=2] { ~conflict_FunctionCall_ColumnRef FunctionCallName "(" (FunctionCallArgs ("," FunctionCallArgs)*)? ")" }
 
@@ -41,7 +41,7 @@ StringLit { StringLitValue }
 
 BoolLit { BoolLitValue }
 
-NullLit {  kw<"null"> }
+NullLit {  null }
 
 // Wrapper rules for field access
 ProgramStatements { Statement }
@@ -64,9 +64,9 @@ FunctionCallArgs { Expr }
 ColumnRefName { Identifier }
 NumberLitValue { Number }
 StringLitValue { String }
-BoolLitValue { (kw<"true"> | kw<"false">) }
+BoolLitValue { (true | false) }
 
-kw<term> { @specialize[@name={term}]<Identifier, term> }
+@external specialize {Identifier} keywords from "./SimpleSQL.keywords.js" { or[@name=or], and[@name=and], select[@name=select], from[@name=from], where[@name=where], as[@name=as], create[@name=create], table[@name=table], int[@name=int], text[@name=text], float[@name=float], bool[@name=bool], insert[@name=insert], into[@name=into], values[@name=values], not[@name=not], true[@name=true], false[@name=false], null[@name=null] }
 
 @tokens {
   @precedence { LineComment, "-" }

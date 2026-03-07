@@ -10,7 +10,7 @@ import { SimpleSQLGrammar } from './grammar.js';
 export const SimpleSQLLanguageMetaData = {
     languageId: 'simple-sql',
     fileExtensions: ['.ssql'],
-    caseInsensitive: false,
+    caseInsensitive: true,
     mode: 'development'
 } as const satisfies LanguageMetaData;
 

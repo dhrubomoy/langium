@@ -618,3 +618,94 @@ describe('Large File Autocomplete Performance', () => {
         expect(completionMs).toBeLessThan(500);
     });
 });
+
+// ── 8. Case-Insensitive Keywords ─────────────────────────────────────────────
+
+describe('Case-Insensitive Keywords', () => {
+
+    test('Uppercase keywords parse correctly', async () => {
+        const doc = await parseDocument(
+            'CREATE TABLE users (id INT, name TEXT);\n' +
+            'SELECT id FROM users;'
+        );
+        expect(doc.parseResult.lexerErrors).toHaveLength(0);
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        const program = doc.parseResult.value;
+        expect(program.statements).toHaveLength(2);
+        expect(program.statements[0].$type).toBe('CreateTableStmt');
+        expect(program.statements[1].$type).toBe('SelectStmt');
+    });
+
+    test('Mixed-case keywords parse correctly', async () => {
+        const doc = await parseDocument(
+            'Create Table users (id Int, name Text);\n' +
+            'Select id From users;'
+        );
+        expect(doc.parseResult.lexerErrors).toHaveLength(0);
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        const program = doc.parseResult.value;
+        expect(program.statements).toHaveLength(2);
+        const create = program.statements[0] as CreateTableStmt;
+        expect(create.name).toBe('users');
+        expect(create.columns).toHaveLength(2);
+    });
+
+    test('Lowercase keywords still work', async () => {
+        const doc = await parseDocument(
+            'create table users (id int);\n' +
+            'select id from users;'
+        );
+        expect(doc.parseResult.lexerErrors).toHaveLength(0);
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+    });
+
+    test('Cross-references resolve with uppercase keywords', async () => {
+        const doc = await parseDocument(
+            'CREATE TABLE users (id INT);\n' +
+            'SELECT id FROM users;'
+        );
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        const program = doc.parseResult.value;
+        const select = program.statements[1] as SelectStmt;
+        expect(select.table.ref).toBeDefined();
+        expect(select.table.ref!.name).toBe('users');
+    });
+
+    test('WHERE clause with mixed-case operators', async () => {
+        const doc = await parseDocument(
+            'CREATE TABLE t (id INT, active INT);\n' +
+            'SELECT id FROM t WHERE id > 1 AND active = 1 OR id = 0;'
+        );
+        expect(doc.parseResult.lexerErrors).toHaveLength(0);
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        const program = doc.parseResult.value;
+        const select = program.statements[1] as SelectStmt;
+        expect(select.condition).toBeDefined();
+    });
+
+    test('INSERT with uppercase keywords', async () => {
+        const doc = await parseDocument(
+            'CREATE TABLE t (id INT);\n' +
+            'INSERT INTO t VALUES (1);'
+        );
+        expect(doc.parseResult.lexerErrors).toHaveLength(0);
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        const program = doc.parseResult.value;
+        const insert = program.statements[1] as InsertStmt;
+        expect(insert.$type).toBe('InsertStmt');
+        expect(insert.values).toHaveLength(1);
+    });
+
+    test('Boolean and null literals with mixed case', async () => {
+        const doc = await parseDocument(
+            'CREATE TABLE t (id INT);\n' +
+            'INSERT INTO t VALUES (TRUE);\n' +
+            'INSERT INTO t VALUES (False);\n' +
+            'INSERT INTO t VALUES (NULL);'
+        );
+        expect(doc.parseResult.lexerErrors).toHaveLength(0);
+        expect(doc.parseResult.parserErrors).toHaveLength(0);
+        const program = doc.parseResult.value;
+        expect(program.statements).toHaveLength(4);
+    });
+});

@@ -360,6 +360,8 @@ export async function runGenerator(config: LangiumConfig, options: GenerateOptio
             const { LezerGrammarTranslator } = await import('langium-lezer');
             const translator = new LezerGrammarTranslator();
             for (const grammar of embeddedGrammars) {
+                const langConfig = configMap.get(grammar);
+                translator.caseInsensitive = Boolean(langConfig?.caseInsensitive);
                 const lezerDiags = translator.validate(grammar);
                 const hasLezerErrors = lezerDiags.some(d => d.severity === 'error');
                 for (const diag of lezerDiags) {

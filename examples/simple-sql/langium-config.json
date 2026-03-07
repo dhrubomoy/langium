@@ -3,6 +3,7 @@
     "parserBackend": "lezer",
     "languages": [{
         "id": "simple-sql",
+        "caseInsensitive": true,
         "grammar": "src/language-server/simple-sql.langium",
         "fileExtensions": [".ssql"],
         "textMate": {

@@ -83,17 +83,27 @@ export async function parseGrammarString(grammarString: string): Promise<Grammar
  * Create a LezerAdapter configured for the given grammar string.
  * Uses in-memory grammar generation + buildParser() — no file I/O.
  */
-export async function createLezerAdapterForGrammar(grammarString: string): Promise<{
+export async function createLezerAdapterForGrammar(grammarString: string, options?: { caseInsensitive?: boolean }): Promise<{
     adapter: LezerAdapter;
     grammar: Grammar;
 }> {
     const grammar = await parseGrammarString(grammarString);
 
     const translator = new LezerGrammarTranslator();
+    translator.caseInsensitive = options?.caseInsensitive ?? false;
     const { grammarText, fieldMapData, keywords } = translator.generateGrammarInMemory(grammar);
 
     // Build an in-memory LRParser from the Lezer grammar text
-    const parser = buildParser(grammarText);
+    const buildOptions = options?.caseInsensitive ? {
+        externalSpecializer(_name: string, terms: { [name: string]: number }) {
+            const lowerMap: Record<string, number> = Object.create(null);
+            for (const [key, id] of Object.entries(terms)) {
+                lowerMap[key.toLowerCase()] = id;
+            }
+            return (value: string) => lowerMap[value.toLowerCase()] ?? -1;
+        }
+    } : undefined;
+    const parser = buildParser(grammarText, buildOptions);
 
     const fieldMap = new DefaultFieldMap(fieldMapData);
 
@@ -237,12 +247,13 @@ export function assertTreesStructurallyEqual(a: SyntaxNode, b: SyntaxNode, path 
  * Only does grammar text generation — does NOT call buildParser().
  * Useful for testing grammar output structure without needing working parse tables.
  */
-export async function generateLezerGrammarText(grammarString: string): Promise<{
+export async function generateLezerGrammarText(grammarString: string, options?: { caseInsensitive?: boolean }): Promise<{
     grammarText: string;
     keywords: Set<string>;
 }> {
     const grammar = await parseGrammarString(grammarString);
     const translator = new LezerGrammarTranslator();
+    translator.caseInsensitive = options?.caseInsensitive ?? false;
     const { grammarText, keywords } = translator.generateGrammarInMemory(grammar);
     return { grammarText, keywords };
 }
@@ -263,17 +274,29 @@ export function generateLargeDocument(itemCount: number): string {
  * This enables DocumentFactory.parse() to use the
  * ParserAdapter → SyntaxNodeAstBuilder pipeline.
  */
-export async function createLezerServicesForGrammar(grammarString: string): Promise<{
+export async function createLezerServicesForGrammar(grammarString: string, options?: { caseInsensitive?: boolean }): Promise<{
     shared: LangiumSharedCoreServices;
     parser: LangiumCoreServices;
 }> {
+    const caseInsensitive = options?.caseInsensitive ?? false;
+
     // 1. Parse the grammar
     const grammar = await parseGrammarString(grammarString);
 
     // 2. Generate Lezer parse tables
     const translator = new LezerGrammarTranslator();
+    translator.caseInsensitive = caseInsensitive;
     const { grammarText, fieldMapData, keywords } = translator.generateGrammarInMemory(grammar);
-    const parser = buildParser(grammarText);
+    const buildOptions = caseInsensitive ? {
+        externalSpecializer(_name: string, terms: { [name: string]: number }) {
+            const lowerMap: Record<string, number> = Object.create(null);
+            for (const [key, id] of Object.entries(terms)) {
+                lowerMap[key.toLowerCase()] = id;
+            }
+            return (value: string) => lowerMap[value.toLowerCase()] ?? -1;
+        }
+    } : undefined;
+    const parser = buildParser(grammarText, buildOptions);
     const fieldMap = new DefaultFieldMap(fieldMapData);
 
     // 3. Create a Lezer adapter loaded with parse tables
@@ -282,7 +305,7 @@ export async function createLezerServicesForGrammar(grammarString: string): Prom
 
     // 4. Build DI services: core module + Lezer parser override (no Chevrotain)
     const languageMetaData = {
-        caseInsensitive: false,
+        caseInsensitive,
         fileExtensions: ['.txt'],
         languageId: grammar.name ?? 'test',
         mode: 'development' as const
