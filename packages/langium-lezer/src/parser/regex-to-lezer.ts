@@ -288,6 +288,7 @@ function translateEscape(pattern: string, start: number): TranslateResult {
         case 't': return { result: '"\\t"', consumed: 2 };
         case '\\': return { result: '"\\\\"', consumed: 2 };
         case '/': return { result: '"/"', consumed: 2 };
+        case '"': return { result: "'\"'", consumed: 2 };
         default:
             // Literal escape — pass through as quoted
             return { result: `"${next}"`, consumed: 2 };
@@ -317,9 +318,9 @@ function isQuantifier(ch: string): boolean {
 }
 
 function escapeLiteralForLezer(ch: string): string {
-    // Characters that need quoting in Lezer grammar
-    if (/[a-zA-Z0-9_]/.test(ch)) {
-        return `"${ch}"`;
+    // Double quote needs to be wrapped in single quotes in Lezer grammar
+    if (ch === '"') {
+        return "'\"'";
     }
     return `"${ch}"`;
 }

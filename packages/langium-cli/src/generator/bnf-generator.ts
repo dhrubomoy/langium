@@ -66,8 +66,10 @@ function processRule(rule: ast.AbstractRule, ctx: GeneratorContext): string {
     }
     if (ast.isInfixRule(rule)) {
         return `${ruleComment}${processName(ruleName, ctx)} ::= ${hiddenPrefix}${processInfix(rule, ctx)}`;
+    } else if (ast.isTerminalRule(rule) && rule.nativeBody) {
+        return `${ruleComment}${processName(ruleName, ctx)} ::= ${hiddenPrefix}/* native: ${rule.nativeBody} */`;
     } else {
-        return `${ruleComment}${processName(ruleName, ctx)} ::= ${hiddenPrefix}${processElement(rule.definition, ctx)}`;
+        return `${ruleComment}${processName(ruleName, ctx)} ::= ${hiddenPrefix}${processElement(rule.definition!, ctx)}`;
     }
 }
 

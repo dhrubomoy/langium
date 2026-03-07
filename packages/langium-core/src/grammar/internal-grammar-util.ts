@@ -146,7 +146,7 @@ export function extractAssignments(element: ast.AbstractElement): ast.Assignment
         if (ast.isInfixRule(element.rule.ref)) {
             return [];
         }
-        return extractAssignments(element.rule.ref.definition);
+        return element.rule.ref.definition ? extractAssignments(element.rule.ref.definition) : [];
     }
     return [];
 }

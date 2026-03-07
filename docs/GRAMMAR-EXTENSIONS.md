@@ -15,7 +15,7 @@ All new syntax uses keywords and constructs that don't conflict with existing La
 | `external tokens` | Custom matchers | Native |
 | `external context` | Error | Native |
 | Terminal regex body (`/pattern/`) | Native | Best-effort conversion |
-| Terminal string body (`'native'`) | Error | Verbatim passthrough |
+| Terminal `native` body | Error | Verbatim passthrough |
 | `conflicts` / GLR | Error | Native |
 | `@dynamicPrecedence` | Error | Native |
 | `specialize` / `extend` | Partial | Native |
@@ -277,17 +277,23 @@ terminal INT: /[0-9]+/;
   - `.` → `_`
   - Complex features (backreferences, lookahead) produce an error diagnostic
 
-### String Body (Backend-Native)
+### Native Body (Backend-Specific)
+
+Use the `native` keyword followed by a string to write terminal bodies in the target
+backend's native syntax. The string is passed verbatim to the Lezer grammar output.
 
 ```langium
-terminal ID: '$[a-zA-Z_] $[a-zA-Z0-9_]*';
-terminal INT: '@digit+';
+terminal Number returns number: native '@digit+';
+terminal HexString: native '"0" ("x" | "X") $[0-9a-fA-F]+';
+hidden terminal BlockComment: native '"/*" (![*] | "*" ![/])* "*/"';
 ```
 
-- **Lezer**: Passed verbatim into the `@tokens` block
-- **Chevrotain**: Not supported (produces an error: "use regex `/pattern/` instead")
+- **Lezer**: The string content is emitted verbatim as the token body in the `@tokens` block
+- **Chevrotain**: Not supported (emitted as a comment in BNF output)
 
 ### Guidance
 
-Use regex bodies for portability across backends. Use string bodies when you need
-precise control over Lezer's token syntax or when regex can't express what you need.
+Use regex bodies for portability across backends. Use `native` bodies when you need
+precise control over Lezer's token syntax or when regex can't express what you need
+(e.g., Lezer built-in character classes like `@digit`, `@whitespace`, or complex
+token patterns with negated character sets).

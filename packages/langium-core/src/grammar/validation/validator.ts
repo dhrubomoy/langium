@@ -1314,6 +1314,9 @@ function isEmptyRule(rule: ast.AbstractRule): boolean {
     if (ast.isInfixRule(rule)) {
         return false;
     }
+    if (ast.isTerminalRule(rule) && rule.nativeBody) {
+        return false;
+    }
     return !rule.definition || !rule.definition.$cstNode || rule.definition.$cstNode.length === 0;
 }
 

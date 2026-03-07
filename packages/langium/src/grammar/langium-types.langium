@@ -98,6 +98,8 @@ interface Grammar {
     conflictBlocks: ConflictBlock[];
     localTokenBlocks: LocalTokenBlock[];
     tokenPrecedenceBlocks: TokenPrecedenceBlock[];
+    skipBlocks: SkipBlock[];
+    tokensBlocks: TokensBlock[];
 }
 
 interface GrammarImport {
@@ -224,10 +226,11 @@ interface TerminalGroup extends TerminalElement {
 }
 
 interface TerminalRule {
-    definition: TerminalElement;
+    definition?: TerminalElement;
     fragment: boolean;
     hidden: boolean;
     name: string;
+    nativeBody?: string;
     type?: ReturnType;
 }
 
@@ -322,5 +325,13 @@ interface TokenPrecedenceBlock {
 interface TokenPrecedenceEntry {
     terminal?: @TerminalRule;
     literal?: string;
+}
+
+interface SkipBlock {
+    rules: ParserRule[];
+}
+
+interface TokensBlock {
+    terminals: TerminalRule[];
 }
 

@@ -32,6 +32,7 @@ import * as path from 'node:path';
 export class LezerGrammarTranslator implements GrammarTranslator {
     readonly backend = 'lezer';
     caseInsensitive = false;
+    private parserRuleNames = new Set<string>();
 
     validate(grammar: Grammar): TranslationDiagnostic[] {
         const diagnostics: TranslationDiagnostic[] = [];
@@ -184,6 +185,23 @@ export class LezerGrammarTranslator implements GrammarTranslator {
             }
         }
 
+        // Collect parser rule names for collision detection with terminal renaming
+        this.parserRuleNames.clear();
+        for (const rule of grammar.rules) {
+            if (GrammarAST.isParserRule(rule)) {
+                this.parserRuleNames.add(rule.name);
+            }
+        }
+
+        // Collect names of rules in @skip blocks so they aren't emitted twice
+        const skipBlockRuleNames = new Set<string>();
+        for (const block of grammar.skipBlocks ?? []) {
+            for (const rule of block.rules) {
+                this.parserRuleNames.add(rule.name);
+                skipBlockRuleNames.add(rule.name);
+            }
+        }
+
         // Separate rules by type
         for (const rule of grammar.rules) {
             if (GrammarAST.isTerminalRule(rule) && rule.hidden) {
@@ -242,6 +260,20 @@ export class LezerGrammarTranslator implements GrammarTranslator {
             lines.push('');
         }
 
+        // 5b. Emit @skip {} { ... } blocks for noskip parser rules
+        for (const block of grammar.skipBlocks ?? []) {
+            lines.push('@skip {} {');
+            for (const rule of block.rules) {
+                const { body, dynamicPrec } = this.translateParserRuleBodyWithMeta(
+                    rule, rule.definition, fieldMapData, keywords, wrapperRules, conflictMarkers
+                );
+                const annotation = dynamicPrec !== undefined ? `[@dynamicPrecedence=${dynamicPrec}]` : '';
+                lines.push(`  ${rule.name}${annotation} { ${body} }`);
+            }
+            lines.push('}');
+            lines.push('');
+        }
+
         // 6. Emit infix rules (no longer emit per-rule @precedence — it's merged above)
         for (const rule of grammar.rules) {
             if (GrammarAST.isInfixRule(rule)) {
@@ -251,9 +283,9 @@ export class LezerGrammarTranslator implements GrammarTranslator {
             }
         }
 
-        // 7. Emit parser rules (non-entry, non-infix) with @dynamicPrecedence and ~conflict markers
+        // 7. Emit parser rules (non-entry, non-infix, not in @skip blocks) with @dynamicPrecedence and ~conflict markers
         for (const rule of grammar.rules) {
-            if (GrammarAST.isParserRule(rule) && !rule.entry && !rule.fragment) {
+            if (GrammarAST.isParserRule(rule) && !rule.entry && !rule.fragment && !skipBlockRuleNames.has(rule.name)) {
                 const { body, dynamicPrec } = this.translateParserRuleBodyWithMeta(
                     rule, rule.definition, fieldMapData, keywords, wrapperRules, conflictMarkers
                 );
@@ -274,24 +306,48 @@ export class LezerGrammarTranslator implements GrammarTranslator {
         }
 
         // 9. Emit wrapper rules for field access
+        // Propagate conflict markers to wrapper rules generated for conflicting parent rules
         if (wrapperRules.length > 0) {
+            for (let i = 0; i < wrapperRules.length; i++) {
+                const wrapperDef = wrapperRules[i];
+                // Extract wrapper rule name (everything before ' { ')
+                const braceIdx = wrapperDef.indexOf(' { ');
+                if (braceIdx < 0) continue;
+                const wrapperName = wrapperDef.substring(0, braceIdx);
+                // Find parent rule name by checking which conflicting rule names are prefixes
+                for (const [ruleName, markers] of conflictMarkers.entries()) {
+                    if (wrapperName.startsWith(ruleName) && wrapperName.length > ruleName.length) {
+                        // This wrapper belongs to a conflicting parent rule
+                        const markerStr = markers.map(m => `~${m}`).join(' ');
+                        const body = wrapperDef.substring(braceIdx + 3, wrapperDef.length - 2);
+                        wrapperRules[i] = `${wrapperName} { ${markerStr} ${body} }`;
+                        break;
+                    }
+                }
+            }
             lines.push('// Wrapper rules for field access');
             lines.push(...wrapperRules);
             lines.push('');
         }
 
         // 10. Emit keyword template or @external specialize for case-insensitive
+        // Resolve the Lezer token name for the ID terminal
+        const idTerminal = grammar.rules.find(
+            (r): r is GrammarAST.TerminalRule => GrammarAST.isTerminalRule(r) && r.name === 'ID'
+        );
+        const idTokenName = idTerminal ? this.getLezerTerminalName(idTerminal) : 'Identifier';
+
         if (this.caseInsensitive) {
             // Filter to identifier-like keywords only (operators don't need specialization)
             const identKeywords = [...keywords].filter(kw => /^[_a-zA-Z]\w*$/.test(kw));
             if (identKeywords.length > 0) {
                 const languageId = grammar.name ?? 'language';
                 const entries = identKeywords.map(kw => `${kw}[@name=${kw}]`).join(', ');
-                lines.push(`@external specialize {Identifier} keywords from "./${languageId}.keywords.js" { ${entries} }`);
+                lines.push(`@external specialize {${idTokenName}} keywords from "./${languageId}.keywords.js" { ${entries} }`);
                 lines.push('');
             }
         } else if (keywords.size > 0) {
-            lines.push('kw<term> { @specialize[@name={term}]<Identifier, term> }');
+            lines.push(`kw<term> { @specialize[@name={term}]<${idTokenName}, term> }`);
             lines.push('');
         }
 
@@ -334,6 +390,14 @@ export class LezerGrammarTranslator implements GrammarTranslator {
             const tokenBody = this.translateTerminalBody(terminal);
             const name = this.getLezerTerminalName(terminal);
             lines.push(`  ${name} { ${tokenBody} }`);
+        }
+        // Emit terminals from tokens {} blocks
+        for (const block of grammar.tokensBlocks ?? []) {
+            for (const terminal of block.terminals) {
+                const tokenBody = this.translateTerminalBody(terminal);
+                const name = this.getLezerTerminalName(terminal);
+                lines.push(`  ${name} { ${tokenBody} }`);
+            }
         }
         lines.push('}');
 
@@ -698,7 +762,16 @@ export class LezerGrammarTranslator implements GrammarTranslator {
         // Emit wrapper rule (deduplicate — same field name may appear multiple times,
         // e.g. `params+=Param (',' params+=Param)*`)
         const wrapperDef = `${wrapperName} { ${inner} }`;
-        if (!wrapperRules.includes(wrapperDef)) {
+        // Check if a wrapper rule with the same name already exists
+        const existingIndex = wrapperRules.findIndex(r => r.startsWith(`${wrapperName} {`));
+        if (existingIndex >= 0) {
+            // Merge alternatives: extract existing body and combine with new body
+            const existing = wrapperRules[existingIndex];
+            const existingBody = existing.slice(wrapperName.length + 3, -2);
+            if (existingBody !== inner) {
+                wrapperRules[existingIndex] = `${wrapperName} { (${existingBody} | ${inner}) }`;
+            }
+        } else {
             wrapperRules.push(wrapperDef);
         }
 
@@ -835,6 +908,13 @@ export class LezerGrammarTranslator implements GrammarTranslator {
     // ---- Terminal rule translation ----
 
     private translateTerminalBody(terminal: GrammarAST.TerminalRule): string {
+        // Native body: pass through verbatim to Lezer grammar
+        if (terminal.nativeBody) {
+            return terminal.nativeBody;
+        }
+        if (!terminal.definition) {
+            return '/* missing terminal definition */';
+        }
         // Special-case: block comment pattern (e.g., ML_COMMENT: /\/\*[\s\S]*?\*\//)
         // The lazy quantifier *? cannot be expressed in Lezer, and greedy matching
         // would consume past the closing */. Use the standard Lezer idiom instead.
@@ -851,7 +931,7 @@ export class LezerGrammarTranslator implements GrammarTranslator {
      * Returns undefined if the terminal doesn't match a known pattern.
      */
     private tryBlockCommentPattern(terminal: GrammarAST.TerminalRule): string | undefined {
-        if (!GrammarAST.isRegexToken(terminal.definition)) return undefined;
+        if (!terminal.definition || !GrammarAST.isRegexToken(terminal.definition)) return undefined;
         let pattern = terminal.definition.regex;
         if (pattern.startsWith('/') && pattern.endsWith('/')) {
             pattern = pattern.slice(1, -1);
@@ -920,6 +1000,8 @@ export class LezerGrammarTranslator implements GrammarTranslator {
     // ---- Validation ----
 
     private validateTerminalRule(rule: GrammarAST.TerminalRule, diagnostics: TranslationDiagnostic[]): void {
+        // Native terminals are passed through verbatim — no validation needed
+        if (rule.nativeBody || !rule.definition) return;
         this.walkTerminalElements(rule.definition, element => {
             if (GrammarAST.isRegexToken(element)) {
                 let pattern = element.regex;
@@ -932,7 +1014,7 @@ export class LezerGrammarTranslator implements GrammarTranslator {
                         message: `Terminal '${rule.name}' ${error}. Rewrite using string body syntax.`,
                         severity: 'error',
                         source: rule.name,
-                        suggestion: `terminal ${rule.name}: 'lezer_token_syntax';`
+                        suggestion: `terminal ${rule.name}: native 'lezer_token_syntax';`
                     });
                 }
             }
@@ -1034,15 +1116,24 @@ export class LezerGrammarTranslator implements GrammarTranslator {
 
     private getLezerTerminalName(terminal: GrammarAST.TerminalRule): string {
         // Map common Langium terminal names to Lezer conventions
-        switch (terminal.name) {
-            case 'WS': return 'whitespace';
-            case 'ML_COMMENT': return 'BlockComment';
-            case 'SL_COMMENT': return 'LineComment';
-            case 'ID': return 'Identifier';
-            case 'INT': case 'NUMBER': return 'Number';
-            case 'STRING': return 'String';
-            default: return terminal.name;
+        const mappings: Record<string, string> = {
+            'WS': 'whitespace',
+            'ML_COMMENT': 'BlockComment',
+            'SL_COMMENT': 'LineComment',
+            'ID': 'Identifier',
+            'INT': 'Number',
+            'NUMBER': 'Number',
+            'STRING': 'String',
+        };
+        const mapped = mappings[terminal.name];
+        if (mapped !== undefined) {
+            // Avoid collision with parser rule names
+            if (this.parserRuleNames.has(mapped)) {
+                return terminal.name;
+            }
+            return mapped;
         }
+        return terminal.name;
     }
 
     private escapeLezerString(value: string): string {

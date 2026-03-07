@@ -492,6 +492,9 @@ export function terminalRegex(terminalRule: ast.TerminalRule): RegExp {
         i: false,
         u: false
     };
+    if (!terminalRule.definition) {
+        throw new Error(`Terminal '${terminalRule.name}' has no definition (native terminals cannot be converted to regex).`);
+    }
     const source = abstractElementToRegex(terminalRule.definition, flags);
     const flagText = Object.entries(flags).filter(([, value]) => value).map(([name]) => name).join('');
     return new RegExp(source, flagText);
@@ -517,6 +520,9 @@ function abstractElementToRegex(element: ast.AbstractElement, flags?: Flags): st
         const rule = element.rule.ref;
         if (!rule) {
             throw new Error('Missing rule reference.');
+        }
+        if (!rule.definition) {
+            throw new Error(`Terminal '${rule.name}' has no definition (native terminals cannot be converted to regex).`);
         }
         return withCardinality(abstractElementToRegex(rule.definition), {
             cardinality: element.cardinality,

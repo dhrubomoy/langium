@@ -4,7 +4,7 @@
  ******************************************************************************/
 
 import type { Grammar } from '../../languages/generated/ast.js';
-import { loadGrammarFromJson } from '../../utils/grammar-loader.js';
+import { loadGrammarFromJson } from 'langium-core';
 
 let loadedLangiumGrammarGrammar: Grammar | undefined;
 export const LangiumGrammarGrammar = (): Grammar => loadedLangiumGrammarGrammar ?? (loadedLangiumGrammarGrammar = loadGrammarFromJson(`{
