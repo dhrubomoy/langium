@@ -6,6 +6,7 @@
 
 import type { Connection } from 'vscode-languageserver';
 import { createDefaultCoreModule, createDefaultSharedCoreModule, Module, TextDocument, setGrammarServicesFactory, inject, EmptyFileSystem } from 'langium-core';
+import { createChevrotainModule } from 'langium-chevrotain';
 import type { DefaultCoreModuleContext, DefaultSharedCoreModuleContext, LangiumDefaultCoreServices, LangiumDefaultSharedCoreServices, LangiumCoreServices, LangiumSharedCoreServices } from 'langium-core';
 import { DefaultCompletionProvider } from './completion/completion-provider.js';
 import { DefaultDefinitionProvider } from './definition-provider.js';
@@ -31,13 +32,13 @@ export interface DefaultModuleContext extends DefaultCoreModuleContext {
 }
 
 /**
- * Creates a dependency injection module configuring the default parser-agnostic Core & LSP services
- * for a Langium-based language implementation. This does not include any parser backend —
- * you must merge a backend module (e.g., `createChevrotainModule()` from langium-chevrotain
- * or `createLezerParserModule()` from langium-lezer) to get a working parser.
+ * Creates a dependency injection module configuring the default Core & LSP services
+ * for a Langium-based language implementation, with the Chevrotain parser backend.
+ * To use a different parser backend (e.g., Lezer), override `parser.ParserAdapter`
+ * by merging a backend module after this one.
  */
 export function createDefaultModule(context: DefaultModuleContext): Module<LangiumServices, LangiumDefaultCoreServices & LangiumLSPServices> {
-    return Module.merge(createDefaultCoreModule(context), createDefaultLSPModule(context));
+    return Module.merge(Module.merge(createDefaultCoreModule(context), createChevrotainModule()), createDefaultLSPModule(context));
 }
 
 /**

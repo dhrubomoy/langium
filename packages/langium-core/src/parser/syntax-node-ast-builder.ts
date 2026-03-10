@@ -7,7 +7,7 @@
 import type { LangiumCoreServices } from '../services.js';
 import type { AstNode, AstReflection, GenericAstNode, Mutable } from '../syntax-tree.js';
 import type { Linker } from '../references/linker.js';
-import type { GrammarRegistry, AssignmentInfo } from '../grammar/grammar-registry.js';
+import type { GrammarRegistry, AssignmentInfo, InferActionInfo, ChainingActionInfo, InfixRuleInfo } from '../grammar/grammar-registry.js';
 import type { ValueConverter } from './value-converter.js';
 import type { RootSyntaxNode, SyntaxNode } from './syntax-node.js';
 import type { ParseResult, ParseError, LexError } from './parse-result.js';
@@ -82,6 +82,31 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
             return this.buildDataTypeValue(syntaxNode);
         }
 
+        // Handle infix rules: detect binary expressions (2 operand children)
+        // and extract the operator from source text between them.
+        const infixInfo = this.grammarRegistry.getInfixRuleInfo(ruleName);
+        if (infixInfo) {
+            const operandChildren = syntaxNode.children.filter(c =>
+                !c.isHidden && !c.isError &&
+                (c.type === infixInfo.ruleName || c.type === infixInfo.operandRuleName)
+            );
+            if (operandChildren.length === 2) {
+                return this.buildInfixExpression(syntaxNode, infixInfo, operandChildren);
+            }
+            // Single operand (pass-through) — fall through to normal build
+        }
+
+        // Handle chaining actions: {infer Type.prop=current} in repetitions.
+        // Detects flat nodes with multiple field children that should be nested.
+        const chainingActions = this.grammarRegistry.getChainingActions(ruleName);
+        if (chainingActions.length > 0) {
+            const result = this.tryBuildChainedNode(syntaxNode, chainingActions[0]);
+            if (result !== undefined) {
+                return result;
+            }
+            // No chaining needed — fall through to normal build
+        }
+
         // Create the AstNode
         const node: GenericAstNode = { $type: ruleName } as GenericAstNode;
 
@@ -104,6 +129,13 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
 
         // Set mandatory default values (empty arrays, default booleans, etc.)
         assignMandatoryProperties(this.reflection, node);
+
+        // Apply type inference from {infer X} actions.
+        // Match populated fields against infer action metadata to determine correct $type.
+        const inferActions = this.grammarRegistry.getInferActions(ruleName);
+        if (inferActions.length > 0) {
+            this.applyTypeInference(node, inferActions);
+        }
 
         // Associate SyntaxNode with AstNode (bidirectional).
         // If inlineChildNode already set $syntaxNode to the inlined child's SyntaxNode
@@ -177,6 +209,20 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
                 );
             }
         } else if (unwrapped.isLeaf) {
+            // In Lezer, a parser rule whose children are all anonymous (e.g., keywords)
+            // appears as a leaf because firstChild skips anonymous nodes.
+            // Detect this by checking if the "leaf" has a known parser rule type with
+            // assignments or infer actions, and force buildNode if so.
+            if (!unwrapped.isKeyword && unwrapped.type) {
+                const rule = this.grammarRegistry.getRuleByName(unwrapped.type);
+                if (rule && !this.grammarRegistry.isDataTypeRule(unwrapped.type)) {
+                    const hasAssignments = this.grammarRegistry.getAssignmentInfos(unwrapped.type).length > 0;
+                    const hasInferActions = this.grammarRegistry.getInferActions(unwrapped.type).length > 0;
+                    if (hasAssignments || hasInferActions) {
+                        return this.buildNode(unwrapped);
+                    }
+                }
+            }
             // Leaf token: convert the value
             if (unwrapped.isKeyword) {
                 return unwrapped.text;
@@ -269,6 +315,16 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
         }
         this.processUnassignedChildren(node, childSN, childAssignedFields);
 
+        // Apply type inference from {infer X} actions for the inlined child's rule.
+        // Only do this if deeper inlining hasn't already changed the $type
+        // (i.e., the type is still the child rule's type, not a more specific one).
+        if ((node as Mutable<AstNode>).$type === childType) {
+            const inferActions = this.grammarRegistry.getInferActions(childType);
+            if (inferActions.length > 0) {
+                this.applyTypeInference(node, inferActions);
+            }
+        }
+
         // Update $syntaxNode to point to the inlined child's SyntaxNode so that
         // findAssignmentSN can locate field children (e.g., SelectStmtTable) which
         // are direct children of the inlined SyntaxNode, not the outer wrapper.
@@ -282,6 +338,320 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
             enumerable: false,
             writable: true
         });
+    }
+
+    // ---- Infix expression support ----
+
+    /**
+     * Build a binary expression from an infix rule's SyntaxNode.
+     * Operators are anonymous tokens in Lezer infix rules, so we extract them
+     * from the source text between the two operand children.
+     */
+    protected buildInfixExpression(
+        syntaxNode: SyntaxNode,
+        infixInfo: InfixRuleInfo,
+        operandChildren: SyntaxNode[]
+    ): unknown {
+        const leftChild = operandChildren[0];
+        const rightChild = operandChildren[1];
+
+        // Extract operator from source text gap between children
+        const fullText = syntaxNode.text;
+        const nodeStart = syntaxNode.offset;
+        const leftEnd = leftChild.offset + leftChild.length - nodeStart;
+        const rightStart = rightChild.offset - nodeStart;
+        const operator = fullText.substring(leftEnd, rightStart).trim();
+
+        const left = this.buildNode(leftChild);
+        const right = this.buildNode(rightChild);
+
+        if (left && operator && right) {
+            const node: GenericAstNode = {
+                $type: infixInfo.binaryTypeName,
+                left,
+                operator,
+                right,
+            } as GenericAstNode;
+
+            if (left && typeof left === 'object' && '$type' in left) {
+                (left as Mutable<AstNode>).$container = node as unknown as AstNode;
+                (left as Mutable<AstNode>).$containerProperty = 'left';
+            }
+            if (right && typeof right === 'object' && '$type' in right) {
+                (right as Mutable<AstNode>).$container = node as unknown as AstNode;
+                (right as Mutable<AstNode>).$containerProperty = 'right';
+            }
+
+            this.defineSyntaxNodeProperty(node, syntaxNode);
+            this.syntaxNodeToAstNode.set(syntaxNode, node as unknown as AstNode);
+            Object.defineProperty(syntaxNode, '$astNode', {
+                value: node,
+                configurable: true,
+                enumerable: false,
+                writable: true
+            });
+
+            return node;
+        }
+
+        // Fallback: couldn't extract operator, build normally
+        return undefined;
+    }
+
+    // ---- Chaining action support ----
+
+    /**
+     * Try to build a nested chain from a flat SyntaxNode with a chaining action.
+     * Returns the outermost chain node, or undefined if no chaining is needed.
+     *
+     * Handles two patterns:
+     * 1. Shared field: `element=X ({infer T.prev=current} '.' element=X)*`
+     *    → All field children share the same name; first is base, rest are chain links.
+     * 2. Separate base: `Base ({infer T.left=current} op=Op right=Base)*`
+     *    → Base is an unassigned child; chain links have their own fields.
+     */
+    protected tryBuildChainedNode(
+        syntaxNode: SyntaxNode,
+        chainingInfo: ChainingActionInfo
+    ): unknown | undefined {
+        const ruleName = syntaxNode.type;
+        const assignmentInfos = this.grammarRegistry.getAssignmentInfos(ruleName);
+
+        // Shared field pattern: a field that appears in the grammar both before and inside
+        // the repetition (e.g., `element=X ({infer T.prev=current} '.' element=X)*`).
+        // In the Lezer tree, all instances share the same wrapper rule name.
+        // Detect by finding a field with more children than expected for a single assignment.
+        const allFieldNames = new Set(assignmentInfos.map(a => a.property));
+
+        for (const fieldName of allFieldNames) {
+            const fieldChildren = syntaxNode.childrenForField(fieldName);
+            if (fieldChildren.length > 1) {
+                // This field is shared — build chain with it
+                return this.buildSharedFieldChain(syntaxNode, chainingInfo, fieldName, fieldChildren, assignmentInfos);
+            }
+        }
+
+        // Separate base pattern: chain fields have children, base is unassigned
+        if (chainingInfo.assignedFields.length > 0) {
+            const firstChainField = chainingInfo.assignedFields[0];
+            const chainFieldChildren = syntaxNode.childrenForField(firstChainField);
+            if (chainFieldChildren.length > 0) {
+                return this.buildSeparateBaseChain(syntaxNode, chainingInfo, assignmentInfos);
+            }
+        }
+
+        return undefined;
+    }
+
+    /**
+     * Build a chain from a shared-field pattern.
+     * E.g., `GlobalReference: element=X ({infer GlobalReference.previous=current} '.' element=X)*`
+     * All `element` children are collected; first is the base, rest create nested wrappers.
+     */
+    private buildSharedFieldChain(
+        syntaxNode: SyntaxNode,
+        chainingInfo: ChainingActionInfo,
+        sharedFieldName: string,
+        fieldChildren: readonly SyntaxNode[],
+        assignmentInfos: AssignmentInfo[]
+    ): unknown {
+        const sharedFieldInfo = assignmentInfos.find(a => a.property === sharedFieldName);
+        if (!sharedFieldInfo) return undefined;
+
+        // Build the innermost node (first field child)
+        let current = this.buildSingleChainNode(
+            chainingInfo.typeName,
+            sharedFieldInfo,
+            fieldChildren[0]
+        );
+
+        // Build each subsequent chain link
+        for (let i = 1; i < fieldChildren.length; i++) {
+            const outer = this.buildSingleChainNode(
+                chainingInfo.typeName,
+                sharedFieldInfo,
+                fieldChildren[i]
+            );
+            outer[chainingInfo.chainProperty] = current;
+            (current as Mutable<AstNode>).$container = outer as unknown as AstNode;
+            (current as Mutable<AstNode>).$containerProperty = chainingInfo.chainProperty;
+            current = outer;
+        }
+
+        // Associate outermost node with the syntax node
+        this.defineSyntaxNodeProperty(current, syntaxNode);
+        this.syntaxNodeToAstNode.set(syntaxNode, current as unknown as AstNode);
+        Object.defineProperty(syntaxNode, '$astNode', {
+            value: current,
+            configurable: true,
+            enumerable: false,
+            writable: true
+        });
+
+        return current;
+    }
+
+    /**
+     * Build a single node in a shared-field chain (e.g., one GlobalReference with element).
+     */
+    private buildSingleChainNode(
+        typeName: string,
+        fieldInfo: AssignmentInfo,
+        fieldChild: SyntaxNode
+    ): GenericAstNode {
+        const node: GenericAstNode = { $type: typeName } as GenericAstNode;
+        const unwrapped = this.unwrapFieldChild(fieldChild);
+
+        if (fieldInfo.isCrossReference) {
+            const refText = this.getLeafText(unwrapped);
+            node[fieldInfo.property] = this.linker.buildReferenceSN(
+                node as unknown as AstNode, fieldInfo.property, unwrapped, refText
+            );
+        } else if (unwrapped.isLeaf) {
+            node[fieldInfo.property] = unwrapped.text;
+        } else {
+            node[fieldInfo.property] = this.buildNode(unwrapped);
+        }
+
+        return node;
+    }
+
+    /**
+     * Build a chain from a separate-base pattern.
+     * E.g., `UnionExpr: IntersectExpr ({infer BinaryTableExpr.left=current} op=Op right=IntersectExpr)*`
+     * The base is an unassigned child; each repetition has its own assigned fields.
+     */
+    private buildSeparateBaseChain(
+        syntaxNode: SyntaxNode,
+        chainingInfo: ChainingActionInfo,
+        assignmentInfos: AssignmentInfo[]
+    ): unknown {
+        // Find the unassigned child (the base)
+        const assignedFields = new Set(assignmentInfos.map(a => a.property));
+        let baseSN: SyntaxNode | undefined;
+        for (const child of syntaxNode.children) {
+            if (child.isLeaf || child.isHidden || child.isError) continue;
+            let isAssigned = false;
+            for (const field of assignedFields) {
+                if (syntaxNode.childrenForField(field).some(fc => fc === child)) {
+                    isAssigned = true;
+                    break;
+                }
+            }
+            if (!isAssigned) {
+                baseSN = child;
+                break;
+            }
+        }
+
+        if (!baseSN) return undefined;
+
+        // Build the base node
+        let current = this.buildNode(baseSN) as GenericAstNode;
+        if (!current || typeof current !== 'object') return undefined;
+
+        // Count repetitions from the first chain field
+        const firstChainField = chainingInfo.assignedFields[0];
+        const repetitionCount = syntaxNode.childrenForField(firstChainField).length;
+
+        // Build each chain link
+        for (let i = 0; i < repetitionCount; i++) {
+            const chainNode: GenericAstNode = {
+                $type: chainingInfo.typeName
+            } as GenericAstNode;
+
+            // Set the chain property (e.g., "left") to the current node
+            chainNode[chainingInfo.chainProperty] = current;
+            (current as Mutable<AstNode>).$container = chainNode as unknown as AstNode;
+            (current as Mutable<AstNode>).$containerProperty = chainingInfo.chainProperty;
+
+            // Process chain fields for this repetition
+            for (const fieldName of chainingInfo.assignedFields) {
+                const info = assignmentInfos.find(a => a.property === fieldName);
+                if (!info) continue;
+                const fieldChildren = syntaxNode.childrenForField(fieldName);
+                if (i < fieldChildren.length) {
+                    chainNode[fieldName] = this.extractAssignmentValue(chainNode, fieldChildren[i], info);
+                }
+            }
+
+            current = chainNode;
+        }
+
+        // Associate outermost node with the syntax node
+        this.defineSyntaxNodeProperty(current, syntaxNode);
+        this.syntaxNodeToAstNode.set(syntaxNode, current as unknown as AstNode);
+        Object.defineProperty(syntaxNode, '$astNode', {
+            value: current,
+            configurable: true,
+            enumerable: false,
+            writable: true
+        });
+
+        return current;
+    }
+
+    // ---- Type inference support ----
+
+    /**
+     * Apply type inference from `{infer X}` actions.
+     * Matches populated fields against each infer action's required fields
+     * to determine the correct `$type`. First match wins.
+     */
+    protected applyTypeInference(node: GenericAstNode, inferActions: InferActionInfo[]): void {
+        // Try actions with required fields first (most specific match).
+        // Fall back to actions with no required fields (catch-all) only if no specific match
+        // AND the node has no populated fields. If the node has populated fields but none
+        // matched any specific action, the node is from a branch without an {infer} action.
+        let catchAll: InferActionInfo | undefined;
+        for (const action of inferActions) {
+            if (action.requiredFields.length === 0) {
+                catchAll = catchAll ?? action;
+                continue;
+            }
+            if (this.matchesInferAction(node, action)) {
+                (node as Mutable<AstNode>).$type = action.typeName;
+                return;
+            }
+        }
+        if (catchAll && !this.hasPopulatedFields(node)) {
+            (node as Mutable<AstNode>).$type = catchAll.typeName;
+        }
+    }
+
+    /**
+     * Check if a node has any populated fields beyond $type and mandatory defaults.
+     */
+    private hasPopulatedFields(node: GenericAstNode): boolean {
+        for (const key of Object.keys(node)) {
+            if (key.startsWith('$')) continue;
+            const val = node[key];
+            if (val === undefined || val === false) continue;
+            if (Array.isArray(val) && val.length === 0) continue;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Check if a node's populated fields match an infer action's required fields.
+     */
+    private matchesInferAction(node: GenericAstNode, action: InferActionInfo): boolean {
+        for (const field of action.requiredFields) {
+            if (!this.hasField(node, field)) return false;
+        }
+        return true;
+    }
+
+    /**
+     * Check if a field is present and non-empty on a node.
+     */
+    private hasField(node: GenericAstNode, field: string): boolean {
+        if (!(field in node)) return false;
+        const val = node[field];
+        if (val === undefined || val === false) return false;
+        if (Array.isArray(val) && val.length === 0) return false;
+        return true;
     }
 
     protected buildDataTypeValue(syntaxNode: SyntaxNode): string {

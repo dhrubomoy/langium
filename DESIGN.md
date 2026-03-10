@@ -804,20 +804,44 @@ Several LSP services currently use `cstNode.grammarSource` (a live Grammar AST r
  */
 export interface GrammarRegistry {
   /** Get the grammar rule that produces nodes of this type. */
-  getRuleByName(typeName: string): AbstractRule | undefined;
+  getRuleByName(name: string): AbstractRule | undefined;
 
-  /** Check if a type name corresponds to a keyword. */
-  isKeyword(typeName: string): boolean;
+  /** Check if a string value is a keyword in the grammar. */
+  isKeyword(value: string): boolean;
 
-  /** Get all valid alternatives at a given rule. For completion. */
+  /** Get all alternatives for a given parser rule. */
   getAlternatives(ruleName: string): AbstractElement[];
 
-  /** Get the assignment name for a child node type within a parent rule. */
-  getAssignment(parentType: string, childType: string): Assignment | undefined;
+  /** Get the assignment for a property within a parser rule. */
+  getAssignmentByProperty(ruleName: string, property: string): Assignment | undefined;
+
+  /** Get all assignments within a parser rule. */
+  getAssignments(ruleName: string): Assignment[];
+
+  /** Get enriched assignment info (cross-ref detection, operator, terminal rule name). */
+  getAssignmentInfos(ruleName: string): AssignmentInfo[];
+
+  /** Check if a parser rule is a data type rule (returns a primitive value). */
+  isDataTypeRule(ruleName: string): boolean;
+
+  /** Get type-only `{infer X}` actions for a parser rule. */
+  getInferActions(ruleName: string): InferActionInfo[];
+
+  /** Get chaining `{infer X.prop=current}` actions for a parser rule. */
+  getChainingActions(ruleName: string): ChainingActionInfo[];
+
+  /** Get infix rule metadata (operand rule, binary type name). */
+  getInfixRuleInfo(ruleName: string): InfixRuleInfo | undefined;
 }
 ```
 
 This is populated once from the Grammar AST at startup. O(1) lookups by type name replace the per-node `grammarSource` pointers.
+
+**Action metadata**: The registry indexes three kinds of grammar actions used by the AST builder:
+
+- **`InferActionInfo`**: Type-only `{infer X}` actions. Stores `typeName` and `requiredFields` — the fields that must be populated to match this type. Optional fields (inside `?` or `*` groups) are excluded from `requiredFields`.
+- **`ChainingActionInfo`**: Left-recursive `{infer X.prop=current}` actions. Stores `typeName`, `chainProperty` (the link to the previous node), and `assignedFields` (fields in the chaining group).
+- **`InfixRuleInfo`**: Metadata for `infix` rules. Stores `ruleName`, `operandRuleName`, and `binaryTypeName` (the `$type` for binary expression nodes).
 
 ### 7.2 Position → AST Mapping
 
@@ -1039,17 +1063,22 @@ langium generate --backend=lezer
 
 ### 11.1 Critical Infrastructure Gaps
 
-#### Gap 1: No SyntaxNode → AST Builder for Lezer
+#### Gap 1: ~~No SyntaxNode → AST Builder for Lezer~~ ✅ RESOLVED
 
-**File**: `packages/langium-core/src/workspace/documents.ts:318-325`
+**File**: `packages/langium-core/src/parser/syntax-node-ast-builder.ts`
 
-`DefaultLangiumDocumentFactory.parse()` calls `services.parser.LangiumParser.parse()`, which is Chevrotain-specific. `LangiumParser` simultaneously builds both the CST and AST during parsing using Chevrotain grammar callbacks. There is **no equivalent AST builder for the Lezer backend**.
+**Implemented**: `DefaultSyntaxNodeAstBuilder` walks any `SyntaxNode` tree and produces a fully typed AST. It uses `GrammarRegistry` for grammar introspection and handles:
 
-The Lezer adapter returns a `SyntaxNode` tree, but nothing walks that tree to construct typed AST nodes (`AstNode` with `$type`, `$container`, properties, cross-references, etc.).
+1. **Normal assignments** — `=`, `+=`, `?=` operators via `processAssignment()`, with field-wrapper unwrapping for Lezer's generated nonterminals.
+2. **Unassigned children (type overrides)** — Rules like `Element: Source | Target` are inlined via `inlineChildNode()`, which processes the child's assignments on the parent node and updates `$type`.
+3. **`{infer X}` type inference** — `applyTypeInference()` matches populated fields against `InferActionInfo.requiredFields` to determine the correct `$type`. Catch-all actions (empty `requiredFields`) only match when the node has no populated fields.
+4. **`{infer X.prop=current}` chaining** — `tryBuildChainedNode()` detects flat nodes with multiple field children and restructures them into nested chains. Handles both shared-field patterns (e.g., `GlobalReference`) and separate-base patterns (e.g., `BinaryTableExpression`).
+5. **`infix` binary expressions** — `buildInfixExpression()` extracts operators from source text between operand children (since operators are anonymous tokens in Lezer infix rules).
+6. **Leaf node fix** — `extractAssignmentValue()` detects Lezer nodes that appear as leaves (because `firstChild` skips anonymous keyword children) and forces `buildNode()` for rules with assignments or infer actions.
+7. **Cross-references** — Built via `Linker.buildReferenceSN()` using `SyntaxNode` instead of `CstNode`.
+8. **Data type rules** — Returns concatenated text for rules that produce primitive values.
 
-**Required**: Implement a generic `AstBuilder` service that takes a `SyntaxNode` tree (from any backend) and produces a `ParseResult<AstNode>`. This should use `GrammarRegistry` for grammar introspection. The `DefaultLangiumDocumentFactory.parse()` method should be updated to use `ParserAdapter.parse()` → `AstBuilder.build()` instead of `LangiumParser.parse()`.
-
-**Also affected**: `DefaultAsyncParser` (`packages/langium-core/src/parser/async-parser.ts:48-50`) — directly accesses `services.parser.LangiumParser`.
+The `DefaultLangiumDocumentFactory.parse()` method uses `ParserAdapter.parse()` → `SyntaxNodeAstBuilder.buildAst()` when `LangiumParser` is not set.
 
 #### Gap 2: SyntaxNode → AstNode Mapping Returns `undefined` for Lezer
 
@@ -1140,10 +1169,10 @@ The test helper `expectValidation` accesses `options.node.$cstNode`. This means 
 | Parsing to SyntaxNode tree | Yes | `LezerAdapter.parse()` returns `SyntaxNode` tree |
 | Incremental parsing | Yes | `LezerAdapter.parseIncremental()` works |
 | Grammar translation | Yes | `LezerGrammarTranslator` generates Lezer grammar |
-| AST construction | **No** | No SyntaxNode → AST builder exists |
-| Document pipeline | **No** | `DocumentFactory.parse()` requires `LangiumParser` |
-| Linking / cross-references | **No** | Depends on AST construction + CstNode `$refNode` |
-| Validation | **No** | Depends on AST construction + `$cstNode` for diagnostic ranges |
+| AST construction | **Yes** | `DefaultSyntaxNodeAstBuilder` handles `{infer}`, chaining, infix, leaf nodes |
+| Document pipeline | **Yes** | `DocumentFactory.parse()` uses `ParserAdapter` + `SyntaxNodeAstBuilder` when `LangiumParser` is not set |
+| Linking / cross-references | **Yes** | `Linker.buildReferenceSN()` uses `SyntaxNode`-based reference nodes |
+| Validation | **Partial** | AST construction works; `$cstNode` still used for some diagnostic ranges |
 | Hover | **No** | Requires `$cstNode` for declaration lookup + comment extraction |
 | Go-to-definition | **No** | Requires `$cstNode` for `findDeclarationNodes` |
 | Find references | **No** | Requires `$cstNode` for `findDeclarations` |

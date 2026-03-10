@@ -197,11 +197,50 @@ interface GrammarRegistry {
     getAlternatives(ruleName: string): AbstractElement[];
     getAssignmentByProperty(ruleName: string, property: string): Assignment | undefined;
     getAssignments(ruleName: string): Assignment[];
+    getAssignmentInfos(ruleName: string): AssignmentInfo[];
+    isDataTypeRule(ruleName: string): boolean;
+    getInferActions(ruleName: string): InferActionInfo[];
+    getChainingActions(ruleName: string): ChainingActionInfo[];
+    getInfixRuleInfo(ruleName: string): InfixRuleInfo | undefined;
 }
 ```
 
 Populated once from the Grammar AST at startup. Used by LSP services (hover, completion,
-semantic tokens, formatter) that previously relied on `cstNode.grammarSource`.
+semantic tokens, formatter) and the AST builder. Key metadata indexed:
+
+- **`AssignmentInfo`**: Enriched assignment data (property, operator, cross-reference flags, terminal rule name)
+- **`InferActionInfo`**: `{infer X}` actions with `requiredFields` (only mandatory fields — optional fields inside `?`/`*` groups are excluded)
+- **`ChainingActionInfo`**: `{infer X.prop=current}` actions with `chainProperty` and `assignedFields`
+- **`InfixRuleInfo`**: `infix` rule metadata with `operandRuleName` and `binaryTypeName`
+
+### SyntaxNodeAstBuilder
+
+Walks a `SyntaxNode` parse tree (from any backend) and constructs a typed AST. This is
+the post-parse step that replaces Chevrotain's in-parse AST construction for new backends.
+
+**File**: `packages/langium-core/src/parser/syntax-node-ast-builder.ts`
+
+`DefaultSyntaxNodeAstBuilder` handles the full Langium grammar feature set:
+
+| Feature | Method | Description |
+|---------|--------|-------------|
+| Normal assignments | `processAssignment()` | `=`, `+=`, `?=` operators |
+| Type overrides | `inlineChildNode()` | Unassigned subrule calls (e.g., `Element: Source \| Target`) |
+| `{infer X}` actions | `applyTypeInference()` | Matches populated fields against `requiredFields` |
+| `{infer X.prop=current}` | `tryBuildChainedNode()` | Restructures flat nodes into nested chains |
+| `infix` rules | `buildInfixExpression()` | Extracts operator from source text between operands |
+| Leaf node fix | `extractAssignmentValue()` | Forces `buildNode()` for "leaf" rules with only anonymous children |
+| Cross-references | `extractAssignmentValue()` | Built via `Linker.buildReferenceSN()` |
+| Data type rules | `buildDataTypeValue()` | Returns concatenated text |
+
+**Type inference details**: `applyTypeInference()` uses a two-pass approach. First, it tries
+actions with specific `requiredFields` (most specific match wins). Then, catch-all actions
+(empty `requiredFields`) only apply if the node has no populated fields at all — preventing
+incorrect matches for branches without `{infer}` actions.
+
+**Chaining details**: `tryBuildChainedNode()` detects two patterns:
+1. **Shared field**: `element=X ({infer T.prev=current} '.' element=X)*` — all field children share the same name
+2. **Separate base**: `Base ({infer T.left=current} op=Op right=Base)*` — base is an unassigned child
 
 ## Incremental Parsing
 

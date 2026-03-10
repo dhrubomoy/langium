@@ -424,9 +424,11 @@ export class LezerGrammarTranslator implements GrammarTranslator {
         }
 
         // From infix rules (generated precedence names)
+        // In the Langium infix rule, precedences[0] is the LOWEST level (loosest binding),
+        // but Lezer's @precedence lists from HIGHEST to LOWEST. So reverse the order.
         for (const rule of grammar.rules) {
             if (GrammarAST.isInfixRule(rule)) {
-                for (let i = 0; i < rule.operators.precedences.length; i++) {
+                for (let i = rule.operators.precedences.length - 1; i >= 0; i--) {
                     const precLevel = rule.operators.precedences[i];
                     levels.push({
                         name: `prec_${rule.name}_${i}`,

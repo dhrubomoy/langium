@@ -65,6 +65,49 @@ export const CROSS_REF_GRAMMAR = `
     terminal ID: /[_a-zA-Z][\\w_]*/;
 `;
 
+export const INFER_ACTION_GRAMMAR = `
+    grammar InferActionTest
+    entry Model: elements+=Element*;
+    Element infers Element:
+        {infer TypeA} 'a' name=ID value=INT
+        | {infer TypeB} 'b' name=ID
+        | {infer TypeC} 'c'
+    ;
+    hidden terminal WS: /\\s+/;
+    terminal ID: /[_a-zA-Z][\\w_]*/;
+    terminal INT: /[0-9]+/;
+`;
+
+export const CHAINING_ACTION_GRAMMAR = `
+    grammar ChainingTest
+    entry Model: refs+=QualifiedRef*;
+    QualifiedRef:
+        element=ID ({infer QualifiedRef.previous=current} '.' element=ID)*;
+    hidden terminal WS: /\\s+/;
+    terminal ID: /[_a-zA-Z][\\w_]*/;
+`;
+
+export const INFIX_RULE_GRAMMAR = `
+    grammar InfixTest
+    entry Root: expr=Expression;
+    infix Expression on Primary infers BinaryExpression:
+        '+' | '-' > '*' | '/';
+    Primary: value=INT | '(' expr=Expression ')';
+    hidden terminal WS: /\\s+/;
+    terminal INT: /[0-9]+/;
+`;
+
+export const LEAF_NODE_FIX_GRAMMAR = `
+    grammar LeafFixTest
+    entry Model: item=SelectItem;
+    SelectItem infers SelectItem:
+        {infer AllStar} '*'
+        | {infer Named} name=ID
+    ;
+    hidden terminal WS: /\\s+/;
+    terminal ID: /[_a-zA-Z][\\w_]*/;
+`;
+
 // ---- Service creation helpers ----
 
 /**

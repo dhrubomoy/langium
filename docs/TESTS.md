@@ -36,14 +36,14 @@ instead of Chevrotain's completion parser and lexer. Most completion tests pass 
 | `Should show documentation on completion items` | ML_COMMENT hidden terminal regex is not correctly translated to Lezer grammar, causing comment text to be parsed as identifiers |
 | `Should not remove same named NodeDescriptions` | Test explicitly extends `DefaultCompletionProvider` (Chevrotain-specific) |
 | `Can perform completion for fully qualified names` | Anonymous punctuation tokens (like `"."`) in data type rules are not preserved in the Lezer parse tree, breaking token matching for FQN-style rules |
-| `Infix rule completion` (entire block) | Infix grammars fail Lezer grammar generation |
+| `Infix rule completion` (entire block) | ~~Infix grammars fail Lezer grammar generation~~ Now fixed; test may need re-enabling |
 
 ### goto-definition.test.ts
 
 | Describe Block | Skip Reason |
 |----------------|-------------|
 | `Definition Provider datatype rule` | Datatype rule (FQN) cross-references + alternative rules don't fully work with Lezer |
-| `Definition Provider with Infix Operators` | Infix grammars with alternatives fail Lezer grammar generation |
+| `Definition Provider with Infix Operators` | ~~Infix grammars fail Lezer grammar generation~~ Now fixed; test may need re-enabling |
 
 ## Known Lezer Limitations
 
@@ -67,11 +67,17 @@ It collects leaf tokens from the parse tree, converts them to the format expecte
 - Anonymous punctuation tokens (like `"."`) in data type rules are not preserved in the Lezer
   parse tree, breaking token matching for FQN-style rules (`ID ('.' ID)*`).
 
-### 3. Infix Grammar Generation
-Grammars with `infix` rules fail Lezer grammar generation entirely (`createServices` returns
-`null`).
+### ~~3. Infix Grammar Generation~~ — FIXED
+Infix rules now work fully with the Lezer backend. `LezerGrammarTranslator` generates correct
+Lezer grammar with proper precedence ordering (highest first in `@precedence` block).
+`DefaultSyntaxNodeAstBuilder.buildInfixExpression()` extracts operators from source text
+between operand children and constructs binary expression nodes with the inferred `$type`
+from the `infers` clause (e.g., `infix Expression on PrimaryExpression infers BinaryExpression`).
 
-**Impact:** Infix-related test blocks are skipped for Lezer.
+**Also fixed:** `{infer X}` type inference and `{infer X.prop=current}` chaining actions
+are now handled generically by `DefaultSyntaxNodeAstBuilder`, using metadata from
+`GrammarRegistry.getInferActions()` and `getChainingActions()`. Optional fields inside
+`?`/`*` groups are correctly excluded from `requiredFields`.
 
 ### ~~4. Cross-Reference Position Navigation~~ — FIXED
 `findAssignmentSN()` now supports non-Chevrotain backends via GrammarRegistry lookups.
