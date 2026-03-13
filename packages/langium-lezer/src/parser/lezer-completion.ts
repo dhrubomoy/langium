@@ -92,14 +92,39 @@ export class LezerCompletion {
                 // 2. features are all optional — the rule's required content is
                 //    matched and only optional tail remains (e.g., ColumnExpr
                 //    offers optional 'as' but parent SelectStmt has 'from' next)
-                // Do NOT bubble up when features include required elements
-                // (e.g., cross-reference targets in InsertItem).
                 if (ruleNode.end <= offset && ruleNode !== rootSyntaxNode) {
                     const shouldBubbleUp = features.length === 0 || walkResult.optionalOnly === true;
                     if (shouldBubbleUp) {
                         this.collectAncestorFeatures(
                             ruleNode, rootSyntaxNode, offset, grammarRegistry, features
                         );
+                    }
+                }
+
+                // When the user is typing a partial token, Lezer may have
+                // committed to one parse path (e.g., "d" as an Evaluation),
+                // but the token could be the start of a keyword from a sibling
+                // alternative at a higher level (e.g., "def" at Statement).
+                // Find the highest ancestor rule starting at the partial token's
+                // offset and offer its first features — the fuzzy matcher in the
+                // completion provider will filter based on the partial text.
+                if (partialText.length > 0) {
+                    const altRuleNode = this.findHighestRuleAtOffset(
+                        ruleNode, rootSyntaxNode, tokenOffset, grammarRegistry
+                    );
+                    if (altRuleNode && altRuleNode !== ruleNode) {
+                        const altRule = grammarRegistry.getRuleByName(altRuleNode.type);
+                        if (altRule && GrammarAST.isParserRule(altRule)) {
+                            const firstFeatures = this.getFirstFeatures(altRule.definition, grammarRegistry);
+                            // Only add keyword features from ancestor alternatives.
+                            // Cross-reference features require matching context nodes
+                            // which may not exist yet at the ancestor level.
+                            for (const f of firstFeatures) {
+                                if (f.kind === 'keyword') {
+                                    features.push(f);
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -183,6 +208,33 @@ export class LezerCompletion {
             }
         }
         return node;
+    }
+
+    /**
+     * Find the highest ancestor rule node that starts at the given offset.
+     * Walks up from `startNode` toward `root`, returning the highest rule node
+     * whose offset matches. This captures the case where the user is typing
+     * the first token of a new construct and the partial text could match
+     * alternatives at a higher grammar level.
+     */
+    protected findHighestRuleAtOffset(
+        startNode: SyntaxNode,
+        root: SyntaxNode,
+        tokenOffset: number,
+        grammarRegistry: GrammarRegistry
+    ): SyntaxNode | null {
+        let highest: SyntaxNode | null = null;
+        let current: SyntaxNode | null = startNode.parent;
+        while (current && current !== root) {
+            if (!current.isError && !current.isLeaf && current.type !== '' && current.offset === tokenOffset) {
+                const rule = grammarRegistry.getRuleByName(current.type);
+                if (rule && GrammarAST.isParserRule(rule)) {
+                    highest = current;
+                }
+            }
+            current = current.parent;
+        }
+        return highest;
     }
 
     /**
@@ -553,7 +605,8 @@ export class LezerCompletion {
     protected getFirstFeatures(
         element: GrammarAST.AbstractElement,
         grammarRegistry: GrammarRegistry,
-        visited: Set<string> = new Set()
+        visited: Set<string> = new Set(),
+        inferredType?: string
     ): CompletionFeature[] {
         if (GrammarAST.isKeyword(element)) {
             return [{
@@ -563,27 +616,39 @@ export class LezerCompletion {
             }];
         } else if (GrammarAST.isGroup(element)) {
             const features: CompletionFeature[] = [];
+            let currentInferredType = inferredType;
             for (const elem of element.elements) {
-                features.push(...this.getFirstFeatures(elem, grammarRegistry, visited));
-                if (!this.isOptional(elem)) {
+                // Track {infer X} actions so cross-references know the target type
+                if (GrammarAST.isAction(elem) && elem.inferredType) {
+                    currentInferredType = elem.inferredType.name;
+                }
+                features.push(...this.getFirstFeatures(elem, grammarRegistry, visited, currentInferredType));
+                if (!this.canBeEmpty(elem)) {
                     break;
                 }
             }
             return features;
         } else if (GrammarAST.isAlternatives(element) || GrammarAST.isUnorderedGroup(element)) {
-            return element.elements.flatMap(e => this.getFirstFeatures(e, grammarRegistry, visited));
+            return element.elements.flatMap(e => this.getFirstFeatures(e, grammarRegistry, visited, inferredType));
         } else if (GrammarAST.isAssignment(element)) {
             const terminal = element.terminal;
             if (GrammarAST.isCrossReference(terminal)) {
-                return [{
+                const feature: CompletionFeature = {
                     kind: 'crossReference',
                     value: '',
                     grammarElement: terminal,
                     assignment: element,
                     property: element.feature
-                }];
+                };
+                // When preceded by an {infer X} action, set the type so the
+                // completion provider creates a synthetic node of the right type
+                // (otherwise it uses the context node which may be wrong).
+                if (inferredType) {
+                    feature.type = inferredType;
+                }
+                return [feature];
             }
-            return this.getFirstFeatures(terminal, grammarRegistry, visited);
+            return this.getFirstFeatures(terminal, grammarRegistry, visited, inferredType);
         } else if (GrammarAST.isRuleCall(element)) {
             const rule = element.rule.ref;
             if (GrammarAST.isParserRule(rule)) {
@@ -592,7 +657,7 @@ export class LezerCompletion {
                     return [];
                 }
                 visited.add(rule.name);
-                return this.getFirstFeatures(rule.definition, grammarRegistry, visited);
+                return this.getFirstFeatures(rule.definition, grammarRegistry, visited, inferredType);
             }
             // Terminal rules — can't suggest content
             return [];
