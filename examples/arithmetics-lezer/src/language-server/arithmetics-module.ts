@@ -4,8 +4,8 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import { type Module, inject } from 'langium';
-import { createDefaultModule, createDefaultSharedModule, type DefaultSharedModuleContext, type LangiumServices, type LangiumSharedServices, type PartialLangiumServices } from 'langium/lsp';
+import { type Module, inject, DefaultLangiumProfiler } from 'langium';
+import { createDefaultModule, createDefaultSharedModule, type DefaultSharedModuleContext, type LangiumServices, type LangiumSharedServices, type PartialLangiumServices, type PartialLangiumSharedServices } from 'langium/lsp';
 import { createLezerParserModule, DefaultFieldMap } from 'langium-lezer';
 import type { FieldMapData, LezerAdapter } from 'langium-lezer';
 import { ArithmeticsScopeProvider } from './arithmetics-scope-provider.js';
@@ -69,9 +69,15 @@ export function createArithmeticsServices(context: DefaultSharedModuleContext): 
     shared: LangiumSharedServices,
     arithmetics: ArithmeticsServices
 } {
+    const ArithmeticsProfilerModule: Module<LangiumSharedServices, PartialLangiumSharedServices> = {
+        profilers: {
+            LangiumProfiler: () => new DefaultLangiumProfiler()
+        }
+    };
     const shared = inject(
         createDefaultSharedModule(context),
-        ArithmeticsGeneratedSharedModule
+        ArithmeticsGeneratedSharedModule,
+        ArithmeticsProfilerModule
     );
     const arithmetics = inject(
         createDefaultModule({ shared }),
