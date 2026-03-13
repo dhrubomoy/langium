@@ -14,6 +14,8 @@ import { parseDocument, textDocumentPositionParams } from 'langium-lsp/test';
 import type { LezerAdapter } from 'langium-lezer';
 import { LezerGrammarTranslator, DefaultFieldMap, createLezerParserModule, LezerAdapter as LezerAdapterImpl } from 'langium-lezer';
 import { buildParser } from '@lezer/generator';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {
     LIST_GRAMMAR,
     createLezerAdapterForGrammar,
@@ -62,37 +64,52 @@ async function createLezerLspServicesForGrammar(grammarString: string): Promise<
     return services;
 }
 
-// ---- Arithmetics-style grammar for realistic benchmarks ----
+// ---- Actual Arithmetics grammars from example projects ----
 
-const ARITHMETICS_GRAMMAR = `
-    grammar ArithBench
-    entry Module: 'module' name=ID statements+=Statement*;
-    Statement: Definition | Evaluation;
-    Definition: 'def' name=ID ':' expr=Expression ';';
-    Evaluation: expression=Expression ';';
-    Expression: Addition;
-    Addition infers Expression:
-        Multiplication ({infer BinaryExpression.left=current} op=('+' | '-') right=Multiplication)*;
-    Multiplication infers Expression:
-        PrimaryExpression ({infer BinaryExpression.left=current} op=('*') right=PrimaryExpression)*;
-    PrimaryExpression infers Expression:
-        '(' Expression ')' |
-        {infer NumberLiteral} value=NUMBER |
-        {infer FunctionCall} func=[Definition];
-    hidden terminal WS: /\\s+/;
-    terminal ID: /[_a-zA-Z][\\w_]*/;
-    terminal NUMBER: /[0-9]+(\\.[0-9]*)?/;
-`;
+// Chevrotain backend grammar (uses `infix BinaryExpression on PrimaryExpression:`)
+const ARITHMETICS_CHEVROTAIN_GRAMMAR = fs.readFileSync(
+    path.resolve(__dirname, '../../../../examples/arithmetics/src/language-server/arithmetics.langium'),
+    'utf-8'
+);
 
+// Lezer backend grammar (uses `infix Expression on PrimaryExpression infers BinaryExpression:`)
+const ARITHMETICS_LEZER_GRAMMAR = fs.readFileSync(
+    path.resolve(__dirname, '../../../../examples/arithmetics-lezer/src/language-server/arithmetics.langium'),
+    'utf-8'
+);
+
+/**
+ * Generate a realistic Arithmetics document with function definitions,
+ * parameter lists, nested expressions, and evaluations with function calls.
+ * Each definition is 1 line; function defs with params add complexity.
+ */
 function generateArithmeticsDocument(defCount: number): string {
     const lines: string[] = ['module Bench'];
+    const ops = ['%', '^', '*', '/', '+', '-'];
+
     for (let i = 0; i < defCount; i++) {
-        lines.push(`def var_${i} : ${i} * (${i + 1} + ${i + 2}) ;`);
+        if (i % 5 === 0 && i > 0) {
+            // Function definition with parameters: def fn_N(a, b): a + b * N;
+            lines.push(`def fn_${i}(a_${i}, b_${i}): a_${i} ${ops[i % ops.length]} b_${i} * ${i};`);
+        } else {
+            // Simple definition with nested expression
+            const op1 = ops[i % ops.length];
+            const op2 = ops[(i + 2) % ops.length];
+            lines.push(`def var_${i}: ${i} ${op1} (${i + 1} ${op2} ${i + 2});`);
+        }
     }
-    // Add evaluations that reference earlier definitions
-    for (let i = 0; i < Math.min(defCount, 20); i++) {
-        lines.push(`var_${i} + var_${Math.min(i + 1, defCount - 1)} ;`);
+
+    // Add evaluations that reference earlier definitions and call functions
+    const evalCount = Math.min(defCount, 100);
+    for (let i = 0; i < evalCount; i++) {
+        if (i % 5 === 0 && i > 0) {
+            // Function call evaluation
+            lines.push(`fn_${i}(${i}, ${i + 1}) + var_${Math.min(i + 1, defCount - 1)};`);
+        } else {
+            lines.push(`var_${i} + var_${Math.min(i + 1, defCount - 1)} * ${i};`);
+        }
     }
+
     return lines.join('\n');
 }
 
@@ -240,16 +257,16 @@ describe('Parse benchmarks — LIST_GRAMMAR', () => {
     });
 });
 
-// ---- Arithmetics grammar benchmarks ----
+// ---- Arithmetics grammar benchmarks (actual example grammars) ----
 
-describe('Parse benchmarks — Arithmetics grammar', () => {
+describe('Parse benchmarks — Arithmetics grammar (actual examples)', () => {
     let lezerAdapter: LezerAdapter;
     let chevrotainAdapter: ParserAdapter;
 
     beforeAll(async () => {
-        const lezerResult = await createLezerAdapterForGrammar(ARITHMETICS_GRAMMAR);
+        const lezerResult = await createLezerAdapterForGrammar(ARITHMETICS_LEZER_GRAMMAR);
         lezerAdapter = lezerResult.adapter;
-        const chevResult = await createChevrotainAdapterForGrammar(ARITHMETICS_GRAMMAR);
+        const chevResult = await createChevrotainAdapterForGrammar(ARITHMETICS_CHEVROTAIN_GRAMMAR);
         chevrotainAdapter = chevResult.adapter;
     });
 
@@ -286,7 +303,7 @@ describe('Parse benchmarks — Arithmetics grammar', () => {
             const lines = doc.split('\n');
             const midLine = Math.floor(lines.length / 2);
             const lineOffset = lines.slice(0, midLine).join('\n').length + 1;
-            const newDef = 'def inserted_var : 42 + 1 ;';
+            const newDef = 'def inserted_var: 42 + 1;';
             const editedLine = doc.slice(0, lineOffset) + newDef + '\n' + doc.slice(lineOffset);
             const lineChanges: TextChange[] = [
                 { rangeOffset: lineOffset, rangeLength: 0, text: newDef + '\n' }
@@ -302,7 +319,7 @@ describe('Parse benchmarks — Arithmetics grammar', () => {
             const replaceStart = lines.slice(0, replaceLineIdx).join('\n').length + 1;
             const replaceEnd = replaceStart + lines[replaceLineIdx].length;
             const oldText = doc.slice(replaceStart, replaceEnd);
-            const newDefReplace = 'def replaced : 99 * 3 + 7 ;';
+            const newDefReplace = 'def replaced: 99 * 3 + 7;';
             const editedBlock = doc.slice(0, replaceStart) + newDefReplace + doc.slice(replaceEnd);
             const blockChanges: TextChange[] = [
                 { rangeOffset: replaceStart, rangeLength: oldText.length, text: newDefReplace }
@@ -325,7 +342,7 @@ describe('Parse benchmarks — Arithmetics grammar', () => {
             });
         }
 
-        console.log('\n=== Arithmetics Grammar Parse Benchmarks ===');
+        console.log('\n=== Arithmetics Grammar Parse Benchmarks (actual examples) ===');
         console.table(results.map(r => ({
             'Defs': r.size,
             'Chevrotain (ms)': r.chevrotainMs,
@@ -344,6 +361,91 @@ describe('Parse benchmarks — Arithmetics grammar', () => {
                 expect(r.lezerIncrCharMs).toBeLessThan(r.lezerFullMs * 2);
             }
         }
+    });
+
+    test('large document benchmark (10K lines)', { timeout: 60000 }, () => {
+        // ~9000 defs + ~100 evals ≈ 10K lines
+        const doc = generateArithmeticsDocument(9000);
+        const lineCount = doc.split('\n').length;
+        const charCount = doc.length;
+        const iterations = 5;
+
+        console.log(`\n=== Arithmetics — ${lineCount} lines, ${(charCount / 1024).toFixed(0)} KB ===`);
+
+        // Full parse — Chevrotain
+        const chevrotainMs = measure(() => chevrotainAdapter.parse(doc), iterations);
+
+        // Full parse — Lezer
+        const lezerFullMs = measure(() => lezerAdapter.parse(doc), iterations);
+
+        // Set up incremental base
+        const baseResult = lezerAdapter.parse(doc);
+        const state = baseResult.incrementalState!;
+
+        // Edit 1: Single char insertion in the middle
+        const midOffset = Math.floor(doc.length / 2);
+        const editedChar = doc.slice(0, midOffset) + '1' + doc.slice(midOffset);
+        const charChanges: TextChange[] = [
+            { rangeOffset: midOffset, rangeLength: 0, text: '1' }
+        ];
+        const lezerIncrCharMs = measure(
+            () => lezerAdapter.parseIncremental!(editedChar, state, charChanges),
+            iterations
+        );
+
+        // Edit 2: Insert a function definition with parameters in the middle
+        const lines = doc.split('\n');
+        const midLine = Math.floor(lines.length / 2);
+        const lineOffset = lines.slice(0, midLine).join('\n').length + 1;
+        const newDef = 'def inserted_fn(x, y): x ^ 2 + y * 3 - 1;';
+        const editedLine = doc.slice(0, lineOffset) + newDef + '\n' + doc.slice(lineOffset);
+        const lineChanges: TextChange[] = [
+            { rangeOffset: lineOffset, rangeLength: 0, text: newDef + '\n' }
+        ];
+        const lezerIncrLineMs = measure(
+            () => lezerAdapter.parseIncremental!(editedLine, state, lineChanges),
+            iterations
+        );
+
+        // Edit 3: Replace 10 definitions in the middle
+        const defLines = lines.filter(l => l.startsWith('def'));
+        const replaceIdx = Math.floor(defLines.length / 2);
+        const replaceStartLineIdx = lines.indexOf(defLines[replaceIdx]);
+        const replaceEndLineIdx = lines.indexOf(defLines[Math.min(replaceIdx + 9, defLines.length - 1)]);
+        const replaceStart = lines.slice(0, replaceStartLineIdx).join('\n').length + 1;
+        const replaceEnd = lines.slice(0, replaceEndLineIdx + 1).join('\n').length;
+        const oldText = doc.slice(replaceStart, replaceEnd);
+        const newDefs = Array.from({ length: 10 }, (_, i) =>
+            `def replaced_${i}(a, b): a ${['+', '-', '*', '/', '^', '%'][i % 6]} b;`
+        ).join('\n');
+        const editedBlock = doc.slice(0, replaceStart) + newDefs + doc.slice(replaceEnd);
+        const blockChanges: TextChange[] = [
+            { rangeOffset: replaceStart, rangeLength: oldText.length, text: newDefs }
+        ];
+        const lezerIncrBlockMs = measure(
+            () => lezerAdapter.parseIncremental!(editedBlock, state, blockChanges),
+            iterations
+        );
+
+        const r = (n: number) => Math.round(n * 100) / 100;
+
+        console.table([{
+            'Lines': lineCount,
+            'KB': (charCount / 1024).toFixed(0),
+            'Chevrotain (ms)': r(chevrotainMs),
+            'Lezer Full (ms)': r(lezerFullMs),
+            'Incr Char (ms)': r(lezerIncrCharMs),
+            'Incr Line (ms)': r(lezerIncrLineMs),
+            'Incr Block (ms)': r(lezerIncrBlockMs),
+            'vs Chev (char)': (chevrotainMs / lezerIncrCharMs).toFixed(1) + 'x',
+            'vs Chev (line)': (chevrotainMs / lezerIncrLineMs).toFixed(1) + 'x',
+            'vs Chev (block)': (chevrotainMs / lezerIncrBlockMs).toFixed(1) + 'x',
+        }]);
+
+        // Incremental must beat full parse for a 10K-line document
+        expect(lezerIncrCharMs).toBeLessThan(lezerFullMs);
+        expect(lezerIncrLineMs).toBeLessThan(lezerFullMs);
+        expect(lezerIncrBlockMs).toBeLessThan(lezerFullMs);
     });
 });
 
