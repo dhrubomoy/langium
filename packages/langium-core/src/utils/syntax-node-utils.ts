@@ -290,7 +290,13 @@ export function findAssignmentSN(node: SyntaxNode, grammarRegistry?: GrammarRegi
     // Strategy 3: Use GrammarRegistry to find assignment by type and field matching
     if (astNode?.$syntaxNode) {
         const parentSN = astNode.$syntaxNode;
-        const assignments = grammarRegistry.getAssignments(astNode.$type);
+        // Try assignments for the AST type first (e.g., "FunctionCall"), then fall back
+        // to the SyntaxNode's rule name (e.g., "PrimaryExpression") for inferred types
+        // where {infer X} creates a type not indexed as a grammar rule.
+        let assignments = grammarRegistry.getAssignments(astNode.$type);
+        if (assignments.length === 0 && parentSN.type !== astNode.$type) {
+            assignments = grammarRegistry.getAssignments(parentSN.type);
+        }
         for (const assignment of assignments) {
             for (const fieldChild of parentSN.childrenForField(assignment.feature)) {
                 if (fieldChild === node || (node.offset >= fieldChild.offset && node.end <= fieldChild.end)) {

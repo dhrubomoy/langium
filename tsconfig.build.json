@@ -20,6 +20,8 @@
         { "path": "./packages/generator-langium/tsconfig.test.json" },
         { "path": "./examples/arithmetics/tsconfig.src.json" },
         { "path": "./examples/arithmetics/tsconfig.test.json" },
+        { "path": "./examples/arithmetics-lezer/tsconfig.src.json" },
+        { "path": "./examples/arithmetics-lezer/tsconfig.test.json" },
         { "path": "./examples/domainmodel/tsconfig.src.json" },
         { "path": "./examples/domainmodel/tsconfig.test.json" },
         { "path": "./examples/requirements/tsconfig.src.json" },

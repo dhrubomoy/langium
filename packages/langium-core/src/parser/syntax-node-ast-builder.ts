@@ -301,6 +301,43 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
             return;
         }
 
+        // Handle infix rules: if the child is an infix rule (e.g., `Expression` in
+        // `PrimaryExpression infers Expression: '(' Expression ')'`), build it as a
+        // complete AstNode via buildNode() and copy its properties to the parent.
+        // Without this, the operands would be flattened and only the last one survives.
+        const infixInfo = this.grammarRegistry.getInfixRuleInfo(childType);
+        if (infixInfo) {
+            const operandChildren = childSN.children.filter(c =>
+                !c.isHidden && !c.isError &&
+                (c.type === infixInfo.ruleName || c.type === infixInfo.operandRuleName)
+            );
+            if (operandChildren.length === 2) {
+                // Build the infix expression as a standalone AstNode
+                const infixNode = this.buildInfixExpression(childSN, infixInfo, operandChildren) as GenericAstNode;
+                // Copy all properties from the built infix node to the parent
+                (node as Mutable<AstNode>).$type = (infixNode as AstNode).$type;
+                for (const key of Object.keys(infixNode)) {
+                    if (key.startsWith('$')) continue;
+                    (node as Record<string, unknown>)[key] = (infixNode as Record<string, unknown>)[key];
+                    // Re-parent child AstNodes
+                    const val = (infixNode as Record<string, unknown>)[key];
+                    if (val && typeof val === 'object' && '$type' in (val as object)) {
+                        (val as Mutable<AstNode>).$container = node as unknown as AstNode;
+                    }
+                }
+                this.defineSyntaxNodeProperty(node, childSN);
+                this.syntaxNodeToAstNode.set(childSN, node);
+                Object.defineProperty(childSN, '$astNode', {
+                    value: node,
+                    configurable: true,
+                    enumerable: false,
+                    writable: true
+                });
+                return;
+            }
+            // Single operand (pass-through) — fall through to normal inlining
+        }
+
         // Update $type to the child's type (mirrors Chevrotain's action callback)
         (node as Mutable<AstNode>).$type = childType;
 

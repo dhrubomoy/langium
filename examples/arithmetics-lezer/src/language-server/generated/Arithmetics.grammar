@@ -1,0 +1,44 @@
+@precedence { prec_Expression_0 @left, prec_Expression_1 @left, prec_Expression_2 @left, prec_Expression_3 @left }
+
+@top Module { module ModuleName ModuleStatements* }
+
+@skip { whitespace | BlockComment | LineComment }
+
+// precedence 0: % (left)
+// precedence 1: ^ (left)
+// precedence 2: *, / (left)
+// precedence 3: +, - (left)
+Expression { Expression !prec_Expression_0 "%" Expression | Expression !prec_Expression_1 "^" Expression | Expression !prec_Expression_2 "*" Expression | Expression !prec_Expression_2 "/" Expression | Expression !prec_Expression_3 "+" Expression | Expression !prec_Expression_3 "-" Expression | PrimaryExpression }
+
+Statement { (Definition | Evaluation) }
+
+Definition { def DefinitionName ("(" DefinitionArgs ("," DefinitionArgs)* ")")? ":" DefinitionExpr ";" }
+
+DeclaredParameter { DeclaredParameterName }
+
+Evaluation { EvaluationExpression ";" }
+
+PrimaryExpression { ("(" Expression ")" |  PrimaryExpressionValue |  PrimaryExpressionFunc ("(" PrimaryExpressionArgs ("," PrimaryExpressionArgs)* ")")?) }
+
+// Wrapper rules for field access
+ModuleName { Identifier }
+ModuleStatements { Statement }
+DefinitionName { Identifier }
+DefinitionArgs { DeclaredParameter }
+DefinitionExpr { Expression }
+DeclaredParameterName { Identifier }
+EvaluationExpression { Expression }
+PrimaryExpressionValue { Number }
+PrimaryExpressionFunc { Identifier }
+PrimaryExpressionArgs { Expression }
+
+@external specialize {Identifier} keywords from "./Arithmetics.keywords.js" { module[@name=module], def[@name=def] }
+
+@tokens {
+  @precedence { LineComment, "/" }
+  Identifier { $[A-Z_a-z] $[0-9A-Z_a-z]* }
+  Number { $[0-9]+ ("." $[0-9]*)? }
+  whitespace { @whitespace+ }
+  BlockComment { "/*" (![*] | "*" ![/])* "*/" }
+  LineComment { "/" "/" ![\n\r]* }
+}

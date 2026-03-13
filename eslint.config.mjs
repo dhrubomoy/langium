@@ -40,7 +40,10 @@ export default [{
         '**/*env.d.ts',
         '**/esbuild.mjs',
         // WA: 'no-useless-escape': 'off' has no effect
-        '**/examples/**/*.monarch.ts'
+        '**/examples/**/*.monarch.ts',
+        // Lezer-generated parse table and terms files
+        '**/*.parser.ts',
+        '**/*.terms.ts'
     ],
 }, ...compat.extends('eslint:recommended', 'plugin:@typescript-eslint/recommended'), {
     files: [

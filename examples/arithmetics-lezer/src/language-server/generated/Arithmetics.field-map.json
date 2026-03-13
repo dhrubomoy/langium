@@ -1,0 +1,42 @@
+{
+  "Module": {
+    "name": [
+      "ModuleName"
+    ],
+    "statements": [
+      "ModuleStatements"
+    ]
+  },
+  "Definition": {
+    "name": [
+      "DefinitionName"
+    ],
+    "args": [
+      "DefinitionArgs"
+    ],
+    "expr": [
+      "DefinitionExpr"
+    ]
+  },
+  "DeclaredParameter": {
+    "name": [
+      "DeclaredParameterName"
+    ]
+  },
+  "Evaluation": {
+    "expression": [
+      "EvaluationExpression"
+    ]
+  },
+  "PrimaryExpression": {
+    "value": [
+      "PrimaryExpressionValue"
+    ],
+    "func": [
+      "PrimaryExpressionFunc"
+    ],
+    "args": [
+      "PrimaryExpressionArgs"
+    ]
+  }
+}

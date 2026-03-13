@@ -352,17 +352,20 @@ describe('Infix rule support', () => {
         expect(doc.parseResult.parserErrors).toHaveLength(0);
         const expr = ast.expr as GenericAstNode;
         expect(expr.$type).toBe('BinaryExpression');
-        expect(expr.operator).toBe('+');
+        // In INFIX_RULE_GRAMMAR: '+' | '-' > '*' | '/'
+        // '+' is listed first (higher precedence / tighter binding), so it groups first.
+        // Tree: (1 + 2) * 3 — top-level operator is '*'
+        expect(expr.operator).toBe('*');
 
-        // Left is 1 (Primary)
+        // Left is 1 + 2 (BinaryExpression with higher precedence)
         const left = expr.left as GenericAstNode;
-        expect(left.$type).toBe('Primary');
-        expect(left.value).toBe(1);
+        expect(left.$type).toBe('BinaryExpression');
+        expect(left.operator).toBe('+');
 
-        // Right is 2 * 3 (BinaryExpression with higher precedence)
+        // Right is 3 (Primary)
         const right = expr.right as GenericAstNode;
-        expect(right.$type).toBe('BinaryExpression');
-        expect(right.operator).toBe('*');
+        expect(right.$type).toBe('Primary');
+        expect(right.value).toBe(3);
     });
 
     test('single value: no binary expression', async () => {

@@ -55,9 +55,9 @@ describe('Precedence translation', () => {
                 Low;
             }
         `);
-        // PrecedenceBlock levels come first, then infix-generated levels (highest precedence first)
+        // PrecedenceBlock levels come first, then infix-generated levels (index 0 = highest precedence first)
         expect(grammarText).toContain('@precedence {');
-        expect(grammarText).toMatch(/High @left.*Low @left.*prec_BinExpr_1 @left.*prec_BinExpr_0 @left/);
+        expect(grammarText).toMatch(/High @left.*Low @left.*prec_BinExpr_0 @left.*prec_BinExpr_1 @left/);
     });
 
     test('should emit !tag marker for @precMarker on elements', async () => {

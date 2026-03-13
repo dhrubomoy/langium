@@ -19,7 +19,8 @@ packages/
   langium-lezer/           # Lezer parser backend (incremental parsing, zero-copy SyntaxNode)
   generator-langium/       # Yeoman project generator
 examples/
-  arithmetics/             # Example: arithmetic expressions DSL
+  arithmetics/             # Example: arithmetic expressions DSL (Chevrotain backend)
+  arithmetics-lezer/       # Example: arithmetic expressions DSL (Lezer backend)
   domainmodel/             # Example: domain model DSL
   requirements/            # Example: requirements DSL
   statemachine/            # Example: state machine DSL
@@ -120,7 +121,7 @@ Phase file: [docs/phases/PHASE-2.md](docs/phases/PHASE-2.md)
 ### Phase 4: Polish
 - [x] Performance benchmarks (packages/langium-lezer/test/benchmark/parse-benchmark.test.ts)
 - [x] Migration guide (docs/MIGRATION.md)
-- [x] Example project with both backends (examples/dual-backend/) — parser-level only
+- [x] Example project with Lezer backend (examples/arithmetics-lezer/)
 - [x] Documentation (docs/ARCHITECTURE.md, docs/GRAMMAR-EXTENSIONS.md)
 
 ## Lezer Backend Bugs (from [docs/TESTS.md](docs/TESTS.md))

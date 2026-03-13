@@ -93,7 +93,7 @@ export class LezerGrammarTranslator implements GrammarTranslator {
                 moduleStyle: 'es',
             });
             const parserPath = path.join(outputDir, `${languageId}.parser.ts`);
-            await fs.promises.writeFile(parserPath, parserCode, 'utf-8');
+            await fs.promises.writeFile(parserPath, '// @ts-nocheck\n' + parserCode, 'utf-8');
             outputFiles.push(parserPath);
 
             // Write terms file
@@ -424,11 +424,11 @@ export class LezerGrammarTranslator implements GrammarTranslator {
         }
 
         // From infix rules (generated precedence names)
-        // In the Langium infix rule, precedences[0] is the LOWEST level (loosest binding),
-        // but Lezer's @precedence lists from HIGHEST to LOWEST. So reverse the order.
+        // In the Langium infix rule, precedences[0] is the HIGHEST level (tightest binding),
+        // and Lezer's @precedence also lists from HIGHEST to LOWEST. So emit in forward order.
         for (const rule of grammar.rules) {
             if (GrammarAST.isInfixRule(rule)) {
-                for (let i = rule.operators.precedences.length - 1; i >= 0; i--) {
+                for (let i = 0; i < rule.operators.precedences.length; i++) {
                     const precLevel = rule.operators.precedences[i];
                     levels.push({
                         name: `prec_${rule.name}_${i}`,

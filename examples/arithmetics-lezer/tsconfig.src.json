@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "out",
+    "lib": ["ESNext", "WebWorker"],
+    "resolveJsonModule": true
+  },
+  "references": [{
+      "path": "../../packages/langium/tsconfig.src.json"
+  }, {
+      "path": "../../packages/langium-lezer/tsconfig.src.json"
+  }],
+  "include": [
+    "src/**/*",
+    "src/**/*.json"
+  ]
+}
