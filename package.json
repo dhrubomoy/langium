@@ -8,8 +8,8 @@
   },
   "scripts": {
     "clean": "shx rm -rf packages/*/lib packages/*/*.tsbuildinfo packages/*/out packages/*/app packages/*/coverage packages/*/test/generator-tests examples/*/*.tsbuildinfo",
-    "build": "tsc -b tsconfig.build.json && npm run build --workspace=langium-vscode --workspace=examples/domainmodel --workspace=examples/arithmetics --workspace=examples/statemachine --workspace=examples/requirements",
-    "watch": "concurrently -n tsc,vscode,domainmodel,arithmetics,requirements,statemachine -c blue,yellow,green,green,green,green \"npm run watch:tsc\" \"npm run watch --workspace=langium-vscode\" \"npm run watch --workspace=examples/domainmodel\" \"npm run watch --workspace=examples/arithmetics\" \"npm run watch --workspace=examples/statemachine\" \"npm run watch --workspace=examples/requirements\"",
+    "build": "tsc -b tsconfig.build.json && npm run build --workspace=langium-vscode --workspace=examples/domainmodel --workspace=examples/arithmetics --workspace=examples/arithmetics-lezer --workspace=examples/statemachine --workspace=examples/requirements --workspace=examples/simple-sql",
+    "watch": "concurrently -n tsc,vscode,domainmodel,arithmetics,arithmetics-lezer,requirements,statemachine -c blue,yellow,green,green,green,green,green \"npm run watch:tsc\" \"npm run watch --workspace=langium-vscode\" \"npm run watch --workspace=examples/domainmodel\" \"npm run watch --workspace=examples/arithmetics\" \"npm run watch --workspace=examples/arithmetics-lezer\" \"npm run watch --workspace=examples/statemachine\" \"npm run watch --workspace=examples/requirements\"",
     "watch:tsc": "tsc -b tsconfig.build.json -w",
     "build:clean": "npm run clean && npm run build",
     "lint": "eslint",
@@ -21,7 +21,7 @@
     "validate-exports": "npm run validate-exports --workspace=langium",
     "version:dependencies": "tsx ./scripts/update-version.ts && npm install",
     "publish:updated": "tsx ./scripts/publish-updated-packages.ts",
-    "langium:generate": "npm run langium:generate --workspace=langium --workspace=examples/domainmodel --workspace=examples/arithmetics --workspace=examples/statemachine --workspace=examples/requirements",
+    "langium:generate": "npm run langium:generate --workspace=langium --workspace=examples/domainmodel --workspace=examples/arithmetics --workspace=examples/arithmetics-lezer --workspace=examples/statemachine --workspace=examples/requirements --workspace=examples/simple-sql",
     "dev-build": "npm run dev-clean && npm install && npm link ./packages/langium && npm link ./packages/langium-cli && npm link ./packages/generator-langium",
     "dev-clean": "shx rm -rf packages/**/node_modules && npm uninstall -g langium-workspaces langium-cli generator-langium langium && npm unlink langium-workspaces langium-cli generator-langium langium",
     "reset:repo": "git clean -f -X -d"
@@ -56,6 +56,10 @@
     "@rollup/rollup-linux-x64-gnu": "^4"
   },
   "workspaces": [
+    "packages/langium-core",
+    "packages/langium-chevrotain",
+    "packages/langium-lezer",
+    "packages/langium-lsp",
     "packages/langium",
     "packages/langium-railroad",
     "packages/langium-cli",
@@ -63,8 +67,10 @@
     "packages/langium-vscode",
     "packages/generator-langium",
     "examples/arithmetics",
+    "examples/arithmetics-lezer",
     "examples/domainmodel",
     "examples/requirements",
-    "examples/statemachine"
+    "examples/statemachine",
+    "examples/simple-sql"
   ]
 }

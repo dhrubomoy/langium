@@ -4,7 +4,7 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import type { Grammar, IParserConfig } from 'langium';
+import type { Grammar, ParserConfig } from 'langium';
 import { type Generated, expandToNode, joinToNode, toString } from 'langium/generate';
 import type { LangiumConfig, LangiumLanguageConfig } from '../package-types.js';
 import { generatedHeader } from './node-util.js';
@@ -13,7 +13,7 @@ export function generateModule(grammars: Grammar[], config: LangiumConfig, gramm
     const grammarsWithName = grammars.filter(grammar => !!grammar.name);
     const parserConfig = config.chevrotainParserConfig;
     const mode = config.mode;
-    const hasIParserConfigImport = Boolean(parserConfig) || grammars.some(grammar => grammarConfigMap.get(grammar)?.chevrotainParserConfig !== undefined);
+    const hasParserConfigImport = Boolean(parserConfig) || grammars.some(grammar => grammarConfigMap.get(grammar)?.chevrotainParserConfig !== undefined);
     let needsGeneralParserConfig = undefined;
 
     /* eslint-disable @stylistic/indent */
@@ -23,17 +23,12 @@ export function generateModule(grammars: Grammar[], config: LangiumConfig, gramm
     ).appendIf(!!config.langiumInternal,
         expandToNode`
 
-            import type { LanguageMetaData } from '../../languages/language-meta-data${config.importExtension}';
+            import type { LanguageMetaData, Module, LangiumSharedCoreServices, LangiumCoreServices, LangiumGeneratedCoreServices, LangiumGeneratedSharedCoreServices${hasParserConfigImport ? ', ParserConfig' : ''} } from 'langium-core';
             import { ${config.projectName}AstReflection } from '../../languages/generated/ast${config.importExtension}';
-            import type { Module } from '../../dependency-injection${config.importExtension}';
-            import type { LangiumSharedCoreServices, LangiumCoreServices, LangiumGeneratedCoreServices, LangiumGeneratedSharedCoreServices } from '../../services${config.importExtension}';
-        `.appendTemplateIf(hasIParserConfigImport)`
-
-            import type { IParserConfig } from '../../parser/parser-config${config.importExtension}';
         `
     ).appendTemplateIf(!config.langiumInternal)`
 
-        import type { LangiumSharedCoreServices, LangiumCoreServices, LangiumGeneratedCoreServices, LangiumGeneratedSharedCoreServices, LanguageMetaData, Module${hasIParserConfigImport ? ', IParserConfig' : ''} } from 'langium';
+        import type { LangiumSharedCoreServices, LangiumCoreServices, LangiumGeneratedCoreServices, LangiumGeneratedSharedCoreServices, LanguageMetaData, Module${hasParserConfigImport ? ', ParserConfig' : ''} } from 'langium';
         import { ${config.projectName}AstReflection } from './ast${config.importExtension}';
     `.appendTemplate`
 
@@ -63,7 +58,7 @@ export function generateModule(grammars: Grammar[], config: LangiumConfig, gramm
                 if (grammarParserConfig) {
                     return expandToNode`
 
-                        export const ${grammar.name}ParserConfig: IParserConfig = {
+                        export const ${grammar.name}ParserConfig: ParserConfig = {
                             ${generateParserConfig(grammarParserConfig)}
                         };
                     `;
@@ -76,7 +71,7 @@ export function generateModule(grammars: Grammar[], config: LangiumConfig, gramm
         )}
         ${needsGeneralParserConfig && parserConfig && expandToNode`
 
-            export const parserConfig: IParserConfig = {
+            export const parserConfig: ParserConfig = {
                 ${generateParserConfig(parserConfig)}
             };
         `}
@@ -109,7 +104,7 @@ export function generateModule(grammars: Grammar[], config: LangiumConfig, gramm
     return toString(node);
 }
 
-function generateParserConfig(config: IParserConfig): Generated {
+function generateParserConfig(config: ParserConfig): Generated {
     return joinToNode(
         Object.entries(config),
         ([key, value]) => `${key}: ${typeof value === 'string' ? `'${value}'` : value},`,

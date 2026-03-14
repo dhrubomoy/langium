@@ -7,7 +7,7 @@
 import chalk from 'chalk';
 import fs from 'fs-extra';
 import { validate } from 'jsonschema';
-import { AstUtils, GrammarAST, URI, type AstNode, type Grammar, type LangiumDocument, type Mutable } from 'langium';
+import { AstUtils, ChevrotainGrammarTranslator, GrammarAST, URI, type AstNode, type Grammar, type LangiumDocument, type Mutable } from 'langium';
 import { createGrammarDiagramHtml, createGrammarDiagramSvg } from 'langium-railroad';
 import { createLangiumGrammarServices, resolveImport, resolveImportUri, resolveTransitiveImports, type LangiumGrammarServices } from 'langium/grammar';
 import { NodeFileSystem } from 'langium/node';
@@ -105,6 +105,7 @@ export interface GenerateOptions {
     file?: string;
     mode?: 'development' | 'production';
     watch?: boolean;
+    backend?: 'chevrotain' | 'lezer';
 }
 
 export interface ExtractTypesOptions {
@@ -323,7 +324,18 @@ export async function runGenerator(config: LangiumConfig, options: GenerateOptio
     const output = path.resolve(relPath, config.out ?? 'src/generated');
     log('log', options, `Writing generated files to ${chalk.white.bold(output)}`);
 
-    if (await rmdirWithFail(output, ['ast.ts', 'grammar.ts', 'module.ts'], options)) {
+    const expectedFiles = ['ast.ts', 'grammar.ts', 'module.ts'];
+    const backend = options.backend ?? config.parserBackend ?? 'chevrotain';
+    if (backend === 'lezer') {
+        for (const lang of languages) {
+            const id = lang.entryGrammar.name ?? '';
+            expectedFiles.push(
+                `${id}.grammar`, `${id}.field-map.json`, `${id}.keywords.json`,
+                `${id}.parser.ts`, `${id}.terms.ts`, `${id}.keywords.ts`
+            );
+        }
+    }
+    if (await rmdirWithFail(output, expectedFiles, options)) {
         return buildResult(false);
     }
     if (await mkdirWithFail(output, options)) {
@@ -351,6 +363,69 @@ export async function runGenerator(config: LangiumConfig, options: GenerateOptio
     // module.ts
     const genModule = generateModule(embeddedGrammars, config, configMap);
     await writeWithFail(path.resolve(output, 'module.ts'), genModule, options);
+
+    // Lezer backend: generate Lezer grammar and parse tables
+    if (backend === 'lezer') {
+        try {
+            const { LezerGrammarTranslator } = await import('langium-lezer');
+            const translator = new LezerGrammarTranslator();
+            for (const grammar of embeddedGrammars) {
+                const langConfig = configMap.get(grammar);
+                translator.caseInsensitive = Boolean(langConfig?.caseInsensitive);
+                const lezerDiags = translator.validate(grammar);
+                const hasLezerErrors = lezerDiags.some(d => d.severity === 'error');
+                for (const diag of lezerDiags) {
+                    if (diag.severity === 'error') {
+                        log('error', options, chalk.red(`[lezer] ${diag.message}`));
+                    } else if (diag.severity === 'warning') {
+                        log('warn', options, chalk.yellow(`[lezer] ${diag.message}`));
+                    } else {
+                        log('log', options, `[lezer] ${diag.message}`);
+                    }
+                }
+                if (hasLezerErrors) {
+                    return buildResult(false);
+                }
+                const lezerResult = await translator.translate(grammar, output);
+                for (const diag of lezerResult.diagnostics) {
+                    if (diag.severity === 'error') {
+                        log('error', options, chalk.red(`[lezer] ${diag.message}`));
+                    } else if (diag.severity === 'warning') {
+                        log('warn', options, chalk.yellow(`[lezer] ${diag.message}`));
+                    }
+                }
+                if (lezerResult.diagnostics.some(d => d.severity === 'error')) {
+                    return buildResult(false);
+                }
+                log('log', options, `Generated Lezer parse tables for ${chalk.white.bold(grammar.name ?? 'language')}`);
+            }
+        } catch (e) {
+            log('error', options, chalk.red('Failed to load langium-lezer package. Install it with: npm install langium-lezer'));
+            log('error', options, chalk.red(String(e)));
+            return buildResult(false);
+        }
+    }
+
+    // Chevrotain backend: validate Phase 3 grammar extensions
+    if (backend === 'chevrotain') {
+        const chevrotainTranslator = new ChevrotainGrammarTranslator();
+        for (const grammar of embeddedGrammars) {
+            const chevDiags = chevrotainTranslator.validate(grammar);
+            const hasChevErrors = chevDiags.some(d => d.severity === 'error');
+            for (const diag of chevDiags) {
+                if (diag.severity === 'error') {
+                    log('error', options, chalk.red(`[chevrotain] ${diag.message}`));
+                } else if (diag.severity === 'warning') {
+                    log('warn', options, chalk.yellow(`[chevrotain] ${diag.message}`));
+                } else {
+                    log('log', options, `[chevrotain] ${diag.message}`);
+                }
+            }
+            if (hasChevErrors) {
+                return buildResult(false);
+            }
+        }
+    }
 
     // additional artifacts
     for (const grammar of embeddedGrammars) {
@@ -425,12 +500,15 @@ export async function embedGrammars(languages: LanguageInfo[], config: LangiumCo
     // We need to rescope the grammars again
     // They need to pick up on the embedded references
     await relinkGrammars(languages.map(l => l.embeddedGrammar));
-    // Create and validate the in-memory parser
-    for (const language of languages) {
-        const parserAnalysis = await validateParser(language.embeddedGrammar, config, language.languageConfig, grammarServices);
-        if (parserAnalysis instanceof Error) {
-            log('error', options, chalk.red(parserAnalysis.toString()));
-            return false;
+    // Create and validate the in-memory parser (Chevrotain only)
+    const backend = options.backend ?? config.parserBackend ?? 'chevrotain';
+    if (backend !== 'lezer') {
+        for (const language of languages) {
+            const parserAnalysis = await validateParser(language.embeddedGrammar, config, language.languageConfig, grammarServices);
+            if (parserAnalysis instanceof Error) {
+                log('error', options, chalk.red(parserAnalysis.toString()));
+                return false;
+            }
         }
     }
     return true;

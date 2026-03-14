@@ -315,6 +315,9 @@ function getWhitespaceRules(grammar: Grammar): Rule[] {
     const rules: Rule[] = [];
     for (const rule of grammar.rules) {
         if (GrammarAST.isTerminalRule(rule)) {
+            if (rule.nativeBody || !rule.definition) {
+                continue;
+            }
             const regex = GrammarUtils.terminalRegex(rule);
 
             if (!GrammarUtils.isCommentTerminal(rule) && !RegExpUtils.isWhitespace(regex)) {
@@ -399,6 +402,9 @@ function getTerminalRules(grammar: Grammar): Rule[] {
     const rules: Rule[] = [];
     for (const rule of grammar.rules) {
         if (GrammarAST.isTerminalRule(rule) && !GrammarUtils.isCommentTerminal(rule)) {
+            if (rule.nativeBody || !rule.definition) {
+                continue;
+            }
             const regex = GrammarUtils.terminalRegex(rule);
 
             if (RegExpUtils.isWhitespace(regex)) {

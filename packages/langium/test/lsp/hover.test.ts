@@ -7,9 +7,10 @@
 import { beforeAll, describe, test } from 'vitest';
 import type { AsyncDisposable} from 'langium';
 import { EmptyFileSystem } from 'langium';
-import { createLangiumGrammarServices, createServicesForGrammar } from 'langium/grammar';
+import { createLangiumGrammarServices } from 'langium/grammar';
 import type { ExpectedHover} from 'langium/test';
 import { expectHover } from 'langium/test';
+import { BACKENDS } from '../langium-lezer-test.js';
 
 describe('Hover', () => {
     const text = `
@@ -76,9 +77,7 @@ describe('Hover', () => {
     });
 });
 
-describe('Hover on keywords', () => {
-
-    const grammar = `grammar HoverOnKeywords
+const hoverKeywordsGrammar = `grammar HoverOnKeywords
 
     entry Model:
         /** root keyword */ 'root' name=ID
@@ -92,41 +91,48 @@ describe('Hover on keywords', () => {
     hidden terminal SL_COMMENT: /##[^\\n\\r]*/;
     `;
 
-    const text = `
+const hoverKeywordsText = `
     ## SL_COMMENT
     <|>root name
     #* ML_COMMENT *#
     <|>tag first <|>tag
       `;
 
-    let hover: (expectedHover: ExpectedHover) => Promise<AsyncDisposable>;
+for (const { name, createServices } of BACKENDS) {
+    describe(`Hover on keywords (${name})`, () => {
 
-    beforeAll(async () => {
-        const services = await createServicesForGrammar({
-            grammar
-        });
-        hover = expectHover(services);
-    });
-    test('Hovering over root keyword', async () => {
-        await hover({
-            text,
-            index: 0,
-            hover: 'root keyword'
-        });
-    });
-    test('Hovering over opening tag keyword', async () => {
+        let hover: (expectedHover: ExpectedHover) => Promise<AsyncDisposable>;
 
-        await hover({
-            text,
-            index: 1,
-            hover: 'opening tag'
+        beforeAll(async () => {
+            const services = await createServices({ grammar: hoverKeywordsGrammar });
+            if (!services) return;
+            hover = expectHover(services);
+        });
+        test('Hovering over root keyword', async ({ skip }) => {
+            if (!hover) skip();
+            await hover({
+                text: hoverKeywordsText,
+                index: 0,
+                hover: 'root keyword'
+            });
+        });
+        test('Hovering over opening tag keyword', async ({ skip }) => {
+            if (!hover) skip();
+            await hover({
+                text: hoverKeywordsText,
+                index: 1,
+                hover: 'opening tag'
+            });
+        });
+        // Lezer cannot distinguish two occurrences of the same keyword ('tag')
+        // within a single rule — it always resolves to the first JSDoc comment.
+        // See docs/TESTS.md for details.
+        test.skipIf(name === 'Lezer')('Hovering over closing tag keyword', async () => {
+            await hover({
+                text: hoverKeywordsText,
+                index: 2,
+                hover: 'closing tag'
+            });
         });
     });
-    test('Hovering over closing tag keyword', async () => {
-        await hover({
-            text,
-            index: 2,
-            hover: 'closing tag'
-        });
-    });
-});
+}

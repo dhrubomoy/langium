@@ -2,7 +2,6 @@
 .vscode-test/
 coverage/
 dist/
-docs/
 lib/
 out/
 node_modules/
@@ -10,3 +9,15 @@ node_modules/
 *.tsbuildinfo
 hello-world
 generator-tests
+
+# TypeScript compiled output (in-source builds)
+**/*.js.map
+**/*.d.ts.map
+packages/**/src/**/*.js
+packages/**/src/**/*.d.ts
+packages/**/test/**/*.js
+packages/**/test/**/*.d.ts
+examples/**/src/**/*.js
+examples/**/src/**/*.d.ts
+examples/**/test/**/*.js
+examples/**/test/**/*.d.ts

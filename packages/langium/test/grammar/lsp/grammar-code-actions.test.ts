@@ -6,9 +6,8 @@
 
 import { EmptyFileSystem } from 'langium';
 import { describe, expect, test } from 'vitest';
-import { IssueCodes } from '../../../src/grammar/index.js';
-import { createLangiumGrammarServices } from '../../../src/grammar/langium-grammar-module.js';
-import { testCodeAction } from '../../../src/test/langium-test.js';
+import { IssueCodes, createLangiumGrammarServices } from 'langium/grammar';
+import { testCodeAction } from 'langium/test';
 
 const services = createLangiumGrammarServices(EmptyFileSystem);
 const testCodeActions = testCodeAction(services.grammar);

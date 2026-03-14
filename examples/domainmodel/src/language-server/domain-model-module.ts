@@ -4,7 +4,7 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import { type Module, inject } from 'langium';
+import { type Module, inject, createChevrotainModule } from 'langium';
 import type { LangiumServices, LangiumSharedServices, PartialLangiumServices } from 'langium/lsp';
 import { createDefaultModule, createDefaultSharedModule, type DefaultSharedModuleContext } from 'langium/lsp';
 import { DomainModelFormatter } from './domain-model-formatter.js';
@@ -49,6 +49,7 @@ export function createDomainModelServices(context: DefaultSharedModuleContext): 
     );
     const domainmodel = inject(
         createDefaultModule({ shared }),
+        createChevrotainModule(),
         DomainModelGeneratedModule,
         DomainModelModule
     );

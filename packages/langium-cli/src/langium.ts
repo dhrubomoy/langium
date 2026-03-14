@@ -18,6 +18,7 @@ program
     .option('-f, --file <file>', 'The configuration file or package.json setting up the generator')
     .option('-w, --watch', 'Enable watch mode to regenerate when a grammar file is changed', false)
     .addOption(new Option('-m, --mode <mode>', 'Mode for optimized builds for your current environment').choices(['development', 'production']))
+    .addOption(new Option('-b, --backend <backend>', 'Parser backend (chevrotain or lezer)').choices(['chevrotain', 'lezer']))
     .action((options: GenerateOptions) => {
         generate(options)
             .then(success => {

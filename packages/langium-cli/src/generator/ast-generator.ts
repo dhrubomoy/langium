@@ -13,7 +13,7 @@ import { collectKeywords, collectTerminalRegexps } from './langium-util.js';
 import { generatedHeader } from './node-util.js';
 
 function generateAstHeader(langiumConfig: LangiumConfig): Generated {
-    const importFrom = langiumConfig.langiumInternal ? `../../syntax-tree${langiumConfig.importExtension}` : 'langium';
+    const importFrom = langiumConfig.langiumInternal ? 'langium-core' : 'langium';
     return expandToNode`
         ${generatedHeader}
 

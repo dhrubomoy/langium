@@ -33,6 +33,20 @@
             ]
         },
         {
+            "name": "Run Arithmetics (Lezer) Extension",
+            "type": "extensionHost",
+            "request": "launch",
+            "runtimeExecutable": "${execPath}",
+            "args": [
+                "${workspaceFolder}/examples/arithmetics-lezer/example",
+                "--extensionDevelopmentPath=${workspaceFolder}/examples/arithmetics-lezer"
+            ],
+            "sourceMaps": true,
+            "outFiles": [
+                "${workspaceFolder}/{packages,examples}/*/{lib,out}/**/*.js"
+            ]
+        },
+        {
             "name": "Run Domainmodel Extension",
             "type": "extensionHost",
             "request": "launch",
@@ -68,6 +82,20 @@
             "args": [
                 "${workspaceFolder}/examples/statemachine/example",
                 "--extensionDevelopmentPath=${workspaceFolder}/examples/statemachine"
+            ],
+            "sourceMaps": true,
+            "outFiles": [
+                "${workspaceFolder}/{packages,examples}/*/{lib,out}/**/*.js"
+            ]
+        },
+        {
+            "name": "Run Simple SQL Extension",
+            "type": "extensionHost",
+            "request": "launch",
+            "runtimeExecutable": "${execPath}",
+            "args": [
+                "${workspaceFolder}/examples/simple-sql/example",
+                "--extensionDevelopmentPath=${workspaceFolder}/examples/simple-sql"
             ],
             "sourceMaps": true,
             "outFiles": [

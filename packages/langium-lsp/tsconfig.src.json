@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib"
+  },
+  "references": [
+    { "path": "../langium-core/tsconfig.src.json" },
+    { "path": "../langium-chevrotain/tsconfig.src.json" }
+  ],
+  "include": [
+    "src/**/*.ts"
+  ]
+}
