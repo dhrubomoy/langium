@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 import type { CompletionItem, CompletionParams, TextEdit } from 'vscode-languageserver-protocol';
-import type { NameProvider, ScopeProvider, AstNode, AstNodeDescription, AstReflection, MultiReference, Reference, ReferenceInfo, MaybePromise, LangiumDocument, TextDocument, DocumentationProvider, Stream, Cancellation, ParserAdapter, GrammarRegistry, CompletionFeature } from 'langium-core';
+import type { NameProvider, ScopeProvider, AstNode, AstNodeDescription, AstReflection, MultiReference, Reference, ReferenceInfo, MaybePromise, LangiumDocument, TextDocument, DocumentationProvider, Stream, Cancellation, ParserAdapter, GrammarRegistry, CompletionFeature, LangiumProfiler } from 'langium-core';
 import type { NodeKindProvider } from '../node-kind-provider.js';
 import type { FuzzyMatcher } from '../fuzzy-matcher.js';
 import type { LangiumServices } from '../lsp-services.js';
@@ -121,6 +121,8 @@ export class DefaultCompletionProvider implements CompletionProvider {
     protected readonly nodeKindProvider: NodeKindProvider;
     protected readonly fuzzyMatcher: FuzzyMatcher;
     protected readonly astReflection: AstReflection;
+    protected readonly profiler?: LangiumProfiler;
+    protected readonly languageId: string;
     readonly completionOptions?: CompletionProviderOptions;
 
     constructor(services: LangiumServices) {
@@ -133,11 +135,19 @@ export class DefaultCompletionProvider implements CompletionProvider {
         this.fuzzyMatcher = services.shared.lsp.FuzzyMatcher;
         this.astReflection = services.shared.AstReflection;
         this.documentationProvider = services.documentation.DocumentationProvider;
+        this.profiler = services.shared.profilers.LangiumProfiler;
+        this.languageId = services.LanguageMetaData.languageId;
     }
 
     async getCompletion(document: LangiumDocument, params: CompletionParams, _cancelToken?: Cancellation.CancellationToken): Promise<CompletionList | undefined> {
+        const task = this.profiler?.isActive('completion')
+            ? this.profiler.createTask('completion', this.languageId)
+            : undefined;
+        task?.start();
+
         const rootSyntaxNode = document.parseResult.value.$syntaxNode;
         if (!rootSyntaxNode) {
+            task?.stop();
             return undefined;
         }
 
@@ -146,6 +156,7 @@ export class DefaultCompletionProvider implements CompletionProvider {
         const offset = textDocument.offsetAt(params.position);
 
         // Delegate to the parser backend to compute completion features
+        task?.startSubTask('getCompletionFeatures');
         const results = this.parserAdapter.getCompletionFeatures({
             rootSyntaxNode,
             text,
@@ -153,6 +164,7 @@ export class DefaultCompletionProvider implements CompletionProvider {
             grammar: this.grammar,
             grammarRegistry: this.grammarRegistry
         });
+        task?.stopSubTask('getCompletionFeatures');
 
         const items: CompletionItem[] = [];
         const acceptor: CompletionAcceptor = (context, value) => {
@@ -171,6 +183,7 @@ export class DefaultCompletionProvider implements CompletionProvider {
         };
 
         const completedFeatures: CompletionFeature[] = [];
+        task?.startSubTask('completionItems');
         for (const result of results) {
             const context: CompletionContext = {
                 node: result.contextNode,
@@ -196,8 +209,11 @@ export class DefaultCompletionProvider implements CompletionProvider {
                 break;
             }
         }
+        task?.stopSubTask('completionItems');
 
-        return CompletionList.create(this.deduplicateItems(items), true);
+        const result = CompletionList.create(this.deduplicateItems(items), true);
+        task?.stop();
+        return result;
     }
 
     /**
