@@ -20,6 +20,7 @@ import type { AdapterParseResult, TextChange } from '../parser/parser-adapter.js
 import type { RootSyntaxNode } from '../parser/syntax-node.js';
 import type { ServiceRegistry } from '../service-registry.js';
 import type { LangiumSharedCoreServices } from '../services.js';
+import type { LangiumProfiler } from './profiler.js';
 import type { AstNode, AstNodeDescription, MultiReference, Mutable, Reference } from '../syntax-tree.js';
 import type { Stream } from '../utils/stream.js';
 import { TextDocument } from './documents.js';
@@ -205,11 +206,13 @@ export class DefaultLangiumDocumentFactory implements LangiumDocumentFactory {
     protected readonly serviceRegistry: ServiceRegistry;
     protected readonly textDocuments?: TextDocumentProvider;
     protected readonly fileSystemProvider: FileSystemProvider;
+    protected readonly profiler?: LangiumProfiler;
 
     constructor(services: LangiumSharedCoreServices) {
         this.serviceRegistry = services.ServiceRegistry;
         this.textDocuments = services.workspace.TextDocuments;
         this.fileSystemProvider = services.workspace.FileSystemProvider;
+        this.profiler = services.profilers.LangiumProfiler;
     }
 
     async fromUri<T extends AstNode = AstNode>(uri: URI, cancellationToken = CancellationToken.None): Promise<LangiumDocument<T>> {
@@ -407,7 +410,7 @@ export class DefaultLangiumDocumentFactory implements LangiumDocumentFactory {
      * Convert an AdapterParseResult into a ParseResult, storing incremental state on the document.
      */
     private buildParseResult<T extends AstNode>(
-        services: { parser: { SyntaxNodeAstBuilder: { buildAst(root: RootSyntaxNode): ParseResult<AstNode> } } },
+        services: { parser: { SyntaxNodeAstBuilder: { buildAst(root: RootSyntaxNode): ParseResult<AstNode> } }, LanguageMetaData: { languageId: string } },
         adapterResult: AdapterParseResult,
         document?: LangiumDocument<T>
     ): ParseResult<T> {
@@ -420,7 +423,13 @@ export class DefaultLangiumDocumentFactory implements LangiumDocumentFactory {
             return adapterResult.builtAst as ParseResult<T>;
         }
         // Generic path: SyntaxNode → AST builder
-        return services.parser.SyntaxNodeAstBuilder.buildAst(adapterResult.root) as ParseResult<T>;
+        const task = this.profiler?.isActive('building')
+            ? this.profiler.createTask('building', services.LanguageMetaData.languageId)
+            : undefined;
+        task?.start();
+        const result = services.parser.SyntaxNodeAstBuilder.buildAst(adapterResult.root) as ParseResult<T>;
+        task?.stop();
+        return result;
     }
 
     protected parseAsync<T extends AstNode>(uri: URI, text: string, cancellationToken: CancellationToken): Promise<ParseResult<T>> {

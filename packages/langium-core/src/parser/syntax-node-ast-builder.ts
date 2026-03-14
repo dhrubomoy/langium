@@ -86,12 +86,20 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
         // and extract the operator from source text between them.
         const infixInfo = this.grammarRegistry.getInfixRuleInfo(ruleName);
         if (infixInfo) {
-            const operandChildren = syntaxNode.children.filter(c =>
-                !c.isHidden && !c.isError &&
-                (c.type === infixInfo.ruleName || c.type === infixInfo.operandRuleName)
-            );
-            if (operandChildren.length === 2) {
-                return this.buildInfixExpression(syntaxNode, infixInfo, operandChildren);
+            // Avoid allocating a filtered array — collect up to 2 operand children inline
+            let op1: SyntaxNode | undefined, op2: SyntaxNode | undefined;
+            let opCount = 0;
+            for (const c of syntaxNode.children) {
+                if (!c.isHidden && !c.isError &&
+                    (c.type === infixInfo.ruleName || c.type === infixInfo.operandRuleName)) {
+                    if (opCount === 0) op1 = c;
+                    else if (opCount === 1) op2 = c;
+                    opCount++;
+                    if (opCount > 2) break;
+                }
+            }
+            if (opCount === 2 && op1 && op2) {
+                return this.buildInfixExpression(syntaxNode, infixInfo, [op1, op2]);
             }
             // Single operand (pass-through) — fall through to normal build
         }
@@ -146,12 +154,8 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
         }
         this.syntaxNodeToAstNode.set(syntaxNode, node);
         // Store back-reference on SyntaxNode for findAstNodeForSyntaxNode()
-        Object.defineProperty(syntaxNode, '$astNode', {
-            value: node,
-            configurable: true,
-            enumerable: false,
-            writable: true
-        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (syntaxNode as any).$astNode = node;
 
         return node;
     }
@@ -246,9 +250,18 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
      */
     protected unwrapFieldChild(childSN: SyntaxNode): SyntaxNode {
         if (!childSN.isLeaf) {
-            const realChildren = childSN.children.filter(c => !c.isError && !c.isHidden);
-            if (realChildren.length === 1) {
-                return realChildren[0];
+            // Avoid allocating a filtered array — count and track the single real child inline
+            let realChild: SyntaxNode | undefined;
+            let count = 0;
+            for (const c of childSN.children) {
+                if (!c.isError && !c.isHidden) {
+                    realChild = c;
+                    count++;
+                    if (count > 1) break;
+                }
+            }
+            if (count === 1 && realChild) {
+                return realChild;
             }
         }
         return childSN;
@@ -269,20 +282,19 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
         syntaxNode: SyntaxNode,
         assignedFields: Set<string>
     ): void {
+        // Pre-collect all assigned children in a Set for O(1) lookup,
+        // avoiding repeated childrenForField() calls in the inner loop.
+        const assignedChildren = new Set<SyntaxNode>();
+        for (const field of assignedFields) {
+            for (const fc of syntaxNode.childrenForField(field)) {
+                assignedChildren.add(fc);
+            }
+        }
         for (const child of syntaxNode.children) {
             if (child.isLeaf || child.isHidden || child.isError) {
                 continue;
             }
-            // Check if this child is part of an assigned field
-            let isAssigned = false;
-            for (const field of assignedFields) {
-                const fieldChildren = syntaxNode.childrenForField(field);
-                if (fieldChildren.some(fc => fc === child)) {
-                    isAssigned = true;
-                    break;
-                }
-            }
-            if (!isAssigned) {
+            if (!assignedChildren.has(child)) {
                 this.inlineChildNode(node, child);
             }
         }
@@ -327,12 +339,8 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
                 }
                 this.defineSyntaxNodeProperty(node, childSN);
                 this.syntaxNodeToAstNode.set(childSN, node);
-                Object.defineProperty(childSN, '$astNode', {
-                    value: node,
-                    configurable: true,
-                    enumerable: false,
-                    writable: true
-                });
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (childSN as any).$astNode = node;
                 return;
             }
             // Single operand (pass-through) — fall through to normal inlining
@@ -369,12 +377,8 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
 
         // Map child SyntaxNode → parent AstNode for correct findAstNode() lookups
         this.syntaxNodeToAstNode.set(childSN, node);
-        Object.defineProperty(childSN, '$astNode', {
-            value: node,
-            configurable: true,
-            enumerable: false,
-            writable: true
-        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (childSN as any).$astNode = node;
     }
 
     // ---- Infix expression support ----
@@ -421,12 +425,8 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
 
             this.defineSyntaxNodeProperty(node, syntaxNode);
             this.syntaxNodeToAstNode.set(syntaxNode, node as unknown as AstNode);
-            Object.defineProperty(syntaxNode, '$astNode', {
-                value: node,
-                configurable: true,
-                enumerable: false,
-                writable: true
-            });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (syntaxNode as any).$astNode = node;
 
             return node;
         }
@@ -518,12 +518,8 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
         // Associate outermost node with the syntax node
         this.defineSyntaxNodeProperty(current, syntaxNode);
         this.syntaxNodeToAstNode.set(syntaxNode, current as unknown as AstNode);
-        Object.defineProperty(syntaxNode, '$astNode', {
-            value: current,
-            configurable: true,
-            enumerable: false,
-            writable: true
-        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (syntaxNode as any).$astNode = current;
 
         return current;
     }
@@ -618,12 +614,8 @@ export class DefaultSyntaxNodeAstBuilder implements SyntaxNodeAstBuilder {
         // Associate outermost node with the syntax node
         this.defineSyntaxNodeProperty(current, syntaxNode);
         this.syntaxNodeToAstNode.set(syntaxNode, current as unknown as AstNode);
-        Object.defineProperty(syntaxNode, '$astNode', {
-            value: current,
-            configurable: true,
-            enumerable: false,
-            writable: true
-        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (syntaxNode as any).$astNode = current;
 
         return current;
     }

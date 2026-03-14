@@ -7,7 +7,7 @@
 import { MultiMap } from '../utils/collections.js';
 import type { Stream } from '../utils/stream.js';
 
-export type ProfilingCategory = 'validating' | 'parsing' | 'linking' | 'completion';
+export type ProfilingCategory = 'validating' | 'parsing' | 'linking' | 'completion' | 'building';
 
 export interface LangiumProfiler {
 
@@ -47,7 +47,7 @@ export interface LangiumProfiler {
 
 export class DefaultLangiumProfiler implements LangiumProfiler {
     protected activeCategories: Set<ProfilingCategory> = new Set<ProfilingCategory>();
-    protected readonly allCategories: ReadonlySet<ProfilingCategory> = new Set<ProfilingCategory>([ 'validating', 'parsing', 'linking', 'completion' ]);
+    protected readonly allCategories: ReadonlySet<ProfilingCategory> = new Set<ProfilingCategory>([ 'validating', 'parsing', 'linking', 'completion', 'building' ]);
     protected readonly records: MultiMap<string, ProfilingRecord>;
 
     constructor(activeCategories?: Set<ProfilingCategory>) {

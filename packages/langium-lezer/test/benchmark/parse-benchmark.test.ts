@@ -6,7 +6,7 @@
 
 import { describe, test, expect, beforeAll } from 'vitest';
 import type { ParserAdapter, TextChange } from 'langium-core';
-import { EmptyFileSystem, inject } from 'langium-core';
+import { EmptyFileSystem, inject, URI } from 'langium-core';
 import { interpretAstReflection } from 'langium-core/grammar';
 import type { LangiumServices, LangiumSharedServices } from 'langium-lsp';
 import { createServicesForGrammar, createDefaultModule, createDefaultSharedModule } from 'langium-lsp';
@@ -1247,6 +1247,108 @@ describe('Tree size comparison', () => {
         for (const r of results) {
             expect(r.chevrotainNodes).toBeGreaterThan(0);
             expect(r.lezerNodes).toBeGreaterThan(0);
+        }
+    });
+});
+
+// ---- Full document pipeline benchmarks ----
+
+describe('Full pipeline benchmarks — fromString + DocumentBuilder (15K lines)', () => {
+    let chevServices: LangiumServices;
+    let lezerLspServices: LangiumServices;
+
+    beforeAll(async () => {
+        chevServices = await createServicesForGrammar({ grammar: ARITHMETICS_CHEVROTAIN_GRAMMAR });
+        lezerLspServices = await createLezerLspServicesForGrammar(ARITHMETICS_LEZER_GRAMMAR);
+    });
+
+    test('full pipeline: parse + build AST + index + scope + link + validate', { timeout: 120000 }, async () => {
+        const defCounts = [500, 2000, 9000];
+        const iterations = 3;
+        const r = (n: number) => Math.round(n * 100) / 100;
+
+        console.log('\n=== Full Pipeline Benchmarks (Arithmetics) ===');
+
+        const results: Array<{
+            defs: number;
+            lines: number;
+            chevFromString: number;
+            lezerFromString: number;
+            chevBuild: number;
+            lezerBuild: number;
+            chevTotal: number;
+            lezerTotal: number;
+        }> = [];
+
+        for (const defCount of defCounts) {
+            const doc = generateArithmeticsDocument(defCount);
+            const lineCount = doc.split('\n').length;
+            let docCounter = 0;
+
+            // Measure Chevrotain: fromString
+            const chevFromString = await measureAsync(async () => {
+                const uri = URI.file(`chev-pipeline-${defCount}-${docCounter++}.txt`);
+                const langDoc = chevServices.shared.workspace.LangiumDocumentFactory.fromString(doc, uri);
+                chevServices.shared.workspace.LangiumDocuments.addDocument(langDoc);
+                return langDoc;
+            }, iterations, 0);
+
+            // Measure Chevrotain: full build (index + scope + link + validate)
+            docCounter = 0;
+            const chevBuild = await measureAsync(async () => {
+                const uri = URI.file(`chev-build-${defCount}-${docCounter++}.txt`);
+                const langDoc = chevServices.shared.workspace.LangiumDocumentFactory.fromString(doc, uri);
+                chevServices.shared.workspace.LangiumDocuments.addDocument(langDoc);
+                await chevServices.shared.workspace.DocumentBuilder.build([langDoc]);
+            }, iterations, 0);
+
+            // Measure Lezer: fromString (parse + AST build)
+            docCounter = 0;
+            const lezerFromString = await measureAsync(async () => {
+                const uri = URI.file(`lezer-pipeline-${defCount}-${docCounter++}.txt`);
+                const langDoc = lezerLspServices.shared.workspace.LangiumDocumentFactory.fromString(doc, uri);
+                lezerLspServices.shared.workspace.LangiumDocuments.addDocument(langDoc);
+                return langDoc;
+            }, iterations, 0);
+
+            // Measure Lezer: full build (index + scope + link + validate)
+            docCounter = 0;
+            const lezerBuild = await measureAsync(async () => {
+                const uri = URI.file(`lezer-build-${defCount}-${docCounter++}.txt`);
+                const langDoc = lezerLspServices.shared.workspace.LangiumDocumentFactory.fromString(doc, uri);
+                lezerLspServices.shared.workspace.LangiumDocuments.addDocument(langDoc);
+                await lezerLspServices.shared.workspace.DocumentBuilder.build([langDoc]);
+            }, iterations, 0);
+
+            results.push({
+                defs: defCount,
+                lines: lineCount,
+                chevFromString: chevFromString,
+                lezerFromString: lezerFromString,
+                chevBuild: chevBuild - chevFromString,
+                lezerBuild: lezerBuild - lezerFromString,
+                chevTotal: chevBuild,
+                lezerTotal: lezerBuild,
+            });
+        }
+
+        console.table(results.map(res => ({
+            'Defs': res.defs,
+            'Lines': res.lines,
+            'Chev fromString (ms)': r(res.chevFromString),
+            'Lezer fromString (ms)': r(res.lezerFromString),
+            'Chev build (ms)': r(res.chevBuild),
+            'Lezer build (ms)': r(res.lezerBuild),
+            'Chev total (ms)': r(res.chevTotal),
+            'Lezer total (ms)': r(res.lezerTotal),
+            'fromString speedup': (res.chevFromString / res.lezerFromString).toFixed(1) + 'x',
+            'Total speedup': (res.chevTotal / res.lezerTotal).toFixed(1) + 'x',
+        })));
+
+        // Lezer fromString should be competitive with Chevrotain
+        for (const res of results) {
+            // Lezer total pipeline should not be more than 2x slower than Chevrotain
+            expect(res.lezerTotal).toBeLessThan(res.chevTotal * 2);
         }
     });
 });
