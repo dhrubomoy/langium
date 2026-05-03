@@ -25,6 +25,7 @@ import { DefaultRenameProvider } from './rename-provider.js';
 import { DefaultTreeSitterDefinitionProvider } from './tree-sitter-definition-provider.js';
 import { DefaultCrossRefDiagnosticsProvider, DefaultParseErrorDiagnosticsProvider } from './tree-sitter-diagnostics-provider.js';
 import { DefaultTreeSitterDocumentSymbolsProvider } from './tree-sitter-document-symbols-provider.js';
+import { DefaultTreeSitterFoldingRangeProvider } from './tree-sitter-folding-provider.js';
 import { DefaultTreeSitterReferencesProvider } from './tree-sitter-references-provider.js';
 import { DefaultTreeSitterRenameProvider } from './tree-sitter-rename-provider.js';
 import { DefaultWorkspaceSymbolProvider } from './workspace-symbol-provider.js';
@@ -68,6 +69,7 @@ export function createDefaultLSPModule(context: DefaultModuleContext): Module<La
             TreeSitterDefinitionProvider: () => new DefaultTreeSitterDefinitionProvider(),
             TreeSitterReferencesProvider: () => new DefaultTreeSitterReferencesProvider(),
             TreeSitterDocumentSymbolsProvider: () => new DefaultTreeSitterDocumentSymbolsProvider(),
+            TreeSitterFoldingRangeProvider: () => new DefaultTreeSitterFoldingRangeProvider(),
             TreeSitterRenameProvider: () => new DefaultTreeSitterRenameProvider()
         },
         shared: () => context.shared
