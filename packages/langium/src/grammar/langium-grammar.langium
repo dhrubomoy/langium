@@ -11,7 +11,10 @@ import './langium-types'
 entry Grammar returns Grammar:
     (isDeclared?='grammar' name=ID)?
     imports+=GrammarImport*
-    (rules+=AbstractRule | interfaces+=Interface | types+=Type)*;
+    (rules+=AbstractRule | interfaces+=Interface | types+=Type | 'conflicts' ':' conflicts+=ConflictGroup (',' conflicts+=ConflictGroup)* ';')*;
+
+ConflictGroup returns ConflictGroup:
+    '[' rules+=[AbstractRule:ID] (',' rules+=[AbstractRule:ID])* ']';
 
 Interface returns Interface:
     'interface' name=ID
@@ -228,7 +231,7 @@ CharacterRange returns TerminalElement:
     {CharacterRange} left=Keyword ('..' right=Keyword)?;
 
 FeatureName returns string:
-    'infix' | 'on' | 'right' | 'left' | 'assoc' | 'current' | 'entry' | 'extends' | 'false' | 'fragment' | 'grammar' | 'hidden' | 'import' | 'interface' | 'returns' | 'terminal' | 'true' | 'type' | 'infer' | 'infers' | 'with' | PrimitiveType | ID;
+    'infix' | 'on' | 'right' | 'left' | 'assoc' | 'conflicts' | 'current' | 'entry' | 'extends' | 'false' | 'fragment' | 'grammar' | 'hidden' | 'import' | 'interface' | 'returns' | 'terminal' | 'true' | 'type' | 'infer' | 'infers' | 'with' | PrimitiveType | ID;
 
 terminal ID: /\^?[_a-zA-Z][\w_]*/;
 terminal STRING: /"(\\.|[^"\\])*"|'(\\.|[^'\\])*'/;

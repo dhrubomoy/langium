@@ -51,6 +51,7 @@ export type LangiumGrammarKeywordNames =
     | "assoc"
     | "bigint"
     | "boolean"
+    | "conflicts"
     | "current"
     | "entry"
     | "extends"
@@ -256,6 +257,21 @@ export function isCondition(item: unknown): item is Condition {
     return reflection.isInstance(item, Condition.$type);
 }
 
+export interface ConflictGroup extends langium.AstNode {
+    readonly $container: Grammar;
+    readonly $type: 'ConflictGroup';
+    rules: Array<langium.Reference<AbstractRule>>;
+}
+
+export const ConflictGroup = {
+    $type: 'ConflictGroup',
+    rules: 'rules'
+} as const;
+
+export function isConflictGroup(item: unknown): item is ConflictGroup {
+    return reflection.isInstance(item, ConflictGroup.$type);
+}
+
 export interface Conjunction extends langium.AstNode {
     readonly $container: Conjunction | Disjunction | Group | NamedArgument | Negation;
     readonly $type: 'Conjunction';
@@ -324,10 +340,11 @@ export function isEndOfFile(item: unknown): item is EndOfFile {
     return reflection.isInstance(item, EndOfFile.$type);
 }
 
-export type FeatureName = 'assoc' | 'current' | 'entry' | 'extends' | 'false' | 'fragment' | 'grammar' | 'hidden' | 'import' | 'infer' | 'infers' | 'infix' | 'interface' | 'left' | 'on' | 'returns' | 'right' | 'terminal' | 'true' | 'type' | 'with' | PrimitiveType | string;
+export type FeatureName = 'assoc' | 'conflicts' | 'current' | 'entry' | 'extends' | 'false' | 'fragment' | 'grammar' | 'hidden' | 'import' | 'infer' | 'infers' | 'infix' | 'interface' | 'left' | 'on' | 'returns' | 'right' | 'terminal' | 'true' | 'type' | 'with' | PrimitiveType | string;
 
 export interface Grammar extends langium.AstNode {
     readonly $type: 'Grammar';
+    conflicts: Array<ConflictGroup>;
     imports: Array<GrammarImport>;
     interfaces: Array<Interface>;
     isDeclared: boolean;
@@ -338,6 +355,7 @@ export interface Grammar extends langium.AstNode {
 
 export const Grammar = {
     $type: 'Grammar',
+    conflicts: 'conflicts',
     imports: 'imports',
     interfaces: 'interfaces',
     isDeclared: 'isDeclared',
@@ -955,6 +973,7 @@ export type LangiumGrammarAstType = {
     BooleanLiteral: BooleanLiteral
     CharacterRange: CharacterRange
     Condition: Condition
+    ConflictGroup: ConflictGroup
     Conjunction: Conjunction
     CrossReference: CrossReference
     Disjunction: Disjunction
@@ -1138,6 +1157,17 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
             },
             superTypes: []
         },
+        ConflictGroup: {
+            name: ConflictGroup.$type,
+            properties: {
+                rules: {
+                    name: ConflictGroup.rules,
+                    defaultValue: [],
+                    referenceType: AbstractRule.$type
+                }
+            },
+            superTypes: []
+        },
         Conjunction: {
             name: Conjunction.$type,
             properties: {
@@ -1198,6 +1228,10 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
         Grammar: {
             name: Grammar.$type,
             properties: {
+                conflicts: {
+                    name: Grammar.conflicts,
+                    defaultValue: []
+                },
                 imports: {
                     name: Grammar.imports,
                     defaultValue: []

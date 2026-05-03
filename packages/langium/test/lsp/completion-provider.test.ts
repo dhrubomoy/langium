@@ -42,7 +42,8 @@ describe('Langium completion provider', () => {
                 'terminal',
                 'infix',
                 'interface',
-                'type'
+                'type',
+                'conflicts'
             ]
         });
     });

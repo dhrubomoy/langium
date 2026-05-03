@@ -14,7 +14,7 @@ type Associativity = "left" | "right";
 
 type Condition = BooleanLiteral | Conjunction | Disjunction | Negation | ParameterReference;
 
-type FeatureName = "assoc" | "current" | "entry" | "extends" | "false" | "fragment" | "grammar" | "hidden" | "import" | "infer" | "infers" | "infix" | "interface" | "left" | "on" | "returns" | "right" | "terminal" | "true" | "type" | "with" | PrimitiveType | string;
+type FeatureName = "assoc" | "conflicts" | "current" | "entry" | "extends" | "false" | "fragment" | "grammar" | "hidden" | "import" | "infer" | "infers" | "infix" | "interface" | "left" | "on" | "returns" | "right" | "terminal" | "true" | "type" | "with" | PrimitiveType | string;
 
 type PrimitiveType = "Date" | "bigint" | "boolean" | "number" | "string";
 
@@ -81,7 +81,12 @@ interface Disjunction {
 interface EndOfFile extends AbstractElement {
 }
 
+interface ConflictGroup {
+    rules: @AbstractRule[];
+}
+
 interface Grammar {
+    conflicts: ConflictGroup[];
     imports: GrammarImport[];
     interfaces: Interface[];
     isDeclared: boolean;
