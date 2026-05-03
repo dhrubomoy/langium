@@ -13,6 +13,19 @@
 - Build/typecheck commands that work: `npx tsc --noEmit` (from a package dir) or `npx tsc -b tsconfig.build.json` (from the repo root).
 - Lint command that works for changed files: `npx eslint <files>`.
 
+## 2026-05-03 - US-002
+Thread: (ralph autonomous run)
+- Created `packages/langium/src/generate/grammar-metadata.ts` defining the stable `GrammarMetadata`, `NodeMetadata`, `FieldMetadata` (with `operator: '=' | '+=' | '?='` and `isRef?: boolean`), and `ReferenceMetadata` interfaces with TSDoc covering the contract for emitter/runtime consumers.
+- `GrammarMetadata` carries `version`, `nodes: Record<string, NodeMetadata>`, `extras: string[]`, and optional `word`.
+- Exported the four interfaces from `packages/langium/src/generate/index.ts` as `export type { ... } from './grammar-metadata.js'` so they are part of the public `langium/generate` entry point.
+- **Files changed:** `packages/langium/src/generate/grammar-metadata.ts` (new), `packages/langium/src/generate/index.ts`.
+- **Quality:** `npx tsc -b tsconfig.build.json` passes; `npx eslint <changed files>` passes.
+- **Learnings for future iterations:**
+  - `langium/generate` is a public entry point with conditional exports — anything added there is part of the API surface, so types are exported via `export type { ... }` to make the type-only nature explicit and to keep tree-shakability.
+  - The PRD's runtime stories (IndexBuilder, LSP adapters) consume `GrammarMetadata` and the compiler stories (US-022/023) emit it, so this type is the contract between those two halves of the project.
+  - `ReferenceMetadata` is included for forward compatibility (flattened reference list) but is not yet consumed; current cross-reference handling rides on `FieldMetadata.isRef`.
+---
+
 ## 2026-05-03 - US-001
 Thread: (ralph autonomous run)
 - Added `web-tree-sitter@~0.26.0` to `packages/langium/package.json` dependencies.
