@@ -31,6 +31,7 @@ import type { ReferencesProvider } from './references-provider.js';
 import type { RenameProvider } from './rename-provider.js';
 import type { SemanticTokenProvider } from './semantic-token-provider.js';
 import type { SignatureHelpProvider } from './signature-help-provider.js';
+import type { TreeSitterDefinitionProvider } from './tree-sitter-definition-provider.js';
 import type { CrossRefDiagnosticsProvider, ParseErrorDiagnosticsProvider } from './tree-sitter-diagnostics-provider.js';
 import type { TypeHierarchyProvider } from './type-hierarchy-provider.js';
 import type { TypeDefinitionProvider } from './type-provider.js';
@@ -74,6 +75,7 @@ export type LangiumLSPServices = {
         readonly DocumentLinkProvider?: DocumentLinkProvider
         readonly ParseErrorDiagnosticsProvider?: ParseErrorDiagnosticsProvider
         readonly CrossRefDiagnosticsProvider?: CrossRefDiagnosticsProvider
+        readonly TreeSitterDefinitionProvider?: TreeSitterDefinitionProvider
     },
     readonly shared: LangiumSharedServices
 };
