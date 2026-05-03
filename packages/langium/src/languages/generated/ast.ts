@@ -42,6 +42,7 @@ export type LangiumGrammarKeywordNames =
     | "?<="
     | "?="
     | "@"
+    | "@word"
     | "Date"
     | "EOF"
     | "["
@@ -780,6 +781,7 @@ export interface TerminalRule extends langium.AstNode {
     definition: TerminalElement;
     fragment: boolean;
     hidden: boolean;
+    isWord: boolean;
     name: string;
     type?: ReturnType;
 }
@@ -789,6 +791,7 @@ export const TerminalRule = {
     definition: 'definition',
     fragment: 'fragment',
     hidden: 'hidden',
+    isWord: 'isWord',
     name: 'name',
     type: 'type'
 } as const;
@@ -1599,6 +1602,10 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                 },
                 hidden: {
                     name: TerminalRule.hidden,
+                    defaultValue: false
+                },
+                isWord: {
+                    name: TerminalRule.isWord,
                     defaultValue: false
                 },
                 name: {

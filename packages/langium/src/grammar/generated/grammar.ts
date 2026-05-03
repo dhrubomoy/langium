@@ -3056,6 +3056,16 @@ export const LangiumGrammarGrammar = (): Grammar => loadedLangiumGrammarGrammar 
         "elements": [
           {
             "$type": "Assignment",
+            "feature": "isWord",
+            "operator": "?=",
+            "terminal": {
+              "$type": "Keyword",
+              "value": "@word"
+            },
+            "cardinality": "?"
+          },
+          {
+            "$type": "Assignment",
             "feature": "hidden",
             "operator": "?=",
             "terminal": {
@@ -5206,6 +5216,15 @@ export const LangiumGrammarGrammar = (): Grammar => loadedLangiumGrammarGrammar 
         {
           "$type": "TypeAttribute",
           "name": "hidden",
+          "type": {
+            "$type": "SimpleType",
+            "primitiveType": "boolean"
+          },
+          "isOptional": false
+        },
+        {
+          "$type": "TypeAttribute",
+          "name": "isWord",
           "type": {
             "$type": "SimpleType",
             "primitiveType": "boolean"

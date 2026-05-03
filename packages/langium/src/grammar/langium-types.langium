@@ -217,6 +217,7 @@ interface TerminalRule {
     definition: TerminalElement;
     fragment: boolean;
     hidden: boolean;
+    isWord: boolean;
     name: string;
     type?: ReturnType;
 }

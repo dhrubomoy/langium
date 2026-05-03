@@ -189,7 +189,7 @@ ReturnType returns ReturnType:
     name=(PrimitiveType | ID);
 
 TerminalRule returns TerminalRule:
-    hidden?='hidden'? 'terminal' (fragment?='fragment' name=ID | name=ID ('returns' type=ReturnType)?) ':'
+    (isWord?='@word')? hidden?='hidden'? 'terminal' (fragment?='fragment' name=ID | name=ID ('returns' type=ReturnType)?) ':'
         definition=TerminalAlternatives
     ';';
 
