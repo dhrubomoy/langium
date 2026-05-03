@@ -36,6 +36,7 @@ export * from './semantic-token-provider.js';
 export * from './signature-help-provider.js';
 export * from './tree-sitter-definition-provider.js';
 export * from './tree-sitter-diagnostics-provider.js';
+export * from './tree-sitter-references-provider.js';
 export * from './type-hierarchy-provider.js';
 export * from './type-provider.js';
 export * from './workspace-symbol-provider.js';

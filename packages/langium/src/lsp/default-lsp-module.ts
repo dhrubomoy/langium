@@ -24,6 +24,7 @@ import { DefaultReferencesProvider } from './references-provider.js';
 import { DefaultRenameProvider } from './rename-provider.js';
 import { DefaultTreeSitterDefinitionProvider } from './tree-sitter-definition-provider.js';
 import { DefaultCrossRefDiagnosticsProvider, DefaultParseErrorDiagnosticsProvider } from './tree-sitter-diagnostics-provider.js';
+import { DefaultTreeSitterReferencesProvider } from './tree-sitter-references-provider.js';
 import { DefaultWorkspaceSymbolProvider } from './workspace-symbol-provider.js';
 import { NormalizedNotebookDocuments, NormalizedTextDocuments } from './normalized-text-documents.js';
 
@@ -62,7 +63,8 @@ export function createDefaultLSPModule(context: DefaultModuleContext): Module<La
             RenameProvider: (services) => new DefaultRenameProvider(services),
             ParseErrorDiagnosticsProvider: () => new DefaultParseErrorDiagnosticsProvider(),
             CrossRefDiagnosticsProvider: () => new DefaultCrossRefDiagnosticsProvider(),
-            TreeSitterDefinitionProvider: () => new DefaultTreeSitterDefinitionProvider()
+            TreeSitterDefinitionProvider: () => new DefaultTreeSitterDefinitionProvider(),
+            TreeSitterReferencesProvider: () => new DefaultTreeSitterReferencesProvider()
         },
         shared: () => context.shared
     };
