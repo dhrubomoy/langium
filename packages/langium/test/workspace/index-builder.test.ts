@@ -214,3 +214,182 @@ describe('DefaultIndexBuilder declarations walk', () => {
         });
     });
 });
+
+describe('DefaultIndexBuilder cross-references walk', () => {
+
+    const builder = new DefaultIndexBuilder();
+    const uri = 'file:///test.arith';
+
+    test('records a single cross-reference keyed by the referenced name', () => {
+        // `def y = x;` — the right-hand side is a NamedExpression whose `element`
+        // field is a cross-reference (isRef: true in ARITHMETIC_METADATA).
+        const root = mockNode({
+            type: 'source_file',
+            children: [
+                {
+                    type: 'Definition',
+                    fields: {
+                        name: { type: 'ID', text: 'y', startPosition: { row: 0, column: 4 }, endPosition: { row: 0, column: 5 } },
+                        expr: {
+                            type: 'NamedExpression',
+                            fields: {
+                                element: {
+                                    type: 'ID',
+                                    text: 'x',
+                                    startPosition: { row: 0, column: 8 },
+                                    endPosition: { row: 0, column: 9 }
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        });
+
+        const index = builder.build(root, ARITHMETIC_METADATA, uri);
+
+        expect(index.references.size).toBe(1);
+        const refs = index.references.get('x');
+        expect(refs).toHaveLength(1);
+        const [ref] = refs!;
+        expect(ref.name).toBe('x');
+        expect(ref.range).toEqual({
+            start: { line: 0, character: 8 },
+            end: { line: 0, character: 9 }
+        });
+        expect(ref.targetUri).toBeUndefined();
+    });
+
+    test('groups multiple references under the same name', () => {
+        const root = mockNode({
+            type: 'source_file',
+            children: [
+                {
+                    type: 'NamedExpression',
+                    fields: {
+                        element: { type: 'ID', text: 'foo', startPosition: { row: 0, column: 0 }, endPosition: { row: 0, column: 3 } }
+                    }
+                },
+                {
+                    type: 'NamedExpression',
+                    fields: {
+                        element: { type: 'ID', text: 'foo', startPosition: { row: 1, column: 4 }, endPosition: { row: 1, column: 7 } }
+                    }
+                }
+            ]
+        });
+
+        const index = builder.build(root, ARITHMETIC_METADATA, uri);
+
+        expect(index.references.size).toBe(1);
+        const refs = index.references.get('foo');
+        expect(refs).toHaveLength(2);
+        expect(refs!.map(r => r.range.start.line)).toEqual([0, 1]);
+    });
+
+    test('records distinct references under separate keys', () => {
+        const root = mockNode({
+            type: 'source_file',
+            children: [
+                {
+                    type: 'NamedExpression',
+                    fields: {
+                        element: { type: 'ID', text: 'a', startPosition: { row: 0, column: 0 }, endPosition: { row: 0, column: 1 } }
+                    }
+                },
+                {
+                    type: 'NamedExpression',
+                    fields: {
+                        element: { type: 'ID', text: 'b', startPosition: { row: 1, column: 0 }, endPosition: { row: 1, column: 1 } }
+                    }
+                }
+            ]
+        });
+
+        const index = builder.build(root, ARITHMETIC_METADATA, uri);
+
+        expect([...index.references.keys()].sort()).toEqual(['a', 'b']);
+        expect(index.references.get('a')).toHaveLength(1);
+        expect(index.references.get('b')).toHaveLength(1);
+    });
+
+    test('does not record references for fields that are not marked isRef', () => {
+        // Definition.expr is a regular field (operator '=', not isRef). The
+        // walker must not treat the expression child as a reference.
+        const root = mockNode({
+            type: 'source_file',
+            children: [
+                {
+                    type: 'Definition',
+                    fields: {
+                        name: { type: 'ID', text: 'a', startPosition: { row: 0, column: 4 }, endPosition: { row: 0, column: 5 } },
+                        expr: {
+                            type: 'NumberLiteral',
+                            fields: { value: { type: 'Number', text: '5' } }
+                        }
+                    }
+                }
+            ]
+        });
+
+        const index = builder.build(root, ARITHMETIC_METADATA, uri);
+
+        expect(index.references.size).toBe(0);
+    });
+
+    test('records both declarations and references in a single walk', () => {
+        // `def y = x;` — should produce one declaration ('y') AND one reference ('x').
+        const root = mockNode({
+            type: 'source_file',
+            children: [
+                {
+                    type: 'Definition',
+                    fields: {
+                        name: { type: 'ID', text: 'y', startPosition: { row: 0, column: 4 }, endPosition: { row: 0, column: 5 } },
+                        expr: {
+                            type: 'NamedExpression',
+                            fields: {
+                                element: { type: 'ID', text: 'x', startPosition: { row: 0, column: 8 }, endPosition: { row: 0, column: 9 } }
+                            }
+                        }
+                    }
+                }
+            ]
+        });
+
+        const index = builder.build(root, ARITHMETIC_METADATA, uri);
+
+        expect(index.declarations.get('y')).toHaveLength(1);
+        expect(index.references.get('x')).toHaveLength(1);
+    });
+
+    test('walks deeply nested cross-references', () => {
+        // Reference can sit inside any expression position — e.g. inside an
+        // Addition's `right` field. The walker must descend into all children.
+        const root = mockNode({
+            type: 'source_file',
+            children: [
+                {
+                    type: 'Addition',
+                    fields: {
+                        left: { type: 'NumberLiteral', fields: { value: { type: 'Number', text: '1' } } },
+                        right: {
+                            type: 'NamedExpression',
+                            fields: {
+                                element: { type: 'ID', text: 'deep', startPosition: { row: 3, column: 12 }, endPosition: { row: 3, column: 16 } }
+                            }
+                        }
+                    }
+                }
+            ]
+        });
+
+        const index = builder.build(root, ARITHMETIC_METADATA, uri);
+
+        expect(index.references.get('deep')).toHaveLength(1);
+        expect(index.references.get('deep')![0].range).toEqual({
+            start: { line: 3, character: 12 },
+            end: { line: 3, character: 16 }
+        });
+    });
+});

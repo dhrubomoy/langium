@@ -8,7 +8,7 @@ import type { Range } from 'vscode-languageserver-types';
 import type { Node as SyntaxNode } from 'web-tree-sitter';
 import type { GrammarMetadata, NodeMetadata } from '../generate/grammar-metadata.js';
 import { URI } from '../utils/uri-utils.js';
-import type { DeclarationInfo, DocumentIndex } from './document-index.js';
+import type { DeclarationInfo, DocumentIndex, ReferenceInfo } from './document-index.js';
 
 /**
  * Service responsible for walking a tree-sitter syntax tree and producing a
@@ -30,11 +30,15 @@ export interface IndexBuilder {
 }
 
 /**
- * Default {@link IndexBuilder} implementation. The declarations walk visits
- * every node in the tree, looks the node's `type` up in
- * {@link GrammarMetadata.nodes}, and — for nodes whose metadata declares a
- * `name` field with operator `'='` — records a {@link DeclarationInfo} keyed by
- * the field's text value.
+ * Default {@link IndexBuilder} implementation. A single recursive walk over the
+ * tree visits every node, looks the node's `type` up in
+ * {@link GrammarMetadata.nodes}, and — when the matched {@link NodeMetadata}
+ * applies — records:
+ *
+ * - a {@link DeclarationInfo} for every node whose metadata declares a `name`
+ *   field with operator `'='`, keyed by the field's text value;
+ * - a {@link ReferenceInfo} for every metadata field marked `isRef: true`,
+ *   keyed by the referenced child's text value.
  */
 export class DefaultIndexBuilder implements IndexBuilder {
 
@@ -52,6 +56,7 @@ export class DefaultIndexBuilder implements IndexBuilder {
         const nodeMeta = metadata.nodes[node.type];
         if (nodeMeta) {
             this.collectDeclaration(node, nodeMeta, uri, index);
+            this.collectReferences(node, nodeMeta, index);
         }
         for (const child of node.children) {
             if (child) {
@@ -84,6 +89,32 @@ export class DefaultIndexBuilder implements IndexBuilder {
             existing.push(declaration);
         } else {
             index.declarations.set(text, [declaration]);
+        }
+    }
+
+    protected collectReferences(node: SyntaxNode, nodeMeta: NodeMetadata, index: DocumentIndex): void {
+        for (const field of nodeMeta.fields) {
+            if (!field.isRef) {
+                continue;
+            }
+            const refChild = node.childForFieldName(field.name);
+            if (!refChild) {
+                continue;
+            }
+            const text = refChild.text;
+            if (typeof text !== 'string' || text.length === 0) {
+                continue;
+            }
+            const reference: ReferenceInfo = {
+                name: text,
+                range: toRange(refChild)
+            };
+            const existing = index.references.get(text);
+            if (existing) {
+                existing.push(reference);
+            } else {
+                index.references.set(text, [reference]);
+            }
         }
     }
 }
