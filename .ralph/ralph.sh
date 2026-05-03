@@ -69,7 +69,7 @@ for i in $(seq 1 $MAX_ITERATIONS); do
   echo "  Ralph Iteration $i of $MAX_ITERATIONS"
   echo "==============================================================="
 
-  OUTPUT=$(sbx run claude --dangerously-skip-permissions --print < "$RALPH_DIR/prompt.md" 2>&1 | tee /dev/stderr) || true
+  OUTPUT=$(sbx run claude -- --dangerously-skip-permissions --print < "$RALPH_DIR/prompt.md" 2>&1 | tee /dev/stderr) || true
 
   if echo "$OUTPUT" | grep -q "<promise>COMPLETE</promise>"; then
     echo ""
