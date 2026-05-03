@@ -32,6 +32,7 @@ import type { AstNodeDescriptionProvider, ReferenceDescriptionProvider } from '.
 import type { AstNodeLocator } from './workspace/ast-node-locator.js';
 import type { ConfigurationProvider } from './workspace/configuration.js';
 import type { DocumentBuilder } from './workspace/document-builder.js';
+import type { IndexBuilder } from './workspace/index-builder.js';
 import type { LangiumDocumentFactory, LangiumDocuments, TextDocumentProvider } from './workspace/documents.js';
 import type { FileSystemProvider } from './workspace/file-system-provider.js';
 import type { IndexManager } from './workspace/index-manager.js';
@@ -100,6 +101,7 @@ export type LangiumDefaultCoreServices = {
         readonly AstNodeLocator: AstNodeLocator
         readonly AstNodeDescriptionProvider: AstNodeDescriptionProvider
         readonly ReferenceDescriptionProvider: ReferenceDescriptionProvider
+        readonly IndexBuilder: IndexBuilder
     }
     readonly shared: LangiumSharedCoreServices
 }
