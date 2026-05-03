@@ -20,6 +20,19 @@ export * from './utils/index.js';
 export * from './validation/index.js';
 export * from './workspace/index.js';
 
+// Disambiguate the `ReferenceInfo` name. Two distinct types share it:
+//   - `./syntax-tree.js`  → the linker/scope-provider context (legacy CST/AST path).
+//   - `./workspace/document-index.js` → the new tree-sitter `DocumentIndex` reference
+//     entry. `DocumentIndex` itself references this type, so it must be the public one.
+// Internal Langium consumers that still need the legacy type import it via the
+// relative `../syntax-tree.js` path.
+export type {
+    DeclarationInfo,
+    DocumentIndex,
+    DocumentIndexMap,
+    ReferenceInfo
+} from './workspace/document-index.js';
+
 // Export the Langium Grammar AST definitions in the `GrammarAST` namespace
 import * as GrammarAST from './languages/generated/ast.js';
 import type { Grammar } from './languages/generated/ast.js';

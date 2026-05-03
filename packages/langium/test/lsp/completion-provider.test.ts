@@ -5,7 +5,8 @@
  ******************************************************************************/
 
 import { describe, test, beforeEach } from 'vitest';
-import type { AstNode, AstNodeDescription, GrammarAST, LangiumDocument, Module, ReferenceInfo } from 'langium';
+import type { AstNode, AstNodeDescription, GrammarAST, LangiumDocument, Module } from 'langium';
+import type { ReferenceInfo } from '../../src/syntax-tree.js';
 import { DefaultAstNodeDescriptionProvider, EmptyFileSystem } from 'langium';
 import { createLangiumGrammarServices, createServicesForGrammar } from 'langium/grammar';
 import { DefaultCompletionProvider } from 'langium/lsp';

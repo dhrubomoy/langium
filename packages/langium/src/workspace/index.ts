@@ -8,6 +8,7 @@ export * from './ast-descriptions.js';
 export * from './ast-node-locator.js';
 export * from './configuration.js';
 export * from './document-builder.js';
+export * from './document-index.js';
 export * from './documents.js';
 export * from './file-system-provider.js';
 export * from './index-manager.js';

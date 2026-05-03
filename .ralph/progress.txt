@@ -2,6 +2,20 @@
 # Branch: ralph/langium-treesitter
 # Started: 2026-05-03
 
+## 2026-05-03 - US-005
+Thread: (ralph autonomous run)
+- Created `packages/langium/src/workspace/document-index.ts` defining `DeclarationInfo` ({ name, nodeType, range, uri }), `ReferenceInfo` ({ name, range, targetUri? }), `DocumentIndex` ({ declarations, references, diagnostics }) using `Range` and `Diagnostic` from `vscode-languageserver-types` and `URI` from `../utils/uri-utils.js`. Added a `DocumentIndexMap = Map<string, DocumentIndex>` alias so the future IndexBuilder return type has a name.
+- Added `export * from './document-index.js'` to `packages/langium/src/workspace/index.ts`.
+- Discovered and resolved a name conflict: `ReferenceInfo` already exists in `packages/langium/src/syntax-tree.ts` (the linker/scope-provider context with `reference`, `container`, `property` fields) and is re-exported via the top-level `index.ts`. The wildcard exports in `packages/langium/src/index.ts` therefore became ambiguous. Resolved by adding an explicit `export type { DeclarationInfo, DocumentIndex, DocumentIndexMap, ReferenceInfo } from './workspace/document-index.js'` at the end of `packages/langium/src/index.ts` so the new type wins at the public API (necessary because `DocumentIndex` itself references this `ReferenceInfo`).
+- Updated three internal test files that imported the legacy `ReferenceInfo` from `'langium'` to use a relative `'../../src/syntax-tree.js'` import instead: `linker.test.ts`, `langium-parser-builder.test.ts`, `completion-provider.test.ts`. No source files in `src/` needed changes — they all import the legacy type via `../syntax-tree.js` already.
+- **Files changed:** `packages/langium/src/workspace/document-index.ts` (new), `packages/langium/src/workspace/index.ts`, `packages/langium/src/index.ts`, `packages/langium/test/references/linker.test.ts`, `packages/langium/test/parser/langium-parser-builder.test.ts`, `packages/langium/test/lsp/completion-provider.test.ts`.
+- **Quality:** `npx tsc -b tsconfig.build.json --force` passes; `npx tsc -p packages/langium/tsconfig.test.json --noEmit` passes; `npx eslint <changed files>` passes. Vitest still cannot run in the sandbox (rolldown binding) so I did not run the test suite, but the change is type-only.
+- **Learnings for future iterations:**
+  - The new `ReferenceInfo` is the public top-level export now; future LSP adapters (US-009..014) and the IndexBuilder (US-006..008) should import it via relative paths from the workspace folder (`../workspace/document-index.js`) rather than from `'langium'` to keep cross-package imports unambiguous.
+  - There are now exactly four hand-written contracts the rest of the project orbits around: `GrammarMetadata` (US-002), the arithmetic `grammar.js` fixture (US-003), the arithmetic `metadata.ts` fixture (US-004), and the `DocumentIndex` shape (US-005). The IndexBuilder in US-006 has to glue these together.
+  - The `targetUri` on `ReferenceInfo` is left optional intentionally — the per-document index doesn't know cross-document targets yet. Cross-document linking (if added later) can populate it during a workspace-wide pass.
+---
+
 ## Codebase Patterns
 - DI services: services are added to `packages/langium/src/services.ts` (LangiumDefaultCoreServices) and wired in `packages/langium/src/default-module.ts` via factory functions `(services) => new Default...(services)`.
 - Generated services use the `LangiumGeneratedCoreServices` type — make new generated fields optional for backwards compatibility.
@@ -16,6 +30,8 @@
 - Tree-sitter `grammar.js` files are JS modules that expect `grammar`, `seq`, `choice`, `field`, `prec`, `prec.left`, `prec.right`, `repeat`, `repeat1`, `optional`, `token` as globals at runtime (provided by the tree-sitter CLI sandbox). To smoke-test loading without the real CLI, eval the file in a `vm` context with stubbed globals.
 - Test files under `packages/langium/test/fixtures/` are picked up by vitest as long as they end in `.test.ts`. Plain fixture data (`metadata.ts`, `grammar.js`) sit alongside `*.test.ts` runners safely.
 - When vitest cannot run in the sandbox, smoke-test a pure TS data module by compiling it with `npx tsc --target ES2020 --module ESNext --moduleResolution bundler --rootDir <dir> --outDir /tmp/out <file>` and importing the emitted `.js` from a one-shot node script.
+- The name `ReferenceInfo` is overloaded in the public `langium` API: the legacy linker context lives in `packages/langium/src/syntax-tree.ts`, while the new tree-sitter-driven `DocumentIndex` reference entry lives in `packages/langium/src/workspace/document-index.ts`. The new one is the public `ReferenceInfo` exported from `packages/langium/src/index.ts` (because `DocumentIndex.references` references it). Internal consumers that still need the legacy type import it via the relative `../syntax-tree.js` path. When US-027 deletes the CST/linker stack, the legacy type goes with it and the conflict resolves itself.
+- TypeScript's `export *` ambiguity between two re-exported barrels can be resolved by adding an explicit `export type { Name } from './path.js'` in the same module — the explicit re-export wins over the wildcards.
 
 ## 2026-05-03 - US-002
 Thread: (ralph autonomous run)

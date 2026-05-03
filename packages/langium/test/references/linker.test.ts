@@ -4,7 +4,8 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import { DefaultScopeProvider, type AstNode, type LangiumCoreServices, type Module, type PartialLangiumCoreServices, type Reference, type ReferenceInfo, type Scope } from 'langium';
+import { DefaultScopeProvider, type AstNode, type LangiumCoreServices, type Module, type PartialLangiumCoreServices, type Reference, type Scope } from 'langium';
+import type { ReferenceInfo } from '../../src/syntax-tree.js';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { createServicesForGrammar } from 'langium/grammar';
 import { clearDocuments, parseHelper } from 'langium/test';

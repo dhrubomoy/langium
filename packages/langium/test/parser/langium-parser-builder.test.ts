@@ -7,7 +7,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import type { TokenType, TokenVocabulary } from 'chevrotain';
-import type { AstNode, CstNode, GenericAstNode, Grammar, GrammarAST, LangiumParser, ParseResult, ReferenceInfo, Scope, TokenBuilderOptions } from 'langium';
+import type { AstNode, CstNode, GenericAstNode, Grammar, GrammarAST, LangiumParser, ParseResult, Scope, TokenBuilderOptions } from 'langium';
+import type { ReferenceInfo } from '../../src/syntax-tree.js';
 import { EmptyFileSystem, DefaultTokenBuilder, GrammarUtils, CstUtils, DefaultScopeProvider, URI } from 'langium';
 import { describe, expect, test, onTestFailed, beforeAll } from 'vitest';
 import { createLangiumGrammarServices, createServicesForGrammar } from 'langium/grammar';
