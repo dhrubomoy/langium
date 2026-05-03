@@ -6,15 +6,36 @@
 
 import { describe, expect, test } from 'vitest';
 import { DiagnosticSeverity } from 'vscode-languageserver-types';
-import type { Diagnostic } from 'vscode-languageserver-types';
-import { DefaultParseErrorDiagnosticsProvider } from 'langium/lsp';
-import type { DocumentIndex } from 'langium';
+import type { Diagnostic, Range } from 'vscode-languageserver-types';
+import { DefaultCrossRefDiagnosticsProvider, DefaultParseErrorDiagnosticsProvider } from 'langium/lsp';
+import { URI } from 'langium';
+import type { DeclarationInfo, DocumentIndex, ReferenceInfo } from 'langium';
 
 function emptyIndex(diagnostics: Diagnostic[] = []): DocumentIndex {
     return {
         declarations: new Map(),
         references: new Map(),
         diagnostics
+    };
+}
+
+function range(line: number, startChar: number, endChar: number): Range {
+    return { start: { line, character: startChar }, end: { line, character: endChar } };
+}
+
+function decl(name: string, line = 0, startChar = 0, endChar = 0): DeclarationInfo {
+    return {
+        name,
+        nodeType: 'Definition',
+        range: range(line, startChar, endChar || startChar + name.length),
+        uri: URI.parse('file:///test.arith')
+    };
+}
+
+function ref(name: string, line: number, startChar: number, endChar?: number): ReferenceInfo {
+    return {
+        name,
+        range: range(line, startChar, endChar ?? startChar + name.length)
     };
 }
 
@@ -53,5 +74,61 @@ describe('DefaultParseErrorDiagnosticsProvider', () => {
     test('returns an empty array when the index has no diagnostics', () => {
         const result = provider.getDiagnostics(emptyIndex());
         expect(result).toEqual([]);
+    });
+});
+
+describe('DefaultCrossRefDiagnosticsProvider', () => {
+
+    const provider = new DefaultCrossRefDiagnosticsProvider();
+
+    test('emits one error diagnostic for an unresolved reference', () => {
+        const index = emptyIndex();
+        index.references.set('foo', [ref('foo', 3, 10)]);
+        const result = provider.getDiagnostics(index);
+        expect(result).toHaveLength(1);
+        expect(result[0]).toEqual({
+            range: range(3, 10, 13),
+            severity: DiagnosticSeverity.Error,
+            message: 'Unresolved reference: foo'
+        });
+    });
+
+    test('emits no diagnostics when the reference resolves to a declaration', () => {
+        const index = emptyIndex();
+        index.declarations.set('foo', [decl('foo')]);
+        index.references.set('foo', [ref('foo', 3, 10)]);
+        const result = provider.getDiagnostics(index);
+        expect(result).toEqual([]);
+    });
+
+    test('emits one diagnostic per occurrence of an unresolved name', () => {
+        const index = emptyIndex();
+        index.references.set('bar', [ref('bar', 1, 0), ref('bar', 2, 4)]);
+        const result = provider.getDiagnostics(index);
+        expect(result).toHaveLength(2);
+        expect(result.every(d => d.message === 'Unresolved reference: bar')).toBe(true);
+        expect(result.every(d => d.severity === DiagnosticSeverity.Error)).toBe(true);
+    });
+
+    test('separates resolved from unresolved references in the same index', () => {
+        const index = emptyIndex();
+        index.declarations.set('foo', [decl('foo')]);
+        index.references.set('foo', [ref('foo', 1, 0)]);
+        index.references.set('baz', [ref('baz', 2, 0)]);
+        const result = provider.getDiagnostics(index);
+        expect(result).toHaveLength(1);
+        expect(result[0].message).toBe('Unresolved reference: baz');
+    });
+
+    test('returns an empty array when the index has no references', () => {
+        const result = provider.getDiagnostics(emptyIndex());
+        expect(result).toEqual([]);
+    });
+
+    test('does not push into index.diagnostics', () => {
+        const index = emptyIndex();
+        index.references.set('foo', [ref('foo', 0, 0)]);
+        provider.getDiagnostics(index);
+        expect(index.diagnostics).toEqual([]);
     });
 });
