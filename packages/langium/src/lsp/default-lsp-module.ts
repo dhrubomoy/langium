@@ -22,6 +22,7 @@ import type { LangiumLSPServices, LangiumServices, LangiumSharedLSPServices, Lan
 import { DefaultNodeKindProvider } from './node-kind-provider.js';
 import { DefaultReferencesProvider } from './references-provider.js';
 import { DefaultRenameProvider } from './rename-provider.js';
+import { DefaultParseErrorDiagnosticsProvider } from './tree-sitter-diagnostics-provider.js';
 import { DefaultWorkspaceSymbolProvider } from './workspace-symbol-provider.js';
 import { NormalizedNotebookDocuments, NormalizedTextDocuments } from './normalized-text-documents.js';
 
@@ -57,7 +58,8 @@ export function createDefaultLSPModule(context: DefaultModuleContext): Module<La
             ReferencesProvider: (services) => new DefaultReferencesProvider(services),
             DefinitionProvider: (services) => new DefaultDefinitionProvider(services),
             DocumentHighlightProvider: (services) => new DefaultDocumentHighlightProvider(services),
-            RenameProvider: (services) => new DefaultRenameProvider(services)
+            RenameProvider: (services) => new DefaultRenameProvider(services),
+            ParseErrorDiagnosticsProvider: () => new DefaultParseErrorDiagnosticsProvider()
         },
         shared: () => context.shared
     };
