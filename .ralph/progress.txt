@@ -14,6 +14,8 @@
 - Lint command that works for changed files: `npx eslint <files>`.
 - Test fixtures (non-`*.test.ts` files) under `packages/langium/test/fixtures/` are NOT picked up by vitest (`include: ['**/test/**/*.test.ts']`) and NOT linted (eslint config only matches `*.ts`/`*.tsx` under `src/` and `test/`). Tree-sitter `grammar.js` fixtures live there safely.
 - Tree-sitter `grammar.js` files are JS modules that expect `grammar`, `seq`, `choice`, `field`, `prec`, `prec.left`, `prec.right`, `repeat`, `repeat1`, `optional`, `token` as globals at runtime (provided by the tree-sitter CLI sandbox). To smoke-test loading without the real CLI, eval the file in a `vm` context with stubbed globals.
+- Test files under `packages/langium/test/fixtures/` are picked up by vitest as long as they end in `.test.ts`. Plain fixture data (`metadata.ts`, `grammar.js`) sit alongside `*.test.ts` runners safely.
+- When vitest cannot run in the sandbox, smoke-test a pure TS data module by compiling it with `npx tsc --target ES2020 --module ESNext --moduleResolution bundler --rootDir <dir> --outDir /tmp/out <file>` and importing the emitted `.js` from a one-shot node script.
 
 ## 2026-05-03 - US-002
 Thread: (ralph autonomous run)
@@ -43,6 +45,19 @@ Thread: (ralph autonomous run)
   - `npm install` in this sandbox is broken (sibling-repo file: dep), so any deps added need to be available in `node_modules` already. `web-tree-sitter` was already present transitively, which is why the build still works.
   - Static `Parser.init()` only needs to be called once globally, but `DefaultWasmLoader.init()` is idempotent (caches `language` and `initPromise`), so multiple containers calling it concurrently is safe.
   - When adding a service to `LangiumDefaultCoreServices`, don't forget to (a) import the type in `services.ts`, (b) declare the field, (c) register the factory in `default-module.ts`, and (d) export the implementation through the parent `parser/index.ts` barrel.
+---
+
+## 2026-05-03 - US-004
+Thread: (ralph autonomous run)
+- Created `packages/langium/test/fixtures/arithmetic/metadata.ts` exporting `ARITHMETIC_METADATA: GrammarMetadata` (imported from `langium/generate`). Covers the 9 PRD-required nodes (Definition, AbstractDefinition, Addition, Subtraction, Multiplication, Division, Negation, NumberLiteral, NamedExpression) plus `Parenthesized` and the `Expression` supertype to fully mirror the grammar.js fixture (US-003). `version: '1.0.0'`, `word: 'ID'`, `extras: ['ML_COMMENT', 'SL_COMMENT']`. Only `NamedExpression.element` is marked `isRef: true`; all field operators are `'='` (this language has no `+=` lists or `?=` flags).
+- Added `packages/langium/test/fixtures/arithmetic/metadata.test.ts` — vitest suite asserting required-node coverage, field shapes per node, sole-cross-reference invariant, and operator legality.
+- **Files changed:** `packages/langium/test/fixtures/arithmetic/metadata.ts` (new), `packages/langium/test/fixtures/arithmetic/metadata.test.ts` (new).
+- **Quality:** `npx tsc -b tsconfig.build.json` passes; `npx tsc -p packages/langium/tsconfig.test.json` (test project) passes; `npx eslint <changed files>` passes. Vitest cannot execute in this sandbox (pre-existing rolldown native-binding issue documented in patterns), so I additionally compiled `metadata.ts` with a standalone tsc invocation and ran a node check that asserts required-node coverage, the single `isRef`, the word/extras values, and field shapes — all PASS.
+- **Learnings for future iterations:**
+  - Test files under `packages/langium/test/fixtures/` ARE picked up by vitest (the `**/test/**/*.test.ts` glob is recursive). Only non-`*.test.ts` fixture files (like `grammar.js` or `metadata.ts`) are excluded from the test runner.
+  - The metadata fixture intentionally contains entries for the abstract/supertype nodes (`AbstractDefinition`, `Expression`) with empty `fields: []`. Future compiler stories (US-022) need to decide whether to emit such entries; the runtime index builder (US-006) should be fine either way because its declaration walk only fires on nodes whose metadata has a `name` field.
+  - Field-name contract between fixtures: `Definition` → name/expr; binary ops → left/right; `Negation` → operand; `Parenthesized` → expression; `NumberLiteral` → value; `NamedExpression` → element (the only `isRef`). Any divergence here will cascade into US-006/007/022/025 test failures.
+  - When a sandbox lacks a working vitest binary, you can still smoke-test a TS module by running `npx tsc --target ES2020 --module ESNext --moduleResolution bundler --rootDir <dir> --outDir /tmp/out <files>` and importing the emitted `.js` from a one-shot node script. Keep this trick to test pure data fixtures, not anything that imports from the workspace package.
 ---
 
 ## 2026-05-03 - US-003
