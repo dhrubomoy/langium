@@ -98,6 +98,7 @@ Alternatives returns AbstractElement:
 
 ConditionalBranch returns AbstractElement:
     UnorderedGroup
+    | {Group} '@prec' ('.' precAssoc=Associativity)? '(' prec=NUMBER ')' elements+=AbstractToken+
     | {Group} '<' guardCondition=Disjunction '>' (elements+=AbstractToken)+;
 
 UnorderedGroup returns AbstractElement:

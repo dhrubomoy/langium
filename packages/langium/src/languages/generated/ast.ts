@@ -42,6 +42,7 @@ export type LangiumGrammarKeywordNames =
     | "?<="
     | "?="
     | "@"
+    | "@prec"
     | "@word"
     | "Date"
     | "EOF"
@@ -368,6 +369,8 @@ export interface Group extends AbstractElement {
     readonly $type: 'Group';
     elements: Array<AbstractElement>;
     guardCondition?: Condition;
+    prec?: number;
+    precAssoc?: Associativity;
     predicate?: '->' | '=>';
 }
 
@@ -376,6 +379,8 @@ export const Group = {
     cardinality: 'cardinality',
     elements: 'elements',
     guardCondition: 'guardCondition',
+    prec: 'prec',
+    precAssoc: 'precAssoc',
     predicate: 'predicate'
 } as const;
 
@@ -1240,6 +1245,12 @@ export class LangiumGrammarAstReflection extends langium.AbstractAstReflection {
                 },
                 guardCondition: {
                     name: Group.guardCondition
+                },
+                prec: {
+                    name: Group.prec
+                },
+                precAssoc: {
+                    name: Group.precAssoc
                 },
                 predicate: {
                     name: Group.predicate

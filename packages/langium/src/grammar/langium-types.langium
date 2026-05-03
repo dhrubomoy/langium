@@ -97,6 +97,8 @@ interface GrammarImport {
 interface Group extends AbstractElement {
     elements: AbstractElement[];
     guardCondition?: Condition;
+    prec?: number;
+    precAssoc?: Associativity;
     predicate?: "->" | "=>";
 }
 

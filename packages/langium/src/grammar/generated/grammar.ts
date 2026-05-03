@@ -1585,6 +1585,76 @@ export const LangiumGrammarGrammar = (): Grammar => loadedLangiumGrammarGrammar 
               },
               {
                 "$type": "Keyword",
+                "value": "@prec"
+              },
+              {
+                "$type": "Group",
+                "elements": [
+                  {
+                    "$type": "Keyword",
+                    "value": "."
+                  },
+                  {
+                    "$type": "Assignment",
+                    "feature": "precAssoc",
+                    "operator": "=",
+                    "terminal": {
+                      "$type": "RuleCall",
+                      "rule": {
+                        "$ref": "#/rules@21"
+                      },
+                      "arguments": []
+                    }
+                  }
+                ],
+                "cardinality": "?"
+              },
+              {
+                "$type": "Keyword",
+                "value": "("
+              },
+              {
+                "$type": "Assignment",
+                "feature": "prec",
+                "operator": "=",
+                "terminal": {
+                  "$type": "RuleCall",
+                  "rule": {
+                    "$ref": "#/rules@69"
+                  },
+                  "arguments": []
+                }
+              },
+              {
+                "$type": "Keyword",
+                "value": ")"
+              },
+              {
+                "$type": "Assignment",
+                "feature": "elements",
+                "operator": "+=",
+                "terminal": {
+                  "$type": "RuleCall",
+                  "rule": {
+                    "$ref": "#/rules@29"
+                  },
+                  "arguments": []
+                },
+                "cardinality": "+"
+              }
+            ]
+          },
+          {
+            "$type": "Group",
+            "elements": [
+              {
+                "$type": "Action",
+                "type": {
+                  "$ref": "#/interfaces@14"
+                }
+              },
+              {
+                "$type": "Keyword",
                 "value": "<"
               },
               {
@@ -3794,7 +3864,8 @@ export const LangiumGrammarGrammar = (): Grammar => loadedLangiumGrammarGrammar 
         "parenthesized": false
       },
       "fragment": false,
-      "hidden": false
+      "hidden": false,
+      "isWord": false
     },
     {
       "$type": "TerminalRule",
@@ -3805,7 +3876,8 @@ export const LangiumGrammarGrammar = (): Grammar => loadedLangiumGrammarGrammar 
         "parenthesized": false
       },
       "fragment": false,
-      "hidden": false
+      "hidden": false,
+      "isWord": false
     },
     {
       "$type": "TerminalRule",
@@ -3820,7 +3892,8 @@ export const LangiumGrammarGrammar = (): Grammar => loadedLangiumGrammarGrammar 
         "parenthesized": false
       },
       "fragment": false,
-      "hidden": false
+      "hidden": false,
+      "isWord": false
     },
     {
       "$type": "TerminalRule",
@@ -3835,7 +3908,8 @@ export const LangiumGrammarGrammar = (): Grammar => loadedLangiumGrammarGrammar 
         "parenthesized": false
       },
       "fragment": false,
-      "hidden": false
+      "hidden": false,
+      "isWord": false
     },
     {
       "$type": "TerminalRule",
@@ -3846,7 +3920,8 @@ export const LangiumGrammarGrammar = (): Grammar => loadedLangiumGrammarGrammar 
         "regex": "/\\\\s+/",
         "parenthesized": false
       },
-      "fragment": false
+      "fragment": false,
+      "isWord": false
     },
     {
       "$type": "TerminalRule",
@@ -3857,7 +3932,8 @@ export const LangiumGrammarGrammar = (): Grammar => loadedLangiumGrammarGrammar 
         "regex": "/\\\\/\\\\*[\\\\s\\\\S]*?\\\\*\\\\//",
         "parenthesized": false
       },
-      "fragment": false
+      "fragment": false,
+      "isWord": false
     },
     {
       "$type": "TerminalRule",
@@ -3868,7 +3944,8 @@ export const LangiumGrammarGrammar = (): Grammar => loadedLangiumGrammarGrammar 
         "regex": "/\\\\/\\\\/[^\\\\n\\\\r]*/",
         "parenthesized": false
       },
-      "fragment": false
+      "fragment": false,
+      "isWord": false
     }
   ],
   "interfaces": [
@@ -4404,6 +4481,26 @@ export const LangiumGrammarGrammar = (): Grammar => loadedLangiumGrammarGrammar 
             "$type": "SimpleType",
             "typeRef": {
               "$ref": "#/types@4"
+            }
+          }
+        },
+        {
+          "$type": "TypeAttribute",
+          "name": "prec",
+          "isOptional": true,
+          "type": {
+            "$type": "SimpleType",
+            "primitiveType": "number"
+          }
+        },
+        {
+          "$type": "TypeAttribute",
+          "name": "precAssoc",
+          "isOptional": true,
+          "type": {
+            "$type": "SimpleType",
+            "typeRef": {
+              "$ref": "#/types@3"
             }
           }
         },
