@@ -6,6 +6,7 @@
 
 import type { Node as SyntaxNode } from 'web-tree-sitter';
 import { describe, expect, test } from 'vitest';
+import { DiagnosticSeverity } from 'vscode-languageserver-types';
 import { DefaultIndexBuilder } from 'langium';
 import { ARITHMETIC_METADATA } from '../fixtures/arithmetic/metadata.js';
 
@@ -16,6 +17,7 @@ interface MockNodeSpec {
     endPosition?: { row: number, column: number };
     fields?: Record<string, MockNodeSpec>;
     children?: MockNodeSpec[];
+    isMissing?: boolean;
 }
 
 function mockNode(spec: MockNodeSpec): SyntaxNode {
@@ -30,6 +32,7 @@ function mockNode(spec: MockNodeSpec): SyntaxNode {
         text: spec.text ?? '',
         startPosition: spec.startPosition ?? { row: 0, column: 0 },
         endPosition: spec.endPosition ?? { row: 0, column: 0 },
+        isMissing: spec.isMissing ?? false,
         children,
         childForFieldName(name: string): SyntaxNode | null {
             return fieldByName.get(name) ?? null;
@@ -391,5 +394,153 @@ describe('DefaultIndexBuilder cross-references walk', () => {
             start: { line: 3, character: 12 },
             end: { line: 3, character: 16 }
         });
+    });
+});
+
+describe('DefaultIndexBuilder diagnostics walk', () => {
+
+    const builder = new DefaultIndexBuilder();
+    const uri = 'file:///test.arith';
+
+    test('emits one Error diagnostic for an ERROR node with correct range and message', () => {
+        const root = mockNode({
+            type: 'source_file',
+            children: [
+                {
+                    type: 'ERROR',
+                    startPosition: { row: 2, column: 5 },
+                    endPosition: { row: 2, column: 9 }
+                }
+            ]
+        });
+
+        const index = builder.build(root, ARITHMETIC_METADATA, uri);
+
+        expect(index.diagnostics).toHaveLength(1);
+        const [diagnostic] = index.diagnostics;
+        expect(diagnostic.severity).toBe(DiagnosticSeverity.Error);
+        expect(diagnostic.message).toBe('Syntax error at 2:5');
+        expect(diagnostic.range).toEqual({
+            start: { line: 2, character: 5 },
+            end: { line: 2, character: 9 }
+        });
+    });
+
+    test('emits a diagnostic for a MISSING node (isMissing: true) regardless of its type', () => {
+        // Tree-sitter's recovery inserts MISSING nodes whose `type` is the
+        // expected token's name (e.g. ';'), not 'ERROR'.
+        const root = mockNode({
+            type: 'source_file',
+            children: [
+                {
+                    type: ';',
+                    isMissing: true,
+                    startPosition: { row: 0, column: 9 },
+                    endPosition: { row: 0, column: 9 }
+                }
+            ]
+        });
+
+        const index = builder.build(root, ARITHMETIC_METADATA, uri);
+
+        expect(index.diagnostics).toHaveLength(1);
+        const [diagnostic] = index.diagnostics;
+        expect(diagnostic.severity).toBe(DiagnosticSeverity.Error);
+        expect(diagnostic.message).toBe('Syntax error at 0:9');
+        expect(diagnostic.range).toEqual({
+            start: { line: 0, character: 9 },
+            end: { line: 0, character: 9 }
+        });
+    });
+
+    test('emits one diagnostic per ERROR/MISSING node in a tree with multiple', () => {
+        const root = mockNode({
+            type: 'source_file',
+            children: [
+                {
+                    type: 'ERROR',
+                    startPosition: { row: 0, column: 0 },
+                    endPosition: { row: 0, column: 1 }
+                },
+                {
+                    type: 'ERROR',
+                    startPosition: { row: 1, column: 4 },
+                    endPosition: { row: 1, column: 8 }
+                },
+                {
+                    type: ';',
+                    isMissing: true,
+                    startPosition: { row: 2, column: 10 },
+                    endPosition: { row: 2, column: 10 }
+                }
+            ]
+        });
+
+        const index = builder.build(root, ARITHMETIC_METADATA, uri);
+
+        expect(index.diagnostics).toHaveLength(3);
+        expect(index.diagnostics.map(d => d.message)).toEqual([
+            'Syntax error at 0:0',
+            'Syntax error at 1:4',
+            'Syntax error at 2:10'
+        ]);
+    });
+
+    test('emits no diagnostics for a fully valid tree', () => {
+        const root = mockNode({
+            type: 'source_file',
+            children: [
+                {
+                    type: 'Definition',
+                    fields: {
+                        name: { type: 'ID', text: 'x', startPosition: { row: 0, column: 4 }, endPosition: { row: 0, column: 5 } },
+                        expr: { type: 'NumberLiteral', fields: { value: { type: 'Number', text: '5' } } }
+                    }
+                }
+            ]
+        });
+
+        const index = builder.build(root, ARITHMETIC_METADATA, uri);
+
+        expect(index.diagnostics).toEqual([]);
+    });
+
+    test('collects diagnostics from deeply nested ERROR nodes', () => {
+        // ERROR nodes can appear anywhere in the tree, including inside an
+        // otherwise-valid Definition. The walker must still find them.
+        const root = mockNode({
+            type: 'source_file',
+            children: [
+                {
+                    type: 'Definition',
+                    fields: {
+                        name: { type: 'ID', text: 'broken', startPosition: { row: 0, column: 4 }, endPosition: { row: 0, column: 10 } },
+                        expr: {
+                            type: 'Addition',
+                            fields: {
+                                left: { type: 'NumberLiteral', fields: { value: { type: 'Number', text: '1' } } },
+                                right: {
+                                    type: 'ERROR',
+                                    startPosition: { row: 0, column: 17 },
+                                    endPosition: { row: 0, column: 20 }
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        });
+
+        const index = builder.build(root, ARITHMETIC_METADATA, uri);
+
+        expect(index.diagnostics).toHaveLength(1);
+        expect(index.diagnostics[0].message).toBe('Syntax error at 0:17');
+        expect(index.diagnostics[0].range).toEqual({
+            start: { line: 0, character: 17 },
+            end: { line: 0, character: 20 }
+        });
+        // Declarations and references from the surrounding valid subtree are
+        // still collected — diagnostics live on the same single-pass walk.
+        expect(index.declarations.get('broken')).toHaveLength(1);
     });
 });

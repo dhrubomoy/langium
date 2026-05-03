@@ -2,6 +2,21 @@
 # Branch: ralph/langium-treesitter
 # Started: 2026-05-03
 
+## 2026-05-03 - US-008
+Thread: (ralph autonomous run)
+- Extended `DefaultIndexBuilder.walk()` (`packages/langium/src/workspace/index-builder.ts`) so the same single-pass walk that records declarations and references also pushes a `Diagnostic` for every tree-sitter ERROR (`node.type === 'ERROR'`) or MISSING (`node.isMissing === true`) node. New helper `collectDiagnostics(node, index)` runs *first* in `walk()` (before metadata-driven decl/ref collection) so diagnostics fire regardless of whether the node has a metadata entry. Diagnostic severity is `DiagnosticSeverity.Error`, message is `Syntax error at <row>:<column>` (using `node.startPosition`), and `range` reuses the shared `toRange(node)` helper.
+- Imported `Diagnostic` (type-only) and the `DiagnosticSeverity` *value* enum from `vscode-languageserver-types` (already a langium dep). Updated the class doc-comment to list diagnostics as the third thing the walk produces.
+- Extended `packages/langium/test/workspace/index-builder.test.ts` with a third `describe('DefaultIndexBuilder diagnostics walk', ...)` block: five tests covering single ERROR (range/message/severity), MISSING (`isMissing: true` with non-`ERROR` type — the typical recovery shape), three-mixed (two ERRORs + one MISSING in walk order), valid tree → zero diagnostics, and deeply-nested ERROR (still found, AND surrounding declarations remain indexed). Added `isMissing?: boolean` to `MockNodeSpec` and propagated it through the `mockNode()` helper.
+- **Files changed:** `packages/langium/src/workspace/index-builder.ts`, `packages/langium/test/workspace/index-builder.test.ts`, `.ralph/prd.json`, `.ralph/progress.txt`.
+- **Quality:** `npx tsc -b tsconfig.build.json --force` passes; `npx tsc -p packages/langium/tsconfig.test.json --noEmit` passes; `npx eslint <changed files>` passes. Vitest still cannot run in the sandbox (rolldown native binding) so I additionally ran a node smoke script (`/tmp/us008-smoke.mjs`) that exercises the compiled `lib/workspace/index-builder.js` against the same five new diagnostics cases plus a regression check that re-asserts US-006/007 declaration+reference behavior is unchanged — all 18 assertions PASS.
+- **Learnings for future iterations:**
+  - The walk now produces diagnostics on every recursion, *before* the metadata lookup, because ERROR/MISSING nodes don't have metadata entries (their `type` is either the literal `'ERROR'` or the expected token name like `';'`). Putting the diagnostic check inside the `if (nodeMeta)` block would silently drop them.
+  - MISSING nodes have `node.type === <expected-token>` (e.g. `';'`), not `'ERROR'`. The OR check `node.type === 'ERROR' || node.isMissing` is therefore necessary and the two flavors are not equivalent — both cases are exercised in the unit tests.
+  - For US-009 (LSP parse-error diagnostics provider), the contract is now: `index.diagnostics` is the *complete* per-document parse-diagnostics list, in walk order. The provider can pass it through unchanged. For US-010 (cross-ref diagnostics), `index.diagnostics` is shared with parse errors — the provider must concatenate, not overwrite.
+  - The `isMissing` flag is part of the web-tree-sitter `Node` interface (verified in `node_modules/web-tree-sitter/web-tree-sitter.d.ts`). For test mocks we add it explicitly to the `mockNode()` helper; the default is `false` so existing tests need no changes.
+  - When extending the walk again, always put new collectors *before* the `if (nodeMeta)` block if they should fire on ERROR/MISSING nodes too, and *inside* the block if they require metadata-driven knowledge.
+---
+
 ## 2026-05-03 - US-007
 Thread: (ralph autonomous run)
 - Extended `DefaultIndexBuilder.walk()` (`packages/langium/src/workspace/index-builder.ts`) so the same single-pass walk that records declarations also records cross-references. Added a `collectReferences(node, nodeMeta, index)` method that iterates `nodeMeta.fields`, skips entries where `isRef !== true`, then for each ref-field reads the child via `node.childForFieldName(field.name)`, captures `child.text` as the reference name, and pushes a `ReferenceInfo` (range from the shared `toRange(node)` helper, `targetUri` left undefined per the per-document index contract) into `index.references` keyed by the name.
@@ -65,6 +80,8 @@ Thread: (ralph autonomous run)
 - TypeScript's `export *` ambiguity between two re-exported barrels can be resolved by adding an explicit `export type { Name } from './path.js'` in the same module — the explicit re-export wins over the wildcards.
 - Tree-sitter `Node` API: prefer `childForFieldName('foo')` (returns the named-field child) over index-based lookup. Index-based lookup is wrong when the rule body emits anonymous keyword/punctuation children (e.g. `def NAME = EXPR;` puts the `name` field at index 1, not 0). The web-tree-sitter type is `Node`; this project aliases it to `SyntaxNode` at import sites to match the PRD vocabulary.
 - LSP coordinate conversion: tree-sitter `startPosition`/`endPosition` are `{ row, column }` (zero-based); the LSP equivalent is `{ line, character }` (also zero-based). Convert with `{ line: pos.row, character: pos.column }`. The shared helper is `toRange(node)` exported from `packages/langium/src/workspace/index-builder.ts`.
+- IndexBuilder walk order: `collectDiagnostics` runs *first* in `walk(node)` (before `if (nodeMeta)`), then `collectDeclaration` + `collectReferences` only when the node has a metadata entry, then recurse children. This ordering matters because ERROR / MISSING nodes have no metadata entry (their `type` is literally `'ERROR'` or the expected token name like `';'`), so any new collector that should fire on them must live outside the `if (nodeMeta)` block.
+- Tree-sitter ERROR vs MISSING: ERROR nodes have `type === 'ERROR'`; MISSING nodes have `isMissing === true` and a `type` equal to the expected-but-absent token (e.g. `';'`). Both are surfaced as parse-error diagnostics via the `||` check in `collectDiagnostics`.
 
 ## 2026-05-03 - US-002
 Thread: (ralph autonomous run)

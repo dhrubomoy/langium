@@ -4,7 +4,8 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import type { Range } from 'vscode-languageserver-types';
+import type { Diagnostic, Range } from 'vscode-languageserver-types';
+import { DiagnosticSeverity } from 'vscode-languageserver-types';
 import type { Node as SyntaxNode } from 'web-tree-sitter';
 import type { GrammarMetadata, NodeMetadata } from '../generate/grammar-metadata.js';
 import { URI } from '../utils/uri-utils.js';
@@ -38,7 +39,9 @@ export interface IndexBuilder {
  * - a {@link DeclarationInfo} for every node whose metadata declares a `name`
  *   field with operator `'='`, keyed by the field's text value;
  * - a {@link ReferenceInfo} for every metadata field marked `isRef: true`,
- *   keyed by the referenced child's text value.
+ *   keyed by the referenced child's text value;
+ * - a {@link Diagnostic} for every tree-sitter ERROR node and every node the
+ *   parser inserted as a recovery (`isMissing`).
  */
 export class DefaultIndexBuilder implements IndexBuilder {
 
@@ -53,6 +56,7 @@ export class DefaultIndexBuilder implements IndexBuilder {
     }
 
     protected walk(node: SyntaxNode, metadata: GrammarMetadata, uri: URI, index: DocumentIndex): void {
+        this.collectDiagnostics(node, index);
         const nodeMeta = metadata.nodes[node.type];
         if (nodeMeta) {
             this.collectDeclaration(node, nodeMeta, uri, index);
@@ -63,6 +67,19 @@ export class DefaultIndexBuilder implements IndexBuilder {
                 this.walk(child, metadata, uri, index);
             }
         }
+    }
+
+    protected collectDiagnostics(node: SyntaxNode, index: DocumentIndex): void {
+        if (node.type !== 'ERROR' && !node.isMissing) {
+            return;
+        }
+        const { row, column } = node.startPosition;
+        const diagnostic: Diagnostic = {
+            range: toRange(node),
+            severity: DiagnosticSeverity.Error,
+            message: `Syntax error at ${row}:${column}`
+        };
+        index.diagnostics.push(diagnostic);
     }
 
     protected collectDeclaration(node: SyntaxNode, nodeMeta: NodeMetadata, uri: URI, index: DocumentIndex): void {
