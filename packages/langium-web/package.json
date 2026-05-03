@@ -14,6 +14,7 @@
         "@codingame/monaco-vscode-keybindings-service-override": "^28.3.0",
         "@codingame/monaco-vscode-lifecycle-service-override": "^28.3.0",
         "@codingame/monaco-vscode-localization-service-override": "^28.3.0",
+        "@codingame/monaco-vscode-theme-defaults-default-extension": "^28.3.0",
         "langium": "~4.2.0",
         "langium-arithmetics-dsl": "~4.2.0",
         "vscode": "npm:@codingame/monaco-vscode-extension-api@^28.3.0",

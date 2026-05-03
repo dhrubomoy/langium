@@ -72,11 +72,9 @@ export const createArithmeticsConfig = (params: {
             ...getLocalizationServiceOverride(createDefaultLocaleConfiguration())
         },
         monacoWorkerFactory: configureDefaultWorkerFactory,
-        advanced: {
-            loadThemes: false
-        },
         userConfiguration: {
             json: JSON.stringify({
+                'workbench.colorTheme': 'Default Dark Modern',
                 'editor.wordBasedSuggestions': 'off'
             })
         },

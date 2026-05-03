@@ -3,6 +3,11 @@ import { defineConfig } from 'vite';
 export default defineConfig({
     server: {
         port: 5173,
+        fs: {
+            // Allow serving files from the parent git directory so wasm assets
+            // from file:-linked packages (monaco-languageclient) can be served.
+            allow: ['../../..']
+        },
         headers: {
             'Cross-Origin-Embedder-Policy': 'require-corp',
             'Cross-Origin-Opener-Policy': 'same-origin'
@@ -23,6 +28,7 @@ export default defineConfig({
             'langium',
             'langium/lsp',
             'web-tree-sitter',
+            '@codingame/monaco-vscode-theme-defaults-default-extension',
             'vscode-languageserver-protocol',
             'vscode-languageserver-types',
             'vscode-languageserver',
@@ -41,6 +47,7 @@ export default defineConfig({
     resolve: {
         dedupe: [
             '@codingame/monaco-vscode-api',
+            '@codingame/monaco-vscode-theme-defaults-default-extension',
             '@codingame/monaco-vscode-base-service-override',
             '@codingame/monaco-vscode-environment-service-override',
             '@codingame/monaco-vscode-extensions-service-override',
