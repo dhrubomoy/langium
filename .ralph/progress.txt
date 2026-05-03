@@ -12,6 +12,8 @@
 - `npm install` at the workspace root currently fails because `packages/langium-web/package.json` has a `file:../../../monaco-languageclient/packages/client` dependency that does not exist in this sandbox. Install is therefore skipped; deps that are already in node_modules continue to work for build/typecheck.
 - Build/typecheck commands that work: `npx tsc --noEmit` (from a package dir) or `npx tsc -b tsconfig.build.json` (from the repo root).
 - Lint command that works for changed files: `npx eslint <files>`.
+- Test fixtures (non-`*.test.ts` files) under `packages/langium/test/fixtures/` are NOT picked up by vitest (`include: ['**/test/**/*.test.ts']`) and NOT linted (eslint config only matches `*.ts`/`*.tsx` under `src/` and `test/`). Tree-sitter `grammar.js` fixtures live there safely.
+- Tree-sitter `grammar.js` files are JS modules that expect `grammar`, `seq`, `choice`, `field`, `prec`, `prec.left`, `prec.right`, `repeat`, `repeat1`, `optional`, `token` as globals at runtime (provided by the tree-sitter CLI sandbox). To smoke-test loading without the real CLI, eval the file in a `vm` context with stubbed globals.
 
 ## 2026-05-03 - US-002
 Thread: (ralph autonomous run)
@@ -41,4 +43,17 @@ Thread: (ralph autonomous run)
   - `npm install` in this sandbox is broken (sibling-repo file: dep), so any deps added need to be available in `node_modules` already. `web-tree-sitter` was already present transitively, which is why the build still works.
   - Static `Parser.init()` only needs to be called once globally, but `DefaultWasmLoader.init()` is idempotent (caches `language` and `initPromise`), so multiple containers calling it concurrently is safe.
   - When adding a service to `LangiumDefaultCoreServices`, don't forget to (a) import the type in `services.ts`, (b) declare the field, (c) register the factory in `default-module.ts`, and (d) export the implementation through the parent `parser/index.ts` barrel.
+---
+
+## 2026-05-03 - US-003
+Thread: (ralph autonomous run)
+- Created `packages/langium/test/fixtures/arithmetic/grammar.js` — a hand-written tree-sitter grammar for the simplified arithmetic language (Definition, AbstractDefinition supertype, Expression supertype with Addition/Subtraction/Multiplication/Division/Negation/Parenthesized/NumberLiteral/NamedExpression children, plus `Number`, `ID`, `ML_COMMENT`, `SL_COMMENT` terminals).
+- Uses `grammar({ name, word: $ => $.ID, extras: $ => [/\s+/, $.ML_COMMENT, $.SL_COMMENT], supertypes: $ => [...], rules })`. Field assignments use `field('name', ...)`. Binary operators use `prec.left(N, ...)` (1 for +/-, 2 for *//), unary minus uses `prec.right(3, ...)`, and `Parenthesized` uses `prec(4, ...)` to demonstrate non-associative `prec()` and ensure paren-grouping commits early. Terminals use `token(/regex/)` with `seq(...)` for multi-part comments.
+- Verified: `node --check` accepts the file as valid JS, and a `vm` stub of the tree-sitter DSL (grammar/seq/choice/field/prec/prec.left/prec.right/repeat/token) loads it cleanly and exposes all 16 rules + extras + word + supertypes.
+- **Files changed:** `packages/langium/test/fixtures/arithmetic/grammar.js` (new).
+- **Quality:** `npx tsc -b tsconfig.build.json` passes; the file is `.js` so it's not in the eslint or tsc include set (intentional — it's a tree-sitter source file, not project source).
+- **Learnings for future iterations:**
+  - Field names in this fixture are the contract that the metadata fixture (US-004) and compiler (US-022) must match: `Definition` has `name` + `expr`; binary ops have `left` + `right`; `Negation` has `operand`; `Parenthesized` has `expression`; `NumberLiteral` has `value`; `NamedExpression` has `element` (this one is `isRef: true` in metadata).
+  - Used `supertypes: [$.AbstractDefinition, $.Expression]` so tree-sitter records the abstract types in `node-types.json` without producing concrete wrapper nodes — `AbstractDefinition: $ => $.Definition` is therefore an alias rather than a structural wrapper.
+  - The grammar avoids any feature that the migration checker (US-019) rejects (no UnorderedGroup, no rule parameters, no negated/until tokens, no semantic predicates) — it's the canonical "post-migration" shape.
 ---
