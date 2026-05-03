@@ -29,6 +29,7 @@ import { DefaultLangiumDocumentFactory, DefaultLangiumDocuments } from './worksp
 import { DefaultIndexManager } from './workspace/index-manager.js';
 import { DefaultWorkspaceManager } from './workspace/workspace-manager.js';
 import { DefaultLexer, DefaultLexerErrorMessageProvider } from './parser/lexer.js';
+import { DefaultWasmLoader } from './parser/wasm-loader.js';
 import { JSDocDocumentationProvider } from './documentation/documentation-provider.js';
 import { DefaultCommentProvider } from './documentation/comment-provider.js';
 import { LangiumParserErrorMessageProvider } from './parser/langium-parser.js';
@@ -62,7 +63,8 @@ export function createDefaultCoreModule(context: DefaultCoreModuleContext): Modu
             TokenBuilder: () => new DefaultTokenBuilder(),
             Lexer: (services) => new DefaultLexer(services),
             ParserErrorMessageProvider: () => new LangiumParserErrorMessageProvider(),
-            LexerErrorMessageProvider: () => new DefaultLexerErrorMessageProvider()
+            LexerErrorMessageProvider: () => new DefaultLexerErrorMessageProvider(),
+            WasmLoader: (services) => new DefaultWasmLoader(services.parser.GrammarWasmPath ?? '')
         },
         workspace: {
             AstNodeLocator: () => new DefaultAstNodeLocator(),

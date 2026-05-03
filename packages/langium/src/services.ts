@@ -17,6 +17,7 @@ import type { Lexer } from './parser/lexer.js';
 import type { IParserConfig } from './parser/parser-config.js';
 import type { TokenBuilder } from './parser/token-builder.js';
 import type { ValueConverter } from './parser/value-converter.js';
+import type { WasmLoader } from './parser/wasm-loader.js';
 import type { Linker } from './references/linker.js';
 import type { NameProvider } from './references/name-provider.js';
 import type { References } from './references/references.js';
@@ -48,6 +49,15 @@ export type LangiumGeneratedCoreServices = {
     readonly LanguageMetaData: LanguageMetaData
     readonly parser: {
         readonly ParserConfig?: IParserConfig
+        /**
+         * Filesystem or URL path of the compiled tree-sitter `grammar.wasm`
+         * artifact for this language. Consumed by the {@link WasmLoader}
+         * service to initialize the tree-sitter parser at runtime.
+         *
+         * Optional for backwards compatibility with languages that have not
+         * yet been migrated to the tree-sitter pipeline.
+         */
+        readonly GrammarWasmPath?: string
     }
 }
 
@@ -65,6 +75,7 @@ export type LangiumDefaultCoreServices = {
         readonly CompletionParser: LangiumCompletionParser
         readonly TokenBuilder: TokenBuilder
         readonly Lexer: Lexer
+        readonly WasmLoader: WasmLoader
     }
     readonly documentation: {
         readonly CommentProvider: CommentProvider

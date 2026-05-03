@@ -2,3 +2,30 @@
 # Branch: ralph/langium-treesitter
 # Started: 2026-05-03
 
+## Codebase Patterns
+- DI services: services are added to `packages/langium/src/services.ts` (LangiumDefaultCoreServices) and wired in `packages/langium/src/default-module.ts` via factory functions `(services) => new Default...(services)`.
+- Generated services use the `LangiumGeneratedCoreServices` type — make new generated fields optional for backwards compatibility.
+- Public exports go through barrel files: e.g. `packages/langium/src/parser/index.ts` re-exports each parser sub-module.
+- File header: every source file under `packages/langium/src/` must include the Eclipse copyright header (enforced by eslint-plugin-header).
+- web-tree-sitter is at v0.26.x and uses `Parser.init()` (static, returns `Promise<void>`) and `Language.load(path)` (static, returns `Promise<Language>`).
+- Tests use vitest, but `npx vitest run ...` currently fails in this sandbox due to a missing rolldown native binding. This is a pre-existing environment issue, not caused by changes.
+- `npm install` at the workspace root currently fails because `packages/langium-web/package.json` has a `file:../../../monaco-languageclient/packages/client` dependency that does not exist in this sandbox. Install is therefore skipped; deps that are already in node_modules continue to work for build/typecheck.
+- Build/typecheck commands that work: `npx tsc --noEmit` (from a package dir) or `npx tsc -b tsconfig.build.json` (from the repo root).
+- Lint command that works for changed files: `npx eslint <files>`.
+
+## 2026-05-03 - US-001
+Thread: (ralph autonomous run)
+- Added `web-tree-sitter@~0.26.0` to `packages/langium/package.json` dependencies.
+- Created `packages/langium/src/parser/wasm-loader.ts` with the `WasmLoader` interface and `DefaultWasmLoader` class. `init()` calls `Parser.init()` then `Language.load(path)` and caches the loaded `Language`; `getLanguage()` returns the cached instance and throws if `init()` has not completed.
+- Added `WasmLoader: WasmLoader` to `LangiumDefaultCoreServices.parser` in `packages/langium/src/services.ts`.
+- Added an optional `parser.GrammarWasmPath?: string` field to `LangiumGeneratedCoreServices` so language-specific generated modules can supply the path; backwards compatible (existing generated modules don't break).
+- Wired `WasmLoader: (services) => new DefaultWasmLoader(services.parser.GrammarWasmPath ?? '')` in `packages/langium/src/default-module.ts`.
+- Re-exported the new module from `packages/langium/src/parser/index.ts`.
+- **Files changed:** `packages/langium/package.json`, `packages/langium/src/parser/wasm-loader.ts` (new), `packages/langium/src/parser/index.ts`, `packages/langium/src/services.ts`, `packages/langium/src/default-module.ts`.
+- **Quality:** `npx tsc -b tsconfig.build.json` passes; `npx eslint <changed files>` passes.
+- **Learnings for future iterations:**
+  - The path-supplied-at-construction pattern means the language-specific generated module must provide `GrammarWasmPath`. That hook is wired but no language uses it yet — US-024 will populate it in the generator.
+  - `npm install` in this sandbox is broken (sibling-repo file: dep), so any deps added need to be available in `node_modules` already. `web-tree-sitter` was already present transitively, which is why the build still works.
+  - Static `Parser.init()` only needs to be called once globally, but `DefaultWasmLoader.init()` is idempotent (caches `language` and `initPromise`), so multiple containers calling it concurrently is safe.
+  - When adding a service to `LangiumDefaultCoreServices`, don't forget to (a) import the type in `services.ts`, (b) declare the field, (c) register the factory in `default-module.ts`, and (d) export the implementation through the parent `parser/index.ts` barrel.
+---
