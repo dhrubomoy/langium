@@ -38,6 +38,7 @@ export * from './tree-sitter-definition-provider.js';
 export * from './tree-sitter-diagnostics-provider.js';
 export * from './tree-sitter-document-symbols-provider.js';
 export * from './tree-sitter-references-provider.js';
+export * from './tree-sitter-rename-provider.js';
 export * from './type-hierarchy-provider.js';
 export * from './type-provider.js';
 export * from './workspace-symbol-provider.js';

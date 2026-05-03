@@ -35,6 +35,7 @@ import type { TreeSitterDefinitionProvider } from './tree-sitter-definition-prov
 import type { CrossRefDiagnosticsProvider, ParseErrorDiagnosticsProvider } from './tree-sitter-diagnostics-provider.js';
 import type { TreeSitterDocumentSymbolsProvider } from './tree-sitter-document-symbols-provider.js';
 import type { TreeSitterReferencesProvider } from './tree-sitter-references-provider.js';
+import type { TreeSitterRenameProvider } from './tree-sitter-rename-provider.js';
 import type { TypeHierarchyProvider } from './type-hierarchy-provider.js';
 import type { TypeDefinitionProvider } from './type-provider.js';
 import type { WorkspaceSymbolProvider } from './workspace-symbol-provider.js';
@@ -80,6 +81,7 @@ export type LangiumLSPServices = {
         readonly TreeSitterDefinitionProvider?: TreeSitterDefinitionProvider
         readonly TreeSitterReferencesProvider?: TreeSitterReferencesProvider
         readonly TreeSitterDocumentSymbolsProvider?: TreeSitterDocumentSymbolsProvider
+        readonly TreeSitterRenameProvider?: TreeSitterRenameProvider
     },
     readonly shared: LangiumSharedServices
 };
