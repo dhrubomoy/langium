@@ -56,6 +56,10 @@
     "./api": {
       "types": "./out/language-server/generated/ast.d.ts",
       "default": "./out/language-server/generated/ast.js"
+    },
+    "./language-server": {
+      "types": "./out/language-server/arithmetics-module.d.ts",
+      "default": "./out/language-server/arithmetics-module.js"
     }
   },
   "scripts": {

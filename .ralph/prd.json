@@ -1,0 +1,454 @@
+{
+  "project": "langium",
+  "branchName": "ralph/langium-treesitter",
+  "description": "Replace Chevrotain with tree-sitter (web-tree-sitter WASM) as Langium's parser, adding incremental parsing, a DocumentIndex runtime, 7 LSP adapters, and a grammar compiler that generates grammar.js + metadata.ts + grammar.wasm from .langium files.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Add web-tree-sitter dependency and WASM Loader service",
+      "description": "As a service implementor, I want a WasmLoader service that accepts a grammar.wasm path at init, calls Language.load(), and exposes the initialized Language \u2014 working in both Node.js and web extension environments \u2014 so that downstream services can parse documents without knowing how the WASM is loaded.",
+      "acceptanceCriteria": [
+        "Add `web-tree-sitter` to packages/langium/package.json dependencies",
+        "Create packages/langium/src/parser/wasm-loader.ts with a WasmLoader service interface and DefaultWasmLoader implementation",
+        "WasmLoader accepts grammarWasmPath: string in its constructor/init and calls Parser.init() then Language.load(path)",
+        "WasmLoader exposes the loaded Language via a getLanguage(): Language accessor",
+        "WasmLoader is wired into the DI container in default-module.ts",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Define GrammarMetadata stable TypeScript type",
+      "description": "As a core maintainer, I want a stable, versioned GrammarMetadata TypeScript type exported from langium/generate so that the runtime index builder and future tooling can consume it without breaking changes.",
+      "acceptanceCriteria": [
+        "Create packages/langium/src/generate/grammar-metadata.ts defining: GrammarMetadata, NodeMetadata, FieldMetadata (with operator: '=' | '+=' | '?='), and ReferenceMetadata",
+        "NodeMetadata includes: nodeType: string, fields: FieldMetadata[], isAction?: boolean, actionType?: string",
+        "FieldMetadata includes: name: string, operator: '=' | '+=' | '?=', isRef?: boolean",
+        "GrammarMetadata includes: version: string, nodes: Record<string, NodeMetadata>, extras: string[], word?: string",
+        "GrammarMetadata is exported from packages/langium/src/generate/index.ts",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Write hand-crafted arithmetic grammar.js reference fixture",
+      "description": "As a core maintainer, I want a hand-written tree-sitter grammar.js for the arithmetic example language that serves as ground-truth for the full pipeline and compiler regression tests.",
+      "acceptanceCriteria": [
+        "Create packages/langium/test/fixtures/arithmetic/grammar.js as a valid tree-sitter grammar module",
+        "Grammar covers: Definition (named expressions), AbstractDefinition, Expression (add/sub/mul/div/neg/paren/number/ref), Number terminal, ID terminal",
+        "Uses field() for named assignments, seq(), choice(), prec(), prec.left(), prec.right(), token(), /regex/ as appropriate",
+        "Declares word: $ => $.ID and extras: [/\\s+/, $.ML_COMMENT, $.SL_COMMENT] or equivalent",
+        "File is valid JavaScript that tree-sitter CLI can parse (module.exports = grammar({...}))",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Write hand-crafted arithmetic metadata.ts reference fixture",
+      "description": "As a core maintainer, I want a hand-written metadata.ts for the arithmetic example that maps tree-sitter node types to Langium AST types, field operators, and cross-reference markers, serving as ground truth for the index builder and compiler.",
+      "acceptanceCriteria": [
+        "Create packages/langium/test/fixtures/arithmetic/metadata.ts exporting a const ARITHMETIC_METADATA: GrammarMetadata",
+        "Metadata covers all nodes: Definition, AbstractDefinition, Addition, Subtraction, Multiplication, Division, Negation, NumberLiteral, NamedExpression (reference node)",
+        "Each node lists its fields with correct operator ('=', '+=', '?=') and isRef where applicable (e.g. element field on NamedExpression is isRef: true)",
+        "extras and word fields are set correctly",
+        "Imports GrammarMetadata from langium/generate",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Define DocumentIndex interface and supporting types",
+      "description": "As a service implementor, I want a DocumentIndex interface with stable maps for declarations, references, and diagnostics so that I can build LSP features against a well-defined contract without depending on tree-sitter internals.",
+      "acceptanceCriteria": [
+        "Create packages/langium/src/workspace/document-index.ts",
+        "Define DeclarationInfo: { name: string, nodeType: string, range: Range, uri: URI }",
+        "Define ReferenceInfo: { name: string, range: Range, targetUri?: URI }",
+        "Define DocumentIndex: { declarations: Map<string, DeclarationInfo[]>, references: Map<string, ReferenceInfo[]>, diagnostics: Diagnostic[] }",
+        "DocumentIndex is keyed by URI: the index builder returns a Map<string, DocumentIndex>",
+        "Types use Range and Diagnostic from vscode-languageserver-types (already a langium dependency)",
+        "All types exported from packages/langium/src/index.ts",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Implement IndexBuilder - declarations walk",
+      "description": "As a service implementor, I want the IndexBuilder to walk the tree-sitter SyntaxNode tree using GrammarMetadata and populate the declarations map so that LSP declaration-based features have their data source.",
+      "acceptanceCriteria": [
+        "Create packages/langium/src/workspace/index-builder.ts with IndexBuilder service interface and DefaultIndexBuilder implementation",
+        "DefaultIndexBuilder.build(tree: SyntaxNode, metadata: GrammarMetadata, uri: string): DocumentIndex",
+        "Walk visits every node, looks up its type in metadata.nodes, collects name field values as DeclarationInfo entries",
+        "Nodes whose metadata has a name field (operator '=') with a string value are treated as declarations",
+        "DeclarationInfo.range is set from node.startPosition / node.endPosition converted to LSP Range",
+        "IndexBuilder is wired into the DI container",
+        "Unit test: given a mock SyntaxNode tree and arithmetic ARITHMETIC_METADATA, declarations map contains expected entries",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Implement IndexBuilder - cross-references walk",
+      "description": "As a service implementor, I want the IndexBuilder to collect all cross-reference nodes (fields marked isRef: true in metadata) into the references map so that Go-to-definition and Find-references adapters have their data source.",
+      "acceptanceCriteria": [
+        "Extend DefaultIndexBuilder.build() to also populate index.references",
+        "For each node, check metadata fields for isRef: true; read the child node's text as the reference name",
+        "ReferenceInfo.range is set from the reference child node's position",
+        "Unit test: given a mock tree with a cross-reference node, references map contains expected ReferenceInfo",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Implement IndexBuilder - diagnostics from ERROR and MISSING nodes",
+      "description": "As a service implementor, I want the index builder to collect ERROR and MISSING tree-sitter nodes in the same pass that builds the declaration/reference maps so that diagnostics are always consistent with the index state.",
+      "acceptanceCriteria": [
+        "Extend DefaultIndexBuilder.build() to push a Diagnostic into index.diagnostics for every node where node.type === 'ERROR' or node.isMissing",
+        "Diagnostic message is 'Syntax error at [line]:[col]' using node.startPosition",
+        "Diagnostic severity is DiagnosticSeverity.Error",
+        "Unit test: given a tree with an ERROR node, diagnostics list contains exactly one entry with correct range and message",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "LSP adapter: parse-error diagnostics",
+      "description": "As a language server user, I want parse errors to appear as diagnostics in my editor without noticeable delay after every keystroke so that I get fast feedback on syntax mistakes.",
+      "acceptanceCriteria": [
+        "Create packages/langium/src/lsp/tree-sitter-diagnostics-provider.ts",
+        "ParseErrorDiagnosticsProvider reads index.diagnostics and returns them as LSP Diagnostic[]",
+        "Provider is registered in lsp/default-lsp-module.ts",
+        "Unit test: given a DocumentIndex with one diagnostic, provider returns it unchanged",
+        "Verify in browser via packages/langium-web e2e tests: typing a syntax error in the arithmetics editor produces at least one error squiggle",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "LSP adapter: cross-reference diagnostics",
+      "description": "As a language server user, I want cross-reference errors (unresolved identifiers) to appear as diagnostics so that I can detect undefined variables and types without running the language.",
+      "acceptanceCriteria": [
+        "Add CrossRefDiagnosticsProvider to packages/langium/src/lsp/tree-sitter-diagnostics-provider.ts",
+        "For each ReferenceInfo in index.references, check if a matching DeclarationInfo exists in index.declarations; if not, emit a DiagnosticSeverity.Error 'Unresolved reference: [name]'",
+        "Unit test: given an index with an unresolved reference, provider emits one error diagnostic; given a resolved reference, emits none",
+        "Verify in browser via packages/langium-web e2e tests: referencing an undefined name shows an 'Unresolved reference' error squiggle",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "LSP adapter: Go-to-definition",
+      "description": "As a language server user, I want Go-to-definition to navigate instantly to the declaration of any symbol so that I can explore code without searching manually.",
+      "acceptanceCriteria": [
+        "Create packages/langium/src/lsp/tree-sitter-definition-provider.ts",
+        "Given a TextDocumentPositionParams, find any ReferenceInfo whose range contains the position, look up its name in index.declarations, return Location pointing to the declaration",
+        "Returns null if no reference or declaration found at position",
+        "Unit test: given a known reference position and matching declaration, returns correct Location",
+        "Verify in browser via packages/langium-web e2e tests: Ctrl+click (or F12) on a reference in the arithmetics editor navigates to the declaration",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "LSP adapter: Find all references",
+      "description": "As a language server user, I want Find-all-references to list every usage of a symbol across the document so that I can understand where a declaration is used.",
+      "acceptanceCriteria": [
+        "Create packages/langium/src/lsp/tree-sitter-references-provider.ts",
+        "Given a ReferenceParams at a declaration position, return all ReferenceInfo entries with matching name as Location[]",
+        "Optionally includes the declaration itself if includeDeclaration is true",
+        "Unit test: given a name with two references, returns two Locations",
+        "Verify in browser via packages/langium-web e2e tests: right-click > Find All References on a declaration shows its usages in the peek panel",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "LSP adapter: Document symbols",
+      "description": "As a language server user, I want Document Symbols to show an outline of all declared names so that I can navigate large files quickly.",
+      "acceptanceCriteria": [
+        "Create packages/langium/src/lsp/tree-sitter-document-symbols-provider.ts",
+        "Returns all DeclarationInfo entries as DocumentSymbol[] with name, kind (default SymbolKind.Variable), and range",
+        "Unit test: given an index with three declarations, returns three DocumentSymbols",
+        "Verify in browser via packages/langium-web e2e tests: the breadcrumb/outline shows declared names for the open arithmetics file",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-014",
+      "title": "LSP adapter: Rename symbol",
+      "description": "As a language server user, I want Rename symbol to update every occurrence of a name atomically so that I can refactor identifiers safely.",
+      "acceptanceCriteria": [
+        "Create packages/langium/src/lsp/tree-sitter-rename-provider.ts",
+        "Given a RenameParams, collect all DeclarationInfo and ReferenceInfo entries with matching name, return WorkspaceEdit with TextEdit[] replacing each range with newName",
+        "Unit test: given one declaration and two references for name 'foo', rename to 'bar' returns three edits",
+        "Verify in browser via packages/langium-web e2e tests: right-click > Rename Symbol renames all occurrences in the editor simultaneously",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-015",
+      "title": "LSP adapter: Folding ranges",
+      "description": "As a language server user, I want folding ranges to collapse blocks in my language so that I can manage large files visually.",
+      "acceptanceCriteria": [
+        "Create packages/langium/src/lsp/tree-sitter-folding-provider.ts",
+        "Walk the tree-sitter SyntaxNode tree and emit FoldingRange for every named node that spans more than one line",
+        "FoldingRange uses node.startPosition.row and node.endPosition.row",
+        "Unit test: given a node spanning lines 1-5 and a one-line node, returns one FoldingRange",
+        "Verify in browser via packages/langium-web e2e tests: multi-line definitions in the arithmetics editor show fold icons in the gutter",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-016",
+      "title": "Grammar syntax extension: @word terminal annotation",
+      "description": "As a language author, I want to annotate my terminal rule with @word to declare the word/identifier terminal so that tree-sitter can disambiguate keywords from identifiers correctly.",
+      "acceptanceCriteria": [
+        "Extend packages/langium/src/grammar/langium-grammar.langium to allow @word annotation on TerminalRule",
+        "Run npm run langium:generate to regenerate the grammar AST types",
+        "The generated TerminalRule AST type has an isWord?: boolean or word?: boolean property",
+        "Unit test (parseHelper): '@word terminal ID: /[a-zA-Z_][\\w]*/;' parses without errors and produces TerminalRule with word flag set",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-017",
+      "title": "Grammar syntax extension: @prec(n) alternative annotation",
+      "description": "As a language author, I want to use @prec(n) annotations on parser rule alternatives to express operator precedence so that I can resolve ambiguities without writing a separate precedence table.",
+      "acceptanceCriteria": [
+        "Extend langium-grammar.langium to allow @prec(n) or @prec.left(n) / @prec.right(n) on Alternatives or Group elements",
+        "Run npm run langium:generate",
+        "Generated AST node for the annotated element has prec?: number and precAssoc?: 'left' | 'right' | 'none'",
+        "Unit test: 'rule E: @prec.left(1) E '+' E | NUM;' parses and produces the correct AST prec fields",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-018",
+      "title": "Grammar syntax extension: conflicts top-level declaration",
+      "description": "As a language author, I want to declare conflicts: [RuleA, RuleB]; at the grammar level so that I can explicitly tell tree-sitter's GLR parser how to resolve specific grammar conflicts.",
+      "acceptanceCriteria": [
+        "Extend langium-grammar.langium to allow an optional 'conflicts' declaration at the Grammar top level, listing arrays of rule-name pairs",
+        "Run npm run langium:generate",
+        "Generated Grammar AST type has conflicts?: ConflictRule[][] or equivalent",
+        "Unit test: a grammar string with 'conflicts: [RuleA, RuleB];' parses without errors and the AST conflicts field is populated",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-019",
+      "title": "Grammar compiler: migration errors for dropped features",
+      "description": "As a language author, I want the compiler to emit clear migration errors for dropped Langium grammar features (UnorderedGroup, RuleParameter, GuardCondition, NegatedToken, UntilToken, semantic predicates, lookahead assertions) with concrete migration hints so that I know exactly what to change when upgrading.",
+      "acceptanceCriteria": [
+        "Create packages/langium-cli/src/generator/treesitter/migration-checker.ts",
+        "checkMigration(grammar: Grammar): MigrationError[] detects use of UnorderedGroup (&), RuleParameter, GuardCondition, NegatedToken (!elem), UntilToken (->elem), and terminal lookahead assertions",
+        "Each MigrationError has message and a hint string matching the migration table in the PRD",
+        "Unit tests: one test per dropped feature asserting the correct hint is returned",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-020",
+      "title": "Grammar compiler: parser rules to grammar.js seq/choice/field",
+      "description": "As a language author, I want langium generate to compile my parser rules into tree-sitter seq(), choice(), field(), prec(), and prec.left()/prec.right() constructs so that I don't have to write tree-sitter grammar syntax manually.",
+      "acceptanceCriteria": [
+        "Create packages/langium-cli/src/generator/treesitter/grammar-js-compiler.ts",
+        "compileParserRule(rule: ParserRule): string emits a tree-sitter rule body string",
+        "Alternatives map to choice(), Groups to seq(), optional (?) to optional(), many (*) to repeat(), at-least-once (+) to repeat1()",
+        "Assignments (=, +=, ?=) map to field('name', ...) wrappers",
+        "@prec(n) / @prec.left / @prec.right annotations map to prec(n, ...) / prec.left(n, ...) / prec.right(n, ...)",
+        "Fragment rules get _-prefixed names in the output",
+        "Unit test: compile the arithmetic grammar's Expression rule and assert the output string contains the expected tree-sitter constructs",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-021",
+      "title": "Grammar compiler: terminal rules, extras, and word declaration",
+      "description": "As a language author, I want hidden terminals compiled to tree-sitter's extras array and the @word terminal compiled to the word declaration so that whitespace/comments are automatically ignored and keywords are correctly disambiguated.",
+      "acceptanceCriteria": [
+        "compileTerminalRule(rule: TerminalRule): string emits the terminal as a token(/regex/) or string literal",
+        "Hidden terminals are collected and emitted in the extras: [...] array of the grammar",
+        "The terminal annotated with @word is emitted as word: $ => $.TERMINAL_NAME",
+        "Unit test: a grammar with hidden whitespace terminal produces 'extras: [/\\\\s+/]' (or equivalent) in the output",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 21,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-022",
+      "title": "Grammar compiler: emit metadata.ts with field and action info",
+      "description": "As a language author, I want the compiler to emit a metadata.ts file with a GrammarMetadata constant describing node-to-AST-type mappings, field operators, Action nodes, and CrossReference markers so that the runtime index builder can interpret the tree without semantic actions.",
+      "acceptanceCriteria": [
+        "Create packages/langium-cli/src/generator/treesitter/metadata-compiler.ts",
+        "compileMetadata(grammar: Grammar): GrammarMetadata builds the metadata object",
+        "For each parser rule, emits a NodeMetadata entry with nodeType, fields (name + operator + isRef)",
+        "Action nodes ({infer T} / {Type.field=current}) are represented with isAction: true and actionType",
+        "CrossReference fields ([Type:Rule]) have isRef: true in their FieldMetadata",
+        "Unit test: compile arithmetic grammar and assert the resulting GrammarMetadata matches the hand-written ARITHMETIC_METADATA fixture (from US-004) structurally",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 22,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-023",
+      "title": "Grammar compiler: write grammar.js and metadata.ts to disk",
+      "description": "As a language author, I want langium generate to write the compiled grammar.js and metadata.ts files to the output directory so that I have a single build command that produces all needed artifacts.",
+      "acceptanceCriteria": [
+        "Create packages/langium-cli/src/generator/treesitter/file-writer.ts",
+        "writeGrammarJs(outputDir: string, grammarJs: string): Promise<void> writes the grammar.js module to outputDir",
+        "writeMetadataTs(outputDir: string, metadata: GrammarMetadata): Promise<void> writes a valid TypeScript file exporting a const GRAMMAR_METADATA: GrammarMetadata",
+        "Both writers are called from the existing langium generate pipeline in packages/langium-cli/src/langium.ts or equivalent entry",
+        "Integration test: run the compiler on the arithmetic example grammar string and assert the output files contain the expected top-level constructs",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 23,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-024",
+      "title": "Grammar compiler: invoke tree-sitter CLI to produce grammar.wasm",
+      "description": "As a language author, I want langium generate to invoke the tree-sitter CLI (tree-sitter generate + tree-sitter build --wasm) and place grammar.wasm in resources/ so that I have a single build command that outputs everything needed to run my language server.",
+      "acceptanceCriteria": [
+        "Create packages/langium-cli/src/generator/treesitter/wasm-builder.ts",
+        "buildWasm(grammarJsPath: string, outputDir: string): Promise<void> runs 'tree-sitter generate' then 'tree-sitter build --wasm' as child processes",
+        "On success, copies or moves the resulting .wasm file to outputDir/resources/grammar.wasm",
+        "On failure (tree-sitter CLI not found or non-zero exit), throws a user-friendly error message",
+        "buildWasm is called after writeGrammarJs in the langium generate pipeline",
+        "Typecheck passes"
+      ],
+      "priority": 24,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-025",
+      "title": "End-to-end validation: compile arithmetic grammar and compare to hand-written fixtures",
+      "description": "As a core maintainer, I want the grammar compiler to be tested with the hand-written arithmetic example as ground truth so that I can validate generated output against a known-good reference.",
+      "acceptanceCriteria": [
+        "Add an integration test in packages/langium-cli/test/treesitter/ that reads the arithmetic .langium grammar, runs the full compiler pipeline (grammar.js + metadata.ts generation), and compares structural output against the hand-written fixtures from US-003 and US-004",
+        "Test asserts that every rule name present in the hand-written grammar.js appears in the compiled output",
+        "Test asserts that every NodeMetadata entry in the hand-written ARITHMETIC_METADATA is present in the compiled GrammarMetadata",
+        "Test is added to the CI test suite (picked up by npm test)",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 25,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-026",
+      "title": "Remove Chevrotain dependencies from package.json",
+      "description": "As a core maintainer, I want all Chevrotain and chevrotain-allstar dependencies removed from package.json after the tree-sitter pipeline is validated so that there is no dead code and the bundle size is reduced.",
+      "acceptanceCriteria": [
+        "Remove 'chevrotain' and 'chevrotain-allstar' from packages/langium/package.json dependencies",
+        "Remove any '@types/chevrotain' or related dev dependencies from all workspace package.json files",
+        "Run npm install and verify the lockfile no longer references chevrotain",
+        "npm run build succeeds with no import errors referencing chevrotain",
+        "Typecheck passes"
+      ],
+      "priority": 26,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-027",
+      "title": "Delete Chevrotain-based CST parser types and implementations",
+      "description": "As a core maintainer, I want all CstNode, CstNodeBuilder, LangiumParser, ChevrotainWrapper, TokenBuilder, and DefaultLexer types deleted so that the codebase is clean and does not suggest to contributors that the CST approach is still used.",
+      "acceptanceCriteria": [
+        "Delete or empty packages/langium/src/parser/ files that implement the Chevrotain-based parser (LangiumParser, ChevrotainWrapper, TokenBuilder, DefaultLexer)",
+        "Delete CstNode hierarchy types from packages/langium/src/syntax-tree.ts or equivalent",
+        "Remove CstNodeBuilder from any workspace service file",
+        "Remove all imports of deleted types from default-module.ts, services.ts, and any other files",
+        "npm run build succeeds with zero references to deleted types",
+        "Typecheck passes"
+      ],
+      "priority": 27,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

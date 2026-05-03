@@ -140,6 +140,29 @@ Tests should assert on observable outputs and public interfaces — not on inter
 **Prior art in the codebase:**  
 `packages/langium/test/grammar/` — grammar parsing and validation tests using `createLangiumGrammarServices(EmptyFileSystem)` and `parseHelper`. New compiler tests can follow the same pattern, replacing assertions on diagnostics with assertions on emitted file content.
 
+## Browser Verification Harness
+
+`packages/langium-web` is a Vite + Monaco Editor web app connected to the arithmetics language server running in a Web Worker. It serves as the browser-based verification layer for user-facing LSP features that unit tests cannot cover.
+
+**Running the dev server:**
+```sh
+cd packages/langium-web
+npm run dev      # opens http://localhost:5173
+```
+
+**Running e2e tests (Playwright):**
+```sh
+cd packages/langium-web
+npm run test:e2e
+```
+
+**Current e2e tests** (`packages/langium-web/tests/e2e/editor.spec.ts`):
+- Monaco editor mounts
+- Valid arithmetics code produces no error squiggles
+- Syntax error produces at least one error squiggle
+
+**Browser verification criteria for LSP adapters (US-009 through US-015):** Each LSP adapter story requires an additional Playwright e2e test in `editor.spec.ts` that demonstrates the feature works end-to-end in the browser. The specific behavior to verify is captured in each story's acceptance criteria in `.ralph/prd.json`.
+
 ## Out of Scope
 
 - **Code completion:** Requires a follow-set table emitted at compile time. Planned for v2.
