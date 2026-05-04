@@ -86,4 +86,9 @@ export interface LangiumLanguageConfig {
          */
         comment?: 'skip' | 'parentheses' | 'slash' | 'hash'
     }
+    /** Enable tree-sitter grammar.js + metadata.ts generation. */
+    treesitter?: {
+        /** Output directory for `grammar.js` and `metadata.ts`. */
+        out: string
+    }
 }

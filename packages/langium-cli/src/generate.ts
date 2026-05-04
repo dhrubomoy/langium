@@ -21,6 +21,8 @@ import { generateTextMate } from './generator/highlighting/textmate-generator.js
 import { getTime, log } from './generator/langium-util.js';
 import { generateModule } from './generator/module-generator.js';
 import { elapsedTime, getUserChoice, schema } from './generator/node-util.js';
+import { emitTreeSitterArtifacts } from './generator/treesitter/file-writer.js';
+import { checkMigration } from './generator/treesitter/migration-checker.js';
 import { generateTypesFile } from './generator/types-generator.js';
 import type { LangiumConfig, LangiumLanguageConfig } from './package-types.js';
 import { RelativePath } from './package-types.js';
@@ -410,6 +412,20 @@ export async function runGenerator(config: LangiumConfig, options: GenerateOptio
             const bnfPath = path.resolve(relPath, languageConfig.bnf.out ?? `${grammar.name ?? 'grammar'}.gbnf`);
             log('log', options, `Writing BNF grammar to ${chalk.white.bold(bnfPath)}`);
             await writeWithFail(bnfPath, genBnf, options);
+        }
+
+        if (languageConfig?.treesitter) {
+            const migrationErrors = checkMigration(grammar);
+            if (migrationErrors.length > 0) {
+                for (const err of migrationErrors) {
+                    log('error', options, chalk.red(`tree-sitter migration: ${err.message}`));
+                    log('error', options, `  hint: ${err.hint}`);
+                }
+                return buildResult(false);
+            }
+            const treesitterDir = path.resolve(relPath, languageConfig.treesitter.out);
+            log('log', options, `Writing tree-sitter artifacts to ${chalk.white.bold(treesitterDir)}`);
+            await emitTreeSitterArtifacts(grammar, treesitterDir, grammar.name);
         }
     }
 
