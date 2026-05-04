@@ -69,16 +69,19 @@ for i in $(seq 1 $MAX_ITERATIONS); do
   echo "  Ralph Iteration $i of $MAX_ITERATIONS"
   echo "==============================================================="
 
-  OUTPUT=$(sbx run claude -- --dangerously-skip-permissions --print < "$RALPH_DIR/prompt.md" 2>&1 | tee /dev/stderr) || true
+  sbx run claude -- --dangerously-skip-permissions --print "$(cat "$RALPH_DIR/prompt.md")" || true
 
-  if echo "$OUTPUT" | grep -q "<promise>COMPLETE</promise>"; then
+  INCOMPLETE=$(jq '[.userStories[] | select(.passes == false)] | length' "$PRD_FILE" 2>/dev/null || echo "1")
+  if [ "$INCOMPLETE" -eq 0 ]; then
     echo ""
     echo "Ralph completed all tasks!"
     echo "Completed at iteration $i of $MAX_ITERATIONS"
     exit 0
   fi
 
-  echo "Iteration $i complete. Continuing..."
+  DONE=$(jq '[.userStories[] | select(.passes == true)] | length' "$PRD_FILE" 2>/dev/null || echo "0")
+  TOTAL=$(jq '.userStories | length' "$PRD_FILE" 2>/dev/null || echo "?")
+  echo "Iteration $i complete. Stories done: $DONE/$TOTAL. Continuing..."
   sleep 2
 done
 
