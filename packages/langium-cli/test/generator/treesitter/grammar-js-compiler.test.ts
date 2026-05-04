@@ -8,7 +8,14 @@ import { EmptyFileSystem, GrammarAST, type Grammar } from 'langium';
 import { createLangiumGrammarServices } from 'langium/grammar';
 import { parseHelper } from 'langium/test';
 import { describe, expect, test } from 'vitest';
-import { compileParserRule, compileParserRuleEntry } from '../../../src/generator/treesitter/grammar-js-compiler.js';
+import {
+    compileExtras,
+    compileParserRule,
+    compileParserRuleEntry,
+    compileTerminalRule,
+    compileTerminalRuleEntry,
+    compileWord
+} from '../../../src/generator/treesitter/grammar-js-compiler.js';
 
 const services = createLangiumGrammarServices(EmptyFileSystem);
 const parse = parseHelper<Grammar>(services.grammar);
@@ -23,6 +30,13 @@ function getRule(grammar: Grammar, name: string): GrammarAST.ParserRule {
     expect(rule, `rule ${name} should exist`).toBeDefined();
     expect(GrammarAST.isParserRule(rule!)).toBe(true);
     return rule as GrammarAST.ParserRule;
+}
+
+function getTerminal(grammar: Grammar, name: string): GrammarAST.TerminalRule {
+    const rule = grammar.rules.find(r => r.name === name);
+    expect(rule, `terminal rule ${name} should exist`).toBeDefined();
+    expect(GrammarAST.isTerminalRule(rule!)).toBe(true);
+    return rule as GrammarAST.TerminalRule;
 }
 
 describe('grammar-js-compiler', () => {
@@ -244,6 +258,157 @@ describe('grammar-js-compiler', () => {
         expect(body).toContain("field('value', $.ID)");
         expect(body).not.toContain('__action__');
         expect(body).not.toContain('infer');
+    });
+
+    // US-021: terminal rules, extras, and word declaration
+
+    test('compiles a regex terminal as token(/regex/)', async () => {
+        const grammar = await parseGrammar(`
+            grammar Test
+            entry E: name=ID;
+            terminal ID: /[_a-zA-Z][\\w]*/;
+        `);
+        const body = compileTerminalRule(getTerminal(grammar, 'ID'));
+        expect(body).toBe('token(/[_a-zA-Z][\\w]*/)');
+    });
+
+    test('compiles a numeric regex terminal preserving alternation', async () => {
+        const grammar = await parseGrammar(`
+            grammar Test
+            entry E: value=Number;
+            terminal Number: /[0-9]+(\\.[0-9]+)?/;
+            terminal ID: /[_a-zA-Z][\\w]*/;
+        `);
+        const body = compileTerminalRule(getTerminal(grammar, 'Number'));
+        expect(body).toBe('token(/[0-9]+(\\.[0-9]+)?/)');
+    });
+
+    test('compileTerminalRuleEntry composes "<name>: $ => token(...)"', async () => {
+        const grammar = await parseGrammar(`
+            grammar Test
+            entry E: name=ID;
+            terminal ID: /[_a-zA-Z][\\w]*/;
+        `);
+        const entry = compileTerminalRuleEntry(getTerminal(grammar, 'ID'));
+        expect(entry).toBe('ID: $ => token(/[_a-zA-Z][\\w]*/)');
+    });
+
+    test('compiles a terminal alternatives body to choice(...)', async () => {
+        const grammar = await parseGrammar(`
+            grammar Test
+            entry E: name=ID;
+            terminal ID: /[a-z]+/ | /[A-Z]+/;
+        `);
+        const body = compileTerminalRule(getTerminal(grammar, 'ID'));
+        expect(body).toBe('token(choice(/[a-z]+/, /[A-Z]+/))');
+    });
+
+    test('compiles a terminal group body to seq(...) of regex parts', async () => {
+        const grammar = await parseGrammar(`
+            grammar Test
+            entry E: name=ID;
+            terminal SL_COMMENT: /\\/\\//  /[^\\n\\r]*/;
+            terminal ID: /[_a-zA-Z][\\w]*/;
+        `);
+        const body = compileTerminalRule(getTerminal(grammar, 'SL_COMMENT'));
+        expect(body).toBe('token(seq(/\\/\\//, /[^\\n\\r]*/))');
+    });
+
+    test('compiles a character range to a regex character class', async () => {
+        const grammar = await parseGrammar(`
+            grammar Test
+            entry E: name=ID;
+            terminal ID: 'a'..'z';
+        `);
+        const body = compileTerminalRule(getTerminal(grammar, 'ID'));
+        expect(body).toBe('token(/[a-z]/)');
+    });
+
+    test('compiles a single keyword in a terminal body to a quoted string', async () => {
+        const grammar = await parseGrammar(`
+            grammar Test
+            entry E: name=ID;
+            terminal ID: 'a';
+        `);
+        const body = compileTerminalRule(getTerminal(grammar, 'ID'));
+        expect(body).toBe("token('a')");
+    });
+
+    test('compiles a terminal rule call body to $.OTHER', async () => {
+        const grammar = await parseGrammar(`
+            grammar Test
+            entry E: name=ID;
+            terminal ID: BASE;
+            terminal BASE: /[_a-zA-Z][\\w]*/;
+        `);
+        const body = compileTerminalRule(getTerminal(grammar, 'ID'));
+        expect(body).toBe('token($.BASE)');
+    });
+
+    test('hidden whitespace terminal compiles into the extras array', async () => {
+        // AC: a grammar with hidden whitespace terminal produces "extras: [/\\s+/]"
+        // (or equivalent). A single-regex hidden terminal is inlined as the
+        // anonymous regex so tree-sitter consumes it without producing a node.
+        const grammar = await parseGrammar(`
+            grammar Test
+            entry E: name=ID;
+            hidden terminal WS: /\\s+/;
+            terminal ID: /[_a-zA-Z][\\w]*/;
+        `);
+        expect(compileExtras(grammar)).toBe('[/\\s+/]');
+    });
+
+    test('hidden multi-element terminal is referenced by name in extras', async () => {
+        const grammar = await parseGrammar(`
+            grammar Test
+            entry E: name=ID;
+            hidden terminal WS: /\\s+/;
+            hidden terminal ML_COMMENT: /\\/\\*[\\s\\S]*?\\*\\//;
+            hidden terminal SL_COMMENT: /\\/\\//  /[^\\n\\r]*/;
+            terminal ID: /[_a-zA-Z][\\w]*/;
+        `);
+        // WS and ML_COMMENT are single-regex hidden terminals — inlined.
+        // SL_COMMENT is a TerminalGroup of two regexes — referenced by name.
+        expect(compileExtras(grammar)).toBe('[/\\s+/, /\\/\\*[\\s\\S]*?\\*\\//, $.SL_COMMENT]');
+    });
+
+    test('grammar without hidden terminals produces an empty extras array', async () => {
+        const grammar = await parseGrammar(`
+            grammar Test
+            entry E: name=ID;
+            terminal ID: /[_a-zA-Z][\\w]*/;
+        `);
+        expect(compileExtras(grammar)).toBe('[]');
+    });
+
+    test('@word terminal yields the word value $.NAME', async () => {
+        const grammar = await parseGrammar(`
+            grammar Test
+            entry E: name=ID;
+            @word terminal ID: /[_a-zA-Z][\\w]*/;
+        `);
+        expect(compileWord(grammar)).toBe('$.ID');
+    });
+
+    test('grammar with no @word annotation yields undefined word', async () => {
+        const grammar = await parseGrammar(`
+            grammar Test
+            entry E: name=ID;
+            terminal ID: /[_a-zA-Z][\\w]*/;
+        `);
+        expect(compileWord(grammar)).toBeUndefined();
+    });
+
+    test('hidden + @word combine: terminal both contributes to extras and acts as word', async () => {
+        // Edge case: @word AND hidden on the same terminal. The terminal still
+        // shows up in extras (because it is hidden) and is the word.
+        const grammar = await parseGrammar(`
+            grammar Test
+            entry E: name=ID;
+            @word hidden terminal ID: /[_a-zA-Z][\\w]*/;
+        `);
+        expect(compileWord(grammar)).toBe('$.ID');
+        expect(compileExtras(grammar)).toBe('[/[_a-zA-Z][\\w]*/]');
     });
 
 });

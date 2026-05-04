@@ -4,7 +4,7 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import { GrammarAST } from 'langium';
+import { GrammarAST, type Grammar } from 'langium';
 
 /**
  * Compile a Langium {@link GrammarAST.ParserRule} to its tree-sitter
@@ -26,6 +26,58 @@ export function compileParserRule(rule: GrammarAST.ParserRule): string {
 export function compileParserRuleEntry(rule: GrammarAST.ParserRule): string {
     const name = ruleEmitName(rule);
     return `${name}: $ => ${compileParserRule(rule)}`;
+}
+
+/**
+ * Compile a Langium {@link GrammarAST.TerminalRule} to its tree-sitter
+ * `grammar.js` rule body. Terminals always render inside `token(...)` so the
+ * emitted node is a single token in the resulting parse tree.
+ */
+export function compileTerminalRule(rule: GrammarAST.TerminalRule): string {
+    return `token(${compileTerminalElement(rule.definition)})`;
+}
+
+/**
+ * Convenience wrapper that emits the full `<name>: $ => <body>` terminal-rule
+ * entry. Used when materialising the `rules` object of the grammar.js module.
+ */
+export function compileTerminalRuleEntry(rule: GrammarAST.TerminalRule): string {
+    return `${rule.name}: $ => ${compileTerminalRule(rule)}`;
+}
+
+/**
+ * Build the value side of the `extras: $ => [...]` declaration. Every
+ * `hidden terminal X: ...` in the grammar contributes one entry. Hidden
+ * terminals whose body is a single regex (e.g. `hidden terminal WS: /\s+/;`)
+ * are inlined as `/regex/` to match the tree-sitter convention of using
+ * anonymous regexes for whitespace; richer terminals are referenced as
+ * `$.NAME` so the rule remains addressable.
+ *
+ * Returns `[]` (an empty array literal) when no hidden terminals are declared.
+ */
+export function compileExtras(grammar: Grammar): string {
+    const hidden = grammar.rules
+        .filter(GrammarAST.isTerminalRule)
+        .filter(rule => rule.hidden);
+    if (hidden.length === 0) {
+        return '[]';
+    }
+    return `[${hidden.map(renderExtraEntry).join(', ')}]`;
+}
+
+/**
+ * Locate the terminal annotated with `@word` and return the value side of the
+ * `word: $ => $.NAME` declaration (i.e. just `$.NAME`). Returns `undefined`
+ * when no terminal is annotated — caller omits the `word` field in that case.
+ */
+export function compileWord(grammar: Grammar): string | undefined {
+    const wordTerminal = grammar.rules
+        .filter(GrammarAST.isTerminalRule)
+        .find(rule => rule.isWord);
+    if (!wordTerminal) {
+        return undefined;
+    }
+    return `$.${wordTerminal.name}`;
 }
 
 function compileElement(element: GrammarAST.AbstractElement): string {
@@ -129,6 +181,65 @@ function ruleEmitName(rule: GrammarAST.AbstractRule): string {
         return `_${rule.name}`;
     }
     return rule.name;
+}
+
+function compileTerminalElement(element: GrammarAST.AbstractElement): string {
+    const body = renderTerminalElement(element);
+    return applyCardinality(body, element.cardinality);
+}
+
+function renderTerminalElement(element: GrammarAST.AbstractElement): string {
+    if (GrammarAST.isRegexToken(element)) {
+        return element.regex;
+    }
+    if (GrammarAST.isTerminalAlternatives(element)) {
+        const parts = element.elements.map(compileTerminalElement);
+        if (parts.length === 1) {
+            return parts[0];
+        }
+        return `choice(${parts.join(', ')})`;
+    }
+    if (GrammarAST.isTerminalGroup(element)) {
+        const parts = element.elements.map(compileTerminalElement);
+        if (parts.length === 1) {
+            return parts[0];
+        }
+        return `seq(${parts.join(', ')})`;
+    }
+    if (GrammarAST.isTerminalRuleCall(element)) {
+        const target = element.rule.ref;
+        const name = target ? target.name : element.rule.$refText;
+        return `$.${name}`;
+    }
+    if (GrammarAST.isCharacterRange(element)) {
+        return renderCharacterRange(element);
+    }
+    if (GrammarAST.isWildcard(element)) {
+        return '/./';
+    }
+    if (GrammarAST.isKeyword(element)) {
+        return emitString(element.value);
+    }
+    return `/* unsupported terminal: ${element.$type} */`;
+}
+
+function renderCharacterRange(range: GrammarAST.CharacterRange): string {
+    if (range.right) {
+        return `/[${escapeForRegexClass(range.left.value)}-${escapeForRegexClass(range.right.value)}]/`;
+    }
+    return emitString(range.left.value);
+}
+
+function renderExtraEntry(rule: GrammarAST.TerminalRule): string {
+    const def = rule.definition;
+    if (GrammarAST.isRegexToken(def) && def.cardinality === undefined) {
+        return def.regex;
+    }
+    return `$.${rule.name}`;
+}
+
+function escapeForRegexClass(value: string): string {
+    return value.replace(/[\\\]\-^]/g, ch => `\\${ch}`);
 }
 
 function emitString(value: string): string {
