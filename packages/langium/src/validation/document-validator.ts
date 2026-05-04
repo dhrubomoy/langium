@@ -4,7 +4,7 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import type { MismatchedTokenException } from 'chevrotain';
+import type { MismatchedTokenException } from '../parser/_chevrotain-types.js';
 import type { DiagnosticSeverity, Position, Range, Diagnostic } from 'vscode-languageserver-types';
 import type { LanguageMetaData } from '../languages/language-meta-data.js';
 import type { ParseResult } from '../parser/langium-parser.js';

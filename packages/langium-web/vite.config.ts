@@ -38,10 +38,7 @@ export default defineConfig({
             'vscode-uri',
             'vscode-languageserver-textdocument',
             'vscode-jsonrpc/lib/common/cancellation.js',
-            'vscode-jsonrpc/lib/common/events.js',
-            '@chevrotain/regexp-to-ast',
-            'chevrotain-allstar',
-            'chevrotain'
+            'vscode-jsonrpc/lib/common/events.js'
         ]
     },
     resolve: {

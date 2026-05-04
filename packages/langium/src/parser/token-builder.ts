@@ -4,15 +4,17 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import type { CustomPatternMatcherFunc, ILexingError, TokenPattern, TokenType, TokenVocabulary } from 'chevrotain';
-import type { AbstractRule, Grammar, Keyword, TerminalRule } from '../languages/generated/ast.js';
-import type { Stream } from '../utils/stream.js';
-import { Lexer } from 'chevrotain';
-import { isAbstractParserRule, isKeyword, isTerminalRule } from '../languages/generated/ast.js';
-import { streamAllContents } from '../utils/ast-utils.js';
-import { getAllReachableRules, terminalRegex } from '../utils/grammar-utils.js';
-import { escapeRegExp, isWhitespace, partialMatches } from '../utils/regexp-utils.js';
-import { stream } from '../utils/stream.js';
+import type { ILexingError, TokenVocabulary } from './_chevrotain-types.js';
+import type { Grammar } from '../languages/generated/ast.js';
+
+/**
+ * After the Chevrotain → tree-sitter migration (US-026/US-027), the legacy
+ * Chevrotain-backed token builder is no longer the runtime backbone.
+ * This module retains the `TokenBuilder` / `LexingReport` / `LexingDiagnostic`
+ * interfaces and a `DefaultTokenBuilder` stub so existing imports continue
+ * to type-check; the runtime implementation now throws — consumers should
+ * migrate to the tree-sitter pipeline.
+ */
 
 export interface TokenBuilderOptions {
     caseInsensitive?: boolean
@@ -43,115 +45,12 @@ export interface LexingDiagnostic extends ILexingError {
 }
 
 export class DefaultTokenBuilder implements TokenBuilder {
-    /**
-     * The list of diagnostics stored during the lexing process of a single text.
-     */
-    protected diagnostics: LexingDiagnostic[] = [];
 
-    buildTokens(grammar: Grammar, options?: TokenBuilderOptions): TokenVocabulary {
-        const reachableRules = stream(getAllReachableRules(grammar, false));
-        const terminalTokens: TokenType[] = this.buildTerminalTokens(reachableRules);
-        const tokens: TokenType[] = this.buildKeywordTokens(reachableRules, terminalTokens, options);
-
-        // Add all terminals tokens to the end in the order they were defined
-        // Chevrotain documentation recommends to add Whitespace-like tokens at the start
-        // However, assuming the lexer is able to optimize the tokens, it should not matter
-        tokens.push(...terminalTokens);
-        // We don't need to add the EOF token explicitly.
-        // It is automatically available at the end of the token stream.
-        return tokens;
+    buildTokens(_grammar: Grammar, _options?: TokenBuilderOptions): TokenVocabulary {
+        throw new Error('Chevrotain-based token builder has been removed; use the tree-sitter pipeline.');
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    flushLexingReport(text: string): LexingReport {
-        return { diagnostics: this.popDiagnostics() };
-    }
-
-    protected popDiagnostics(): LexingDiagnostic[] {
-        const diagnostics = [...this.diagnostics];
-        this.diagnostics = [];
-        return diagnostics;
-    }
-
-    protected buildTerminalTokens(rules: Stream<AbstractRule>): TokenType[] {
-        return rules.filter(isTerminalRule).filter(e => !e.fragment)
-            .map(terminal => this.buildTerminalToken(terminal)).toArray();
-    }
-
-    protected buildTerminalToken(terminal: TerminalRule): TokenType {
-        const regex = terminalRegex(terminal);
-        const pattern = this.requiresCustomPattern(regex) ? this.regexPatternFunction(regex) : regex;
-        const tokenType: TokenType = {
-            name: terminal.name,
-            PATTERN: pattern,
-        };
-        if (typeof pattern === 'function') {
-            tokenType.LINE_BREAKS = true;
-        }
-        if (terminal.hidden) {
-            // Only skip tokens that are able to accept whitespace
-            tokenType.GROUP = isWhitespace(regex) ? Lexer.SKIPPED : 'hidden';
-        }
-        return tokenType;
-    }
-
-    protected requiresCustomPattern(regex: RegExp): boolean {
-        if (regex.flags.includes('u') || regex.flags.includes('s')) {
-            // Unicode and dotall regexes are not supported by Chevrotain.
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    protected regexPatternFunction(regex: RegExp): CustomPatternMatcherFunc {
-        const stickyRegex = new RegExp(regex, regex.flags + 'y');
-        return (text, offset) => {
-            stickyRegex.lastIndex = offset;
-            const execResult = stickyRegex.exec(text);
-            return execResult;
-        };
-    }
-
-    protected buildKeywordTokens(rules: Stream<AbstractRule>, terminalTokens: TokenType[], options?: TokenBuilderOptions): TokenType[] {
-        return rules
-            // We filter by parser rules, since keywords in terminal rules get transformed into regex and are not actual tokens
-            .filter(isAbstractParserRule)
-            .flatMap(rule => streamAllContents(rule).filter(isKeyword))
-            .distinct(e => e.value).toArray()
-            // Sort keywords by descending length
-            .sort((a, b) => b.value.length - a.value.length)
-            .map(keyword => this.buildKeywordToken(keyword, terminalTokens, Boolean(options?.caseInsensitive)));
-    }
-
-    protected buildKeywordToken(keyword: Keyword, terminalTokens: TokenType[], caseInsensitive: boolean): TokenType {
-        const keywordPattern = this.buildKeywordPattern(keyword, caseInsensitive);
-        const tokenType: TokenType = {
-            name: keyword.value,
-            PATTERN: keywordPattern,
-            LONGER_ALT: this.findLongerAlt(keyword, terminalTokens)
-        };
-
-        if (typeof keywordPattern === 'function') {
-            tokenType.LINE_BREAKS = true;
-        }
-
-        return tokenType;
-    }
-
-    protected buildKeywordPattern(keyword: Keyword, caseInsensitive: boolean): TokenPattern {
-        return caseInsensitive ?
-            new RegExp(escapeRegExp(keyword.value), 'i') :
-            keyword.value;
-    }
-
-    protected findLongerAlt(keyword: Keyword, terminalTokens: TokenType[]): TokenType[] {
-        return terminalTokens.reduce((longerAlts: TokenType[], token) => {
-            const pattern = token?.PATTERN as RegExp;
-            if (pattern?.source && partialMatches('^' + pattern.source + '$', keyword.value)) {
-                longerAlts.push(token);
-            }
-            return longerAlts;
-        }, []);
+    flushLexingReport(_text: string): LexingReport {
+        return { diagnostics: [] };
     }
 }

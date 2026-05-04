@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 // Ensure that all imports are erased at runtime to avoid circular dependencies.
-import type { IParserErrorMessageProvider, ILexerErrorMessageProvider } from 'chevrotain';
+import type { IParserErrorMessageProvider, ILexerErrorMessageProvider } from './parser/_chevrotain-types.js';
 import type { CommentProvider } from './documentation/comment-provider.js';
 import type { DocumentationProvider } from './documentation/documentation-provider.js';
 import type { Grammar } from './languages/generated/ast.js';

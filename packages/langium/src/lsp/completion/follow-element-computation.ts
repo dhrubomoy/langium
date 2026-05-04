@@ -4,7 +4,7 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import type { IToken } from 'chevrotain';
+import type { IToken } from '../../parser/_chevrotain-types.js';
 import * as ast from '../../languages/generated/ast.js';
 import { getCrossReferenceTerminal, getExplicitRuleType, getTypeName, isArrayCardinality, isOptionalCardinality, terminalRegex } from '../../utils/grammar-utils.js';
 import { getContainerOfType } from '../../utils/ast-utils.js';
