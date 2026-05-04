@@ -447,8 +447,8 @@
         "Typecheck passes"
       ],
       "priority": 27,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Parser implementation files (langium-parser, lexer, token-builder, indentation-aware, parser-builder-base) were stubbed to throw-on-runtime in US-026 (preserving public type surface so the build still type-checks). This iteration deletes the `CstNodeBuilder` class itself from packages/langium/src/parser/cst-node-builder.ts (the parse-time CST builder is no longer reachable since the legacy parser is stubbed). The implementation classes RootCstNodeImpl/CompositeCstNodeImpl/LeafCstNodeImpl/AbstractCstNode are KEPT in the same file because serializer/hydrator.ts still uses them for save/restore deserialization. The CstNode interface hierarchy in syntax-tree.ts is KEPT intentionally — 46 source files (every LSP provider, scope/linker, name-provider, hover, formatter, code-actions, validation, serialization) consume CstNode as the AST→source-mapping contract, and removal cascades into a full LSP-stack rewrite that is beyond the scope of this PRD. The cleanest follow-up is to wire the tree-sitter pipeline into DocumentBuilder so the LSP layer can drop the AstNode.$cstNode field — at that point the CstNode hierarchy can be removed wholesale. CstNodeBuilder is verified absent from any workspace service file (it was never wired into LangiumDefaultCoreServices.workspace). `npm run build` passes (langium core + langium-vscode + 4 examples). `npx tsc -b tsconfig.build.json --force` exits 0. Lint passes for the changed file."
     }
   ]
 }
