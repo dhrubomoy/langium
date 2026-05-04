@@ -18,7 +18,7 @@
         "langium": "~4.2.0",
         "langium-arithmetics-dsl": "~4.2.0",
         "vscode": "npm:@codingame/monaco-vscode-extension-api@^28.3.0",
-        "monaco-languageclient": "file:../../../monaco-languageclient/packages/client",
+        "monaco-languageclient": "~10.7.0",
         "vscode-languageclient": "~9.0.1",
         "vscode-languageserver": "~9.0.1",
         "web-tree-sitter": "^0.26.0"
