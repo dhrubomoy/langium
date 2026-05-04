@@ -23,6 +23,7 @@ import { generateModule } from './generator/module-generator.js';
 import { elapsedTime, getUserChoice, schema } from './generator/node-util.js';
 import { emitTreeSitterArtifacts } from './generator/treesitter/file-writer.js';
 import { checkMigration } from './generator/treesitter/migration-checker.js';
+import { buildWasm } from './generator/treesitter/wasm-builder.js';
 import { generateTypesFile } from './generator/types-generator.js';
 import type { LangiumConfig, LangiumLanguageConfig } from './package-types.js';
 import { RelativePath } from './package-types.js';
@@ -425,7 +426,14 @@ export async function runGenerator(config: LangiumConfig, options: GenerateOptio
             }
             const treesitterDir = path.resolve(relPath, languageConfig.treesitter.out);
             log('log', options, `Writing tree-sitter artifacts to ${chalk.white.bold(treesitterDir)}`);
-            await emitTreeSitterArtifacts(grammar, treesitterDir, grammar.name);
+            const { grammarJsPath } = await emitTreeSitterArtifacts(grammar, treesitterDir, grammar.name);
+            try {
+                log('log', options, `Building tree-sitter WASM into ${chalk.white.bold(path.join(treesitterDir, 'resources', 'grammar.wasm'))}`);
+                await buildWasm(grammarJsPath, treesitterDir);
+            } catch (e) {
+                log('error', options, chalk.red(`tree-sitter wasm build failed: ${e instanceof Error ? e.message : String(e)}`));
+                return buildResult(false);
+            }
         }
     }
 
