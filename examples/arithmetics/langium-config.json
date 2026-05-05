@@ -10,6 +10,9 @@
         },
         "monarch": {
             "out": "./syntaxes/arithmetics.monarch.ts"
+        },
+        "treesitter": {
+            "out": "src/language-server/generated/treesitter"
         }
     }],
     "out": "src/language-server/generated"

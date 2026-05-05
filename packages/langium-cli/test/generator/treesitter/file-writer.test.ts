@@ -155,15 +155,22 @@ describe('file-writer disk I/O', () => {
     test('writeGrammarJs writes grammar.js to outputDir', async () => {
         const outDir = path.join(tmpDir, 'out');
         await writeGrammarJs(outDir, "module.exports = grammar({ name: 'foo', rules: {} });\n");
-        const written = await fs.readFile(path.join(outDir, 'grammar.js'), 'utf8');
+        const written = await fs.readFile(path.join(outDir, 'parser', 'grammar.js'), 'utf8');
         expect(written).toContain("module.exports = grammar({ name: 'foo'");
+    });
+
+    test('writeGrammarJs writes a CommonJS package.json shim alongside grammar.js', async () => {
+        const outDir = path.join(tmpDir, 'cjs-shim');
+        await writeGrammarJs(outDir, '// empty\n');
+        const pkgJson = await fs.readFile(path.join(outDir, 'parser', 'package.json'), 'utf8');
+        expect(JSON.parse(pkgJson)).toEqual({ type: 'commonjs' });
     });
 
     test('writeGrammarJs creates the directory if missing', async () => {
         const outDir = path.join(tmpDir, 'nested', 'a', 'b');
         expect(await fs.pathExists(outDir)).toBe(false);
         await writeGrammarJs(outDir, '// empty\n');
-        expect(await fs.pathExists(path.join(outDir, 'grammar.js'))).toBe(true);
+        expect(await fs.pathExists(path.join(outDir, 'parser', 'grammar.js'))).toBe(true);
     });
 
     test('writeMetadataTs writes a typed const to metadata.ts', async () => {
@@ -183,7 +190,7 @@ describe('file-writer disk I/O', () => {
         const grammar = await parseGrammar(ARITHMETIC_GRAMMAR);
         const outDir = path.join(tmpDir, 'gen');
         const result = await emitTreeSitterArtifacts(grammar, outDir, 'arithmetic');
-        expect(result.grammarJsPath).toBe(path.resolve(outDir, 'grammar.js'));
+        expect(result.grammarJsPath).toBe(path.resolve(outDir, 'parser', 'grammar.js'));
         expect(result.metadataTsPath).toBe(path.resolve(outDir, 'metadata.ts'));
 
         const js = await fs.readFile(result.grammarJsPath, 'utf8');

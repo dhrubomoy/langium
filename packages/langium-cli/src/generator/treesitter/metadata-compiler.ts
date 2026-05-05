@@ -32,6 +32,10 @@ export function compileMetadata(grammar: Grammar): GrammarMetadata {
     const nodes: Record<string, NodeMetadata> = {};
 
     for (const rule of grammar.rules) {
+        if (GrammarAST.isInfixRule(rule)) {
+            nodes[rule.name] = buildInfixNode(rule);
+            continue;
+        }
         if (!GrammarAST.isParserRule(rule)) {
             continue;
         }
@@ -60,6 +64,17 @@ export function compileMetadata(grammar: Grammar): GrammarMetadata {
         nodes,
         extras: collectExtras(grammar),
         ...(word ? { word } : {})
+    };
+}
+
+function buildInfixNode(rule: GrammarAST.InfixRule): NodeMetadata {
+    return {
+        nodeType: rule.name,
+        fields: [
+            { name: 'left', operator: '=' },
+            { name: 'operator', operator: '=' },
+            { name: 'right', operator: '=' }
+        ]
     };
 }
 

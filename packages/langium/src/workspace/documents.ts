@@ -348,6 +348,14 @@ export class DefaultLangiumDocumentFactory implements LangiumDocumentFactory {
         }
         const treeSitterParser = services.parser.TreeSitterDocumentParser;
         document.treeSitterTree = treeSitterParser.parse(text, document.treeSitterTree);
+        const metadata = services.workspace.GrammarMetadataProvider.getMetadata();
+        if (metadata) {
+            document.documentIndex = services.workspace.IndexBuilder.build(
+                document.treeSitterTree.rootNode,
+                metadata,
+                document.uri.toString()
+            );
+        }
     }
 
     protected parse<T extends AstNode>(uri: URI, text: string, options?: ParserOptions): ParseResult<T> {

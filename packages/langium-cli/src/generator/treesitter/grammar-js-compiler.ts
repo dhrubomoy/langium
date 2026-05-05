@@ -46,6 +46,53 @@ export function compileTerminalRuleEntry(rule: GrammarAST.TerminalRule): string 
 }
 
 /**
+ * Compile a Langium {@link GrammarAST.InfixRule} to its tree-sitter
+ * `grammar.js` rule body. The infix rule's precedence groups are emitted as
+ * separate `prec.left` / `prec.right` / `prec` alternatives over the base
+ * rule (`infix X on Base`), with `field('left', ...)`, `field('operator', ...)`,
+ * and `field('right', ...)` matching the AST shape Langium synthesises (see
+ * `calculateInfixInterfaces` in `type-system/type-collector/inferred-types.ts`).
+ *
+ * The first precedence group (highest in source) gets the highest tree-sitter
+ * precedence number; the base rule is included as the lowest-precedence
+ * alternative so the rule terminates at primary expressions.
+ */
+export function compileInfixRule(rule: GrammarAST.InfixRule): string {
+    const baseName = rule.call.rule.ref?.name ?? rule.call.rule.$refText;
+    const groups = rule.operators.precedences;
+    const alternatives: string[] = [];
+    for (let i = 0; i < groups.length; i++) {
+        const group = groups[i];
+        const precedence = groups.length - i;
+        const opStrings = group.operators.map(op => emitString(op.value));
+        const operator = opStrings.length === 1 ? opStrings[0] : `choice(${opStrings.join(', ')})`;
+        const seqBody = `seq(field('left', $.${rule.name}), field('operator', ${operator}), field('right', $.${rule.name}))`;
+        const wrapped = wrapPrec(seqBody, precedence, group.associativity);
+        alternatives.push(wrapped);
+    }
+    alternatives.push(`$.${baseName}`);
+    return `choice(${alternatives.join(', ')})`;
+}
+
+/**
+ * Convenience wrapper that emits the full `<name>: $ => <body>` infix-rule
+ * entry. Used when materialising the `rules` object of the grammar.js module.
+ */
+export function compileInfixRuleEntry(rule: GrammarAST.InfixRule): string {
+    return `${rule.name}: $ => ${compileInfixRule(rule)}`;
+}
+
+function wrapPrec(body: string, precedence: number, associativity?: 'left' | 'right' | 'none'): string {
+    if (associativity === 'right') {
+        return `prec.right(${precedence}, ${body})`;
+    }
+    if (associativity === 'none') {
+        return `prec(${precedence}, ${body})`;
+    }
+    return `prec.left(${precedence}, ${body})`;
+}
+
+/**
  * Build the value side of the `extras: $ => [...]` declaration. Every
  * `hidden terminal X: ...` in the grammar contributes one entry. Hidden
  * terminals whose body is a single regex (e.g. `hidden terminal WS: /\s+/;`)

@@ -170,6 +170,20 @@
                     "required": [
                         "out"
                     ]
+                },
+                "treesitter": {
+                    "description": "An object to describe tree-sitter grammar.js + metadata.ts generation.",
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "out": {
+                            "description": "Output directory for the generated tree-sitter `grammar.js`, `metadata.ts`, and `resources/grammar.wasm` artifacts.",
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "out"
+                    ]
                 }
             },
             "required": [

@@ -4,12 +4,33 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { type Module, inject } from 'langium';
 import { createDefaultModule, createDefaultSharedModule, type DefaultSharedModuleContext, type LangiumServices, type LangiumSharedServices, type PartialLangiumServices } from 'langium/lsp';
 import { ArithmeticsScopeProvider } from './arithmetics-scope-provider.js';
 import { ArithmeticsValidator, registerValidationChecks } from './arithmetics-validator.js';
 import { ArithmeticsGeneratedModule, ArithmeticsGeneratedSharedModule } from './generated/module.js';
+import { GRAMMAR_METADATA } from './generated/treesitter/metadata.js';
 import { ArithmeticsCodeActionProvider } from './lsp/arithmetics-code-actions.js';
+
+/**
+ * Filesystem path to the tree-sitter grammar Wasm artifact emitted by
+ * `langium generate` (see `langium-config.json`). Resolved from
+ * `import.meta.url` when running as ESM (e.g. vitest, the source path), and
+ * from `__dirname` when running from the esbuild-bundled CJS output. The
+ * `esbuild.mjs` build step copies the Wasm file into the bundle's output tree
+ * so the relative layout matches in both cases.
+ */
+export const ARITHMETICS_GRAMMAR_WASM_PATH = resolveGrammarWasmPath();
+
+function resolveGrammarWasmPath(): string {
+    const cjsDirname = (globalThis as { __dirname?: string }).__dirname;
+    if (typeof cjsDirname === 'string') {
+        return path.resolve(cjsDirname, './generated/treesitter/resources/grammar.wasm');
+    }
+    return fileURLToPath(new URL('./generated/treesitter/resources/grammar.wasm', import.meta.url));
+}
 
 /**
  * Declaration of custom services - add your own service classes here.
@@ -32,11 +53,17 @@ export type ArithmeticsServices = LangiumServices & ArithmeticsAddedServices
  * selected services, while the custom services must be fully specified.
  */
 export const ArithmeticsModule: Module<ArithmeticsServices, PartialLangiumServices & ArithmeticsAddedServices> = {
+    parser: {
+        GrammarWasmPath: () => ARITHMETICS_GRAMMAR_WASM_PATH
+    },
     references: {
         ScopeProvider: (services) => new ArithmeticsScopeProvider(services)
     },
     validation: {
         ArithmeticsValidator: () => new ArithmeticsValidator()
+    },
+    workspace: {
+        GrammarMetadataProvider: () => ({ getMetadata: () => GRAMMAR_METADATA })
     },
     lsp: {
         CodeActionProvider: () => new ArithmeticsCodeActionProvider()

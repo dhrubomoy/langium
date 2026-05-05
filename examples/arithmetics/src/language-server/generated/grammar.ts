@@ -439,7 +439,8 @@ export const ArithmeticsGrammar = (): Grammar => loadedArithmeticsGrammar ?? (lo
         "regex": "/\\\\s+/",
         "parenthesized": false
       },
-      "fragment": false
+      "fragment": false,
+      "isWord": false
     },
     {
       "$type": "TerminalRule",
@@ -450,7 +451,8 @@ export const ArithmeticsGrammar = (): Grammar => loadedArithmeticsGrammar ?? (lo
         "parenthesized": false
       },
       "fragment": false,
-      "hidden": false
+      "hidden": false,
+      "isWord": false
     },
     {
       "$type": "TerminalRule",
@@ -465,7 +467,8 @@ export const ArithmeticsGrammar = (): Grammar => loadedArithmeticsGrammar ?? (lo
         "parenthesized": false
       },
       "fragment": false,
-      "hidden": false
+      "hidden": false,
+      "isWord": false
     },
     {
       "$type": "TerminalRule",
@@ -476,7 +479,8 @@ export const ArithmeticsGrammar = (): Grammar => loadedArithmeticsGrammar ?? (lo
         "regex": "/\\\\/\\\\*[\\\\s\\\\S]*?\\\\*\\\\//",
         "parenthesized": false
       },
-      "fragment": false
+      "fragment": false,
+      "isWord": false
     },
     {
       "$type": "TerminalRule",
@@ -487,7 +491,8 @@ export const ArithmeticsGrammar = (): Grammar => loadedArithmeticsGrammar ?? (lo
         "regex": "/\\\\/\\\\/[^\\\\n\\\\r]*/",
         "parenthesized": false
       },
-      "fragment": false
+      "fragment": false,
+      "isWord": false
     }
   ],
   "types": [
@@ -513,6 +518,7 @@ export const ArithmeticsGrammar = (): Grammar => loadedArithmeticsGrammar ?? (lo
       }
     }
   ],
+  "conflicts": [],
   "imports": [],
   "interfaces": []
 }`));

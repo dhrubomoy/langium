@@ -64,6 +64,13 @@ export async function buildWasm(
     }
 
     await fs.move(stagedWasmPath, finalWasmPath, { overwrite: true });
+
+    // Clean up intermediate tree-sitter build artifacts (generated C parser
+    // sources, grammar.json, node-types.json, tree_sitter header copies) that
+    // sit alongside grammar.js. Only the wasm output is shipped — keeping the
+    // intermediates out of git avoids large diffs and confusion about which
+    // files are hand-edited vs. regenerated.
+    await fs.remove(path.resolve(grammarDir, 'src'));
 }
 
 function runTreeSitter(binary: string, args: string[], cwd: string): Promise<void> {

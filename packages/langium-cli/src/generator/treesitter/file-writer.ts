@@ -10,6 +10,7 @@ import type { GrammarMetadata } from 'langium/generate';
 import * as path from 'path';
 import {
     compileExtras,
+    compileInfixRuleEntry,
     compileParserRuleEntry,
     compileTerminalRuleEntry,
     compileWord
@@ -40,6 +41,8 @@ export function composeGrammarJs(grammar: Grammar, languageName?: string): strin
             ruleEntries.push(compileParserRuleEntry(rule));
         } else if (GrammarAST.isTerminalRule(rule)) {
             ruleEntries.push(compileTerminalRuleEntry(rule));
+        } else if (GrammarAST.isInfixRule(rule)) {
+            ruleEntries.push(compileInfixRuleEntry(rule));
         }
     }
     const word = compileWord(grammar);
@@ -89,12 +92,29 @@ export const GRAMMAR_METADATA: GrammarMetadata = ${body};
 }
 
 /**
- * Write the composed `grammar.js` module to `<outputDir>/grammar.js`. Creates
- * the directory if it does not exist.
+ * Subdirectory of the tree-sitter output that holds the CommonJS-flavoured
+ * `grammar.js` (and its companion `package.json` shim that pins
+ * `"type": "commonjs"` so the file loads even when the surrounding workspace
+ * is ESM). Kept separate from the parent output directory to avoid the
+ * `commonjs` shim affecting sibling TypeScript files like `metadata.ts`.
+ */
+export const GRAMMAR_JS_SUBDIR = 'parser';
+
+/**
+ * Write the composed `grammar.js` module to
+ * `<outputDir>/<GRAMMAR_JS_SUBDIR>/grammar.js`. Creates the directory if it
+ * does not exist. Also writes a `package.json` with `"type": "commonjs"`
+ * alongside `grammar.js` so the CommonJS-style `module.exports` loads
+ * correctly even when the surrounding workspace package is ESM.
  */
 export async function writeGrammarJs(outputDir: string, grammarJs: string): Promise<void> {
-    await fs.mkdirs(outputDir);
-    await fs.writeFile(path.resolve(outputDir, 'grammar.js'), grammarJs);
+    const grammarDir = path.resolve(outputDir, GRAMMAR_JS_SUBDIR);
+    await fs.mkdirs(grammarDir);
+    await fs.writeFile(path.resolve(grammarDir, 'grammar.js'), grammarJs);
+    await fs.writeFile(
+        path.resolve(grammarDir, 'package.json'),
+        JSON.stringify({ type: 'commonjs' }, null, 4) + '\n'
+    );
 }
 
 /**
@@ -121,7 +141,7 @@ export async function emitTreeSitterArtifacts(
     await writeGrammarJs(outputDir, grammarJs);
     await writeMetadataTs(outputDir, metadata);
     return {
-        grammarJsPath: path.resolve(outputDir, 'grammar.js'),
+        grammarJsPath: path.resolve(outputDir, GRAMMAR_JS_SUBDIR, 'grammar.js'),
         metadataTsPath: path.resolve(outputDir, 'metadata.ts')
     };
 }
