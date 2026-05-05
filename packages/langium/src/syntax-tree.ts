@@ -4,7 +4,7 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import type { TokenType } from './parser/_chevrotain-types.js';
+import type { TokenType } from 'chevrotain';
 import type { URI } from './utils/uri-utils.js';
 import type { AbstractElement } from './languages/generated/ast.js';
 import type { DocumentSegment, LangiumDocument } from './workspace/documents.js';

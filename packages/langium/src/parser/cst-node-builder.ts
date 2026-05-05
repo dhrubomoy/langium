@@ -4,11 +4,105 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import type { TokenType } from './_chevrotain-types.js';
+import type { IToken, TokenType } from 'chevrotain';
 import type { Range } from 'vscode-languageserver-types';
 import type { AbstractElement } from '../languages/generated/ast.js';
 import type { AstNode, CompositeCstNode, CstNode, LeafCstNode, RootCstNode } from '../syntax-tree.js';
 import { Position } from 'vscode-languageserver-types';
+import { tokenToRange } from '../utils/cst-utils.js';
+
+export class CstNodeBuilder {
+
+    private rootNode!: RootCstNodeImpl;
+    private nodeStack: CompositeCstNodeImpl[] = [];
+
+    get current(): CompositeCstNodeImpl {
+        return this.nodeStack[this.nodeStack.length - 1] ?? this.rootNode;
+    }
+
+    buildRootNode(input: string): RootCstNode {
+        this.rootNode = new RootCstNodeImpl(input);
+        this.rootNode.root = this.rootNode;
+        this.nodeStack = [this.rootNode];
+        return this.rootNode;
+    }
+
+    buildCompositeNode(feature: AbstractElement): CompositeCstNode {
+        const compositeNode = new CompositeCstNodeImpl();
+        compositeNode.grammarSource = feature;
+        compositeNode.root = this.rootNode;
+        this.current.content.push(compositeNode);
+        this.nodeStack.push(compositeNode);
+        return compositeNode;
+    }
+
+    buildLeafNode(token: IToken, feature?: AbstractElement): LeafCstNode {
+        const leafNode = new LeafCstNodeImpl(token.startOffset, token.image.length, tokenToRange(token), token.tokenType, !feature);
+        leafNode.grammarSource = feature;
+        leafNode.root = this.rootNode;
+        this.current.content.push(leafNode);
+        return leafNode;
+    }
+
+    removeNode(node: CstNode): void {
+        const parent = node.container;
+        if (parent) {
+            const index = parent.content.indexOf(node);
+            if (index >= 0) {
+                parent.content.splice(index, 1);
+            }
+        }
+    }
+
+    addHiddenNodes(tokens: IToken[]): void {
+        const nodes: LeafCstNode[] = [];
+        for (const token of tokens) {
+            const leafNode = new LeafCstNodeImpl(token.startOffset, token.image.length, tokenToRange(token), token.tokenType, true);
+            leafNode.root = this.rootNode;
+            nodes.push(leafNode);
+        }
+        let current: CompositeCstNode = this.current;
+        let added = false;
+        // If we are within a composite node, we add the hidden nodes to the content
+        if (current.content.length > 0) {
+            current.content.push(...nodes);
+            return;
+        }
+        // Otherwise we are at a newly created node
+        // Instead of adding the hidden nodes here, we search for the first parent node with content
+        while (current.container) {
+            const index = current.container.content.indexOf(current);
+            if (index > 0) {
+                // Add the hidden nodes before the current node
+                current.container.content.splice(index, 0, ...nodes);
+                added = true;
+                break;
+            }
+            current = current.container;
+        }
+        // If we arrive at the root node, we add the hidden nodes at the beginning
+        // This is the case if the hidden nodes are the first nodes in the tree
+        if (!added) {
+            this.rootNode.content.unshift(...nodes);
+        }
+    }
+
+    construct(item: { $type: string | symbol | undefined, $cstNode: CstNode, $infixName?: string }): void {
+        const current: CstNode = this.current;
+        // The specified item could be a datatype ($type is symbol), fragment ($type is undefined) or infix rule ($infix is true)
+        // Only if the $type is a string, we actually assign the element
+        if (typeof item.$type === 'string' && !item.$infixName) {
+            this.current.astNode = <AstNode>item;
+        }
+        item.$cstNode = current;
+        const node = this.nodeStack.pop();
+        // Empty composite nodes are not valid
+        // Simply remove the node from the tree
+        if (node?.content.length === 0) {
+            this.removeNode(node);
+        }
+    }
+}
 
 export abstract class AbstractCstNode implements CstNode {
     abstract get offset(): number;

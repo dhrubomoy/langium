@@ -4,30 +4,19 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import type { ILexerErrorMessageProvider, ILexingError, IMultiModeLexerDefinition, IToken, TokenType, TokenTypeDictionary, TokenVocabulary } from './_chevrotain-types.js';
+import type { ILexerErrorMessageProvider, ILexingError, IMultiModeLexerDefinition, IToken, TokenType, TokenTypeDictionary, TokenVocabulary } from 'chevrotain';
 import type { LangiumCoreServices } from '../services.js';
+import { Lexer as ChevrotainLexer, defaultLexerErrorProvider } from 'chevrotain';
 import type { LexingReport, TokenBuilder } from './token-builder.js';
-
-/**
- * After the Chevrotain → tree-sitter migration (US-026/US-027), the legacy
- * Chevrotain-backed Langium parser is no longer the runtime parser.
- * This module retains the public interfaces (`Lexer`, `LexerResult`,
- * `DefaultLexer`, ...) so existing imports continue to type-check, but the
- * runtime implementations now throw — consumers should migrate to the
- * tree-sitter pipeline in `parser/wasm-loader.ts` and the LSP adapters in
- * `lsp/tree-sitter-*-provider.ts`.
- */
-
-const REMOVED_MESSAGE = 'Chevrotain-based lexer has been removed; use the tree-sitter pipeline (WasmLoader, IndexBuilder).';
 
 export class DefaultLexerErrorMessageProvider implements ILexerErrorMessageProvider {
 
-    buildUnexpectedCharactersMessage(_fullText: string, _startOffset: number, _length: number, _line?: number, _column?: number): string {
-        return 'Unexpected characters';
+    buildUnexpectedCharactersMessage(fullText: string, startOffset: number, length: number, line?: number, column?: number): string {
+        return defaultLexerErrorProvider.buildUnexpectedCharactersMessage(fullText, startOffset, length, line, column);
     }
 
-    buildUnableToPopLexerModeMessage(_token: IToken): string {
-        return 'Unable to pop lexer mode';
+    buildUnableToPopLexerModeMessage(token: IToken): string {
+        return defaultLexerErrorProvider.buildUnableToPopLexerModeMessage(token);
     }
 }
 
@@ -64,18 +53,45 @@ export class DefaultLexer implements Lexer {
 
     protected readonly tokenBuilder: TokenBuilder;
     protected readonly errorMessageProvider: ILexerErrorMessageProvider;
+    protected tokenTypes: TokenTypeDictionary;
+    protected chevrotainLexer: ChevrotainLexer;
 
     constructor(services: LangiumCoreServices) {
         this.errorMessageProvider = services.parser.LexerErrorMessageProvider;
         this.tokenBuilder = services.parser.TokenBuilder;
+        const tokens = this.tokenBuilder.buildTokens(services.Grammar, {
+            caseInsensitive: services.LanguageMetaData.caseInsensitive
+        });
+        this.tokenTypes = this.toTokenTypeDictionary(tokens);
+        const lexerTokens = isTokenTypeDictionary(tokens) ? Object.values(tokens) : tokens;
+        const production = services.LanguageMetaData.mode === 'production';
+        this.chevrotainLexer = new ChevrotainLexer(lexerTokens, {
+            positionTracking: 'full',
+            skipValidations: production,
+            errorMessageProvider: this.errorMessageProvider
+        });
     }
 
     get definition(): TokenTypeDictionary {
-        return {};
+        return this.tokenTypes;
     }
 
-    tokenize(_text: string, _options: TokenizeOptions = DEFAULT_TOKENIZE_OPTIONS): LexerResult {
-        throw new Error(REMOVED_MESSAGE);
+    tokenize(text: string, _options: TokenizeOptions = DEFAULT_TOKENIZE_OPTIONS): LexerResult {
+        const chevrotainResult = this.chevrotainLexer.tokenize(text);
+        return {
+            tokens: chevrotainResult.tokens,
+            errors: chevrotainResult.errors,
+            hidden: chevrotainResult.groups.hidden ?? [],
+            report: this.tokenBuilder.flushLexingReport?.(text)
+        };
+    }
+
+    protected toTokenTypeDictionary(buildTokens: TokenVocabulary): TokenTypeDictionary {
+        if (isTokenTypeDictionary(buildTokens)) return buildTokens;
+        const tokens = isIMultiModeLexerDefinition(buildTokens) ? Object.values(buildTokens.modes).flat() : buildTokens;
+        const res: TokenTypeDictionary = {};
+        tokens.forEach(token => res[token.name] = token);
+        return res;
     }
 }
 
@@ -90,7 +106,7 @@ export function isTokenTypeArray(tokenVocabulary: TokenVocabulary): tokenVocabul
  * Returns a check whether the given TokenVocabulary is IMultiModeLexerDefinition
  */
 export function isIMultiModeLexerDefinition(tokenVocabulary: TokenVocabulary): tokenVocabulary is IMultiModeLexerDefinition {
-    return Boolean(tokenVocabulary) && typeof tokenVocabulary === 'object' && 'modes' in tokenVocabulary && 'defaultMode' in tokenVocabulary;
+    return tokenVocabulary && 'modes' in tokenVocabulary && 'defaultMode' in tokenVocabulary;
 }
 
 /**

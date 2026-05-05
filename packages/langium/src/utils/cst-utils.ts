@@ -4,7 +4,7 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import type { IToken } from '../parser/_chevrotain-types.js';
+import type { IToken } from '@chevrotain/types';
 import type { Range } from 'vscode-languageserver-types';
 import type { CstNode, CompositeCstNode, LeafCstNode } from '../syntax-tree.js';
 import type { DocumentSegment } from '../workspace/documents.js';

@@ -19,7 +19,7 @@ import type { FuzzyMatcher } from '../fuzzy-matcher.js';
 import type { GrammarConfig } from '../../languages/grammar-config.js';
 import type { Lexer } from '../../parser/lexer.js';
 import type { DocumentationProvider } from '../../documentation/documentation-provider.js';
-import type { IToken } from '../../parser/_chevrotain-types.js';
+import type { IToken } from 'chevrotain';
 import type { MarkupContent } from 'vscode-languageserver';
 import { CompletionItemKind, CompletionList, Position } from 'vscode-languageserver';
 import * as ast from '../../languages/generated/ast.js';

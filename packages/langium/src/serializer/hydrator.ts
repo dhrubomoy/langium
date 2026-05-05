@@ -6,7 +6,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import type { TokenType } from '../parser/_chevrotain-types.js';
+import type { TokenType } from 'chevrotain';
 import { CompositeCstNodeImpl, LeafCstNodeImpl, RootCstNodeImpl } from '../parser/cst-node-builder.js';
 import { isAbstractElement, type AbstractElement, type Grammar } from '../languages/generated/ast.js';
 import type { Linker } from '../references/linker.js';

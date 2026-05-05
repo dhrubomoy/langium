@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 // Ensure that all imports are erased at runtime to avoid circular dependencies.
-import type { IParserErrorMessageProvider, ILexerErrorMessageProvider } from './parser/_chevrotain-types.js';
+import type { IParserErrorMessageProvider, ILexerErrorMessageProvider } from 'chevrotain';
 import type { CommentProvider } from './documentation/comment-provider.js';
 import type { DocumentationProvider } from './documentation/documentation-provider.js';
 import type { Grammar } from './languages/generated/ast.js';
@@ -32,9 +32,9 @@ import type { AstNodeDescriptionProvider, ReferenceDescriptionProvider } from '.
 import type { AstNodeLocator } from './workspace/ast-node-locator.js';
 import type { ConfigurationProvider } from './workspace/configuration.js';
 import type { DocumentBuilder } from './workspace/document-builder.js';
-import type { IndexBuilder } from './workspace/index-builder.js';
 import type { LangiumDocumentFactory, LangiumDocuments, TextDocumentProvider } from './workspace/documents.js';
 import type { FileSystemProvider } from './workspace/file-system-provider.js';
+import type { IndexBuilder } from './workspace/index-builder.js';
 import type { IndexManager } from './workspace/index-manager.js';
 import type { WorkspaceLock } from './workspace/workspace-lock.js';
 import type { Hydrator } from './serializer/hydrator.js';
@@ -50,14 +50,6 @@ export type LangiumGeneratedCoreServices = {
     readonly LanguageMetaData: LanguageMetaData
     readonly parser: {
         readonly ParserConfig?: IParserConfig
-        /**
-         * Filesystem or URL path of the compiled tree-sitter `grammar.wasm`
-         * artifact for this language. Consumed by the {@link WasmLoader}
-         * service to initialize the tree-sitter parser at runtime.
-         *
-         * Optional for backwards compatibility with languages that have not
-         * yet been migrated to the tree-sitter pipeline.
-         */
         readonly GrammarWasmPath?: string
     }
 }
