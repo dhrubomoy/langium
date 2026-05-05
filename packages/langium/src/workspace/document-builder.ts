@@ -409,9 +409,10 @@ export class DefaultDocumentBuilder implements DocumentBuilder {
     protected async buildDocuments(documents: LangiumDocument[], options: BuildOptions, cancelToken: CancellationToken): Promise<void> {
         this.prepareBuild(documents, options);
         // 0. Parse content
-        await this.runCancelable(documents, DocumentState.Parsed, cancelToken, doc =>
-            this.langiumDocumentFactory.update(doc, cancelToken)
-        );
+        await this.runCancelable(documents, DocumentState.Parsed, cancelToken, async doc => {
+            await this.langiumDocumentFactory.update(doc, cancelToken);
+            this.buildDocumentIndex(doc);
+        });
         // 1. Index content: collect the documents' symbols being accessible by other documents
         await this.runCancelable(documents, DocumentState.IndexedContent, cancelToken, doc =>
             this.indexManager.updateContent(doc, cancelToken)
@@ -682,6 +683,32 @@ export class DefaultDocumentBuilder implements DocumentBuilder {
 
     protected getBuildOptions(document: LangiumDocument): BuildOptions {
         return this.buildState.get(document.uri.toString())?.options ?? {};
+    }
+
+    /**
+     * Run the per-language {@link IndexBuilder} over `document.treeSitterTree`
+     * and store the resulting {@link DocumentIndex} on `document.documentIndex`.
+     * Skips silently when the document was not tree-sitter-parsed (no
+     * `treeSitterTree`) or the language has no compiled grammar metadata
+     * (`GrammarMetadataProvider.getMetadata()` returns `undefined`). Called
+     * immediately after the parse phase so LSP adapters can read a consistent,
+     * up-to-date index from the moment {@link DocumentState.Parsed} is reached.
+     */
+    protected buildDocumentIndex(document: LangiumDocument): void {
+        const tree = document.treeSitterTree;
+        if (!tree) {
+            return;
+        }
+        const services = this.serviceRegistry.getServices(document.uri);
+        const metadata = services.workspace.GrammarMetadataProvider.getMetadata();
+        if (!metadata) {
+            return;
+        }
+        document.documentIndex = services.workspace.IndexBuilder.build(
+            tree.rootNode,
+            metadata,
+            document.uri.toString()
+        );
     }
 
 }

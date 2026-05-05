@@ -35,6 +35,7 @@ import type { ConfigurationProvider } from './workspace/configuration.js';
 import type { DocumentBuilder } from './workspace/document-builder.js';
 import type { LangiumDocumentFactory, LangiumDocuments, TextDocumentProvider } from './workspace/documents.js';
 import type { FileSystemProvider } from './workspace/file-system-provider.js';
+import type { GrammarMetadataProvider } from './workspace/grammar-metadata-provider.js';
 import type { IndexBuilder } from './workspace/index-builder.js';
 import type { IndexManager } from './workspace/index-manager.js';
 import type { WorkspaceLock } from './workspace/workspace-lock.js';
@@ -96,6 +97,7 @@ export type LangiumDefaultCoreServices = {
         readonly AstNodeDescriptionProvider: AstNodeDescriptionProvider
         readonly ReferenceDescriptionProvider: ReferenceDescriptionProvider
         readonly IndexBuilder: IndexBuilder
+        readonly GrammarMetadataProvider: GrammarMetadataProvider
     }
     readonly shared: LangiumSharedCoreServices
 }

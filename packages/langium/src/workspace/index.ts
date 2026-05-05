@@ -11,6 +11,7 @@ export * from './document-builder.js';
 export * from './document-index.js';
 export * from './documents.js';
 export * from './file-system-provider.js';
+export * from './grammar-metadata-provider.js';
 export * from './index-builder.js';
 export * from './index-manager.js';
 export * from './workspace-lock.js';

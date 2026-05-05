@@ -26,6 +26,7 @@ import { DefaultAstNodeLocator } from './workspace/ast-node-locator.js';
 import { DefaultConfigurationProvider } from './workspace/configuration.js';
 import { DefaultDocumentBuilder } from './workspace/document-builder.js';
 import { DefaultLangiumDocumentFactory, DefaultLangiumDocuments } from './workspace/documents.js';
+import { DefaultGrammarMetadataProvider } from './workspace/grammar-metadata-provider.js';
 import { DefaultIndexBuilder } from './workspace/index-builder.js';
 import { DefaultIndexManager } from './workspace/index-manager.js';
 import { DefaultWorkspaceManager } from './workspace/workspace-manager.js';
@@ -73,7 +74,8 @@ export function createDefaultCoreModule(context: DefaultCoreModuleContext): Modu
             AstNodeLocator: () => new DefaultAstNodeLocator(),
             AstNodeDescriptionProvider: (services) => new DefaultAstNodeDescriptionProvider(services),
             ReferenceDescriptionProvider: (services) => new DefaultReferenceDescriptionProvider(services),
-            IndexBuilder: () => new DefaultIndexBuilder()
+            IndexBuilder: () => new DefaultIndexBuilder(),
+            GrammarMetadataProvider: () => new DefaultGrammarMetadataProvider()
         },
         references: {
             Linker: (services) => new DefaultLinker(services),
