@@ -16,6 +16,7 @@ import type { LangiumCompletionParser, LangiumParser } from './parser/langium-pa
 import type { Lexer } from './parser/lexer.js';
 import type { IParserConfig } from './parser/parser-config.js';
 import type { TokenBuilder } from './parser/token-builder.js';
+import type { TreeSitterDocumentParser } from './parser/tree-sitter-document-parser.js';
 import type { ValueConverter } from './parser/value-converter.js';
 import type { WasmLoader } from './parser/wasm-loader.js';
 import type { Linker } from './references/linker.js';
@@ -69,6 +70,7 @@ export type LangiumDefaultCoreServices = {
         readonly TokenBuilder: TokenBuilder
         readonly Lexer: Lexer
         readonly WasmLoader: WasmLoader
+        readonly TreeSitterDocumentParser: TreeSitterDocumentParser
     }
     readonly documentation: {
         readonly CommentProvider: CommentProvider

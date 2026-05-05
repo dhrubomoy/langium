@@ -31,6 +31,7 @@ import { DefaultIndexManager } from './workspace/index-manager.js';
 import { DefaultWorkspaceManager } from './workspace/workspace-manager.js';
 import { DefaultLexer, DefaultLexerErrorMessageProvider } from './parser/lexer.js';
 import { DefaultWasmLoader } from './parser/wasm-loader.js';
+import { DefaultTreeSitterDocumentParser } from './parser/tree-sitter-document-parser.js';
 import { JSDocDocumentationProvider } from './documentation/documentation-provider.js';
 import { DefaultCommentProvider } from './documentation/comment-provider.js';
 import { LangiumParserErrorMessageProvider } from './parser/langium-parser.js';
@@ -65,7 +66,8 @@ export function createDefaultCoreModule(context: DefaultCoreModuleContext): Modu
             Lexer: (services) => new DefaultLexer(services),
             ParserErrorMessageProvider: () => new LangiumParserErrorMessageProvider(),
             LexerErrorMessageProvider: () => new DefaultLexerErrorMessageProvider(),
-            WasmLoader: (services) => new DefaultWasmLoader(services.parser.GrammarWasmPath ?? '')
+            WasmLoader: (services) => new DefaultWasmLoader(services.parser.GrammarWasmPath ?? ''),
+            TreeSitterDocumentParser: (services) => new DefaultTreeSitterDocumentParser(services)
         },
         workspace: {
             AstNodeLocator: () => new DefaultAstNodeLocator(),

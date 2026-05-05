@@ -14,5 +14,6 @@ export * from './lexer.js';
 export * from './parser-builder-base.js';
 export * from './parser-config.js';
 export * from './token-builder.js';
+export * from './tree-sitter-document-parser.js';
 export * from './value-converter.js';
 export * from './wasm-loader.js';

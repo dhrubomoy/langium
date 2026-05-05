@@ -14,6 +14,7 @@
 export { TextDocument } from 'vscode-languageserver-textdocument';
 
 import type { Diagnostic, Range } from 'vscode-languageserver-types';
+import type { Tree } from 'web-tree-sitter';
 import type { FileSystemProvider } from './file-system-provider.js';
 import type { ParseResult, ParserOptions } from '../parser/langium-parser.js';
 import type { ServiceRegistry } from '../service-registry.js';
@@ -25,6 +26,7 @@ import { CancellationToken } from '../utils/cancellation.js';
 import { stream } from '../utils/stream.js';
 import { URI, UriTrie } from '../utils/uri-utils.js';
 import type { DocumentBuilder } from './document-builder.js';
+import type { DocumentIndex } from './document-index.js';
 
 /**
  * A Langium document holds the parse result (AST and CST) and any additional state that is derived
@@ -45,6 +47,18 @@ export interface LangiumDocument<T extends AstNode = AstNode> {
     references: Array<Reference | MultiReference>;
     /** Result of the validation phase */
     diagnostics?: Diagnostic[]
+    /**
+     * Tree-sitter syntax tree for the document, when the language has a loaded
+     * tree-sitter grammar. Stored so that subsequent edits can pass it to the
+     * parser as the previous tree, enabling incremental re-parses.
+     */
+    treeSitterTree?: Tree;
+    /**
+     * Per-document index built from {@link treeSitterTree} via the
+     * {@link IndexBuilder} service. Drives tree-sitter LSP adapters
+     * (Go-to-definition, Find-all-references, ...).
+     */
+    documentIndex?: DocumentIndex;
 }
 
 /**
@@ -213,25 +227,35 @@ export class DefaultLangiumDocumentFactory implements LangiumDocumentFactory {
     protected create<T extends AstNode = AstNode>(uri: URI, content: string | TextDocument | { $model: T }, options?: ParserOptions): LangiumDocument<T> {
         if (typeof content === 'string') {
             const parseResult = this.parse<T>(uri, content, options);
-            return this.createLangiumDocument<T>(parseResult, uri, undefined, content);
+            const document = this.createLangiumDocument<T>(parseResult, uri, undefined, content);
+            this.parseTreeSitter(document, content);
+            return document;
 
         } else if ('$model' in content) {
             const parseResult = { value: content.$model, parserErrors: [], lexerErrors: [] };
             return this.createLangiumDocument<T>(parseResult, uri);
 
         } else {
-            const parseResult = this.parse<T>(uri, content.getText(), options);
-            return this.createLangiumDocument(parseResult, uri, content);
+            const text = content.getText();
+            const parseResult = this.parse<T>(uri, text, options);
+            const document = this.createLangiumDocument(parseResult, uri, content);
+            this.parseTreeSitter(document, text);
+            return document;
         }
     }
 
     protected async createAsync<T extends AstNode = AstNode>(uri: URI, content: string | TextDocument, cancelToken: CancellationToken): Promise<LangiumDocument<T>> {
         if (typeof content === 'string') {
             const parseResult = await this.parseAsync<T>(uri, content, cancelToken);
-            return this.createLangiumDocument<T>(parseResult, uri, undefined, content);
+            const document = this.createLangiumDocument<T>(parseResult, uri, undefined, content);
+            this.parseTreeSitter(document, content);
+            return document;
         } else {
-            const parseResult = await this.parseAsync<T>(uri, content.getText(), cancelToken);
-            return this.createLangiumDocument(parseResult, uri, content);
+            const text = content.getText();
+            const parseResult = await this.parseAsync<T>(uri, text, cancelToken);
+            const document = this.createLangiumDocument(parseResult, uri, content);
+            this.parseTreeSitter(document, text);
+            return document;
         }
     }
 
@@ -302,9 +326,28 @@ export class DefaultLangiumDocumentFactory implements LangiumDocumentFactory {
         if (oldText !== text) {
             document.parseResult = await this.parseAsync(document.uri, text, cancellationToken);
             (document.parseResult.value as Mutable<AstNode>).$document = document;
+            this.parseTreeSitter(document, text);
         }
         document.state = DocumentState.Parsed;
         return document;
+    }
+
+    /**
+     * Run the per-language tree-sitter parser over `text` and store the
+     * resulting {@link Tree} on `document.treeSitterTree`. On update calls the
+     * previous tree (if any) is passed back in so tree-sitter can re-parse
+     * incrementally. Skips silently when no grammar Wasm is loaded for the
+     * document's language — the legacy Chevrotain parse result is still the
+     * source of truth there.
+     */
+    protected parseTreeSitter<T extends AstNode>(document: Mutable<LangiumDocument<T>>, text: string): void {
+        const services = this.serviceRegistry.getServices(document.uri);
+        const wasmLoader = services.parser.WasmLoader;
+        if (!wasmLoader.isInitialized()) {
+            return;
+        }
+        const treeSitterParser = services.parser.TreeSitterDocumentParser;
+        document.treeSitterTree = treeSitterParser.parse(text, document.treeSitterTree);
     }
 
     protected parse<T extends AstNode>(uri: URI, text: string, options?: ParserOptions): ParseResult<T> {

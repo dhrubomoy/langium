@@ -26,6 +26,14 @@ export interface WasmLoader {
      * awaited yet.
      */
     getLanguage(): Language;
+
+    /**
+     * Returns `true` once {@link init} has resolved with a {@link Language},
+     * meaning {@link getLanguage} is safe to call. Lets callers (e.g. the
+     * document factory) skip the tree-sitter path gracefully when no grammar
+     * has been loaded.
+     */
+    isInitialized(): boolean;
 }
 
 /**
@@ -63,5 +71,9 @@ export class DefaultWasmLoader implements WasmLoader {
             throw new Error('WasmLoader has not been initialized — call init() before getLanguage().');
         }
         return this.language;
+    }
+
+    isInitialized(): boolean {
+        return this.language !== undefined;
     }
 }
