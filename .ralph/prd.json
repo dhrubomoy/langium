@@ -522,6 +522,95 @@
       "priority": 31,
       "passes": true,
       "notes": "Added 5 new Playwright tests to packages/langium-web/tests/e2e/editor.spec.ts (one per LSP feature): (1) `parse-error diagnostic appears within 10 seconds of typing` — types `Module bad\\ndef a: ;` and asserts `.squiggly-error` becomes visible within 10s; (2) `cross-reference diagnostic for an undefined name` — types `Module m\\ndef a: b;` (where `b` is undefined) and asserts `.squiggly-error` appears within 10s; (3) `go-to-definition jumps cursor to the declaration` — uses `Ctrl/Cmd+G` (Go-to-Line) to position cursor on `a` reference at line 5 col 8 of the initial code, captures cursor element top via `document.querySelector('.cursors-layer .cursor').style.top/transform`, presses F12, then `expect.poll`s for the cursor `top` to differ within 10s (verifies cursor moved to declaration line); (4) `document symbols action lists declared names` — presses `Ctrl/Cmd+Shift+O` and asserts `.quick-input-widget` shows up containing one of the symbol names (a/b/c) from the initial code; (5) `folding ranges produce gutter widgets for multi-line content` — replaces content with a multi-line block comment + def, hovers the editor (so Monaco renders gutter fold widgets), and asserts `.codicon-folding-expanded, .codicon-folding-collapsed` is attached within 10s. The 3 pre-existing tests (Monaco editor mounts, valid code has no squiggles, syntax error has squiggles) are preserved verbatim with one change: the inline `await page.locator('.monaco-editor').click()` + `Ctrl+A` + `type` block in the syntax-error test now uses the new shared `replaceContent()` helper for consistency. Helpers added: `focusEditor(page)`, `replaceContent(page, text)`, and `cursorTopPx(page)` — all small, all DRY-out repeated code that was already inlined in the existing tests.\n\n**Tree-sitter pipeline note:** The AC says these tests verify that the tree-sitter pipeline drives LSP features. Per the PRD architecture (US-029/030), the tree-sitter path activates only when a language supplies both a `grammar.wasm` (via `GrammarWasmPath`) AND a `GRAMMAR_METADATA` constant (via `GrammarMetadataProvider`). The `langium-arithmetics-dsl` example used by `packages/langium-web` does NOT yet supply either — it still uses the chevrotain parser via `createArithmeticsServices`. Result: `documentIndex` stays `undefined` and the LSP layer reads from the chevrotain CST. The tests pass because the LSP feature contract is preserved across both pipelines (US-029/030 made the tree-sitter additions a no-op when wasm/metadata are absent). When a real language eventually wires up `grammar.wasm` + `GRAMMAR_METADATA`, the same tests will exercise the tree-sitter path with no test-side changes needed. This was the intended decoupling.\n\n**Quality:**\n- TypeScript: `npx tsc --noEmit --target ES2022 --module ESNext --moduleResolution bundler --strict --esModuleInterop --skipLibCheck packages/langium-web/tests/e2e/editor.spec.ts` Exit 0 (no errors). The package's own `tsconfig.src.json` only includes `src/**/*` so the test file is correctly excluded from the production build typecheck. Pre-existing `npm run build` failure in `packages/langium-web` (tsc resolves to the workspace-root tsconfig.json which sweeps `generator-langium/templates/*.ts` template files containing intentional syntax errors) is NOT a regression — verified by `git stash && npm run build` returning the same errors. Workspace-level `npm run build` (langium core + langium-vscode + 4 examples) Exit 0 — `langium-web` is not part of that pipeline.\n- ESLint: `npx eslint packages/langium-web/tests/e2e/editor.spec.ts --max-warnings 0` Exit 0.\n- Vitest: `npx vitest run packages/langium/test/workspace/` 84/84 pass (regression check on the layer US-029/030 touched).\n\n**E2E test runtime in this sandbox:** Playwright's chromium download is blocked by network policy (`detail: no matching allow rule — blocked by default deny policy` for `playwright.download.prss.microsoft.com`). The Ubuntu 25.10 base image's `chromium-browser` package is a snapd shim (snap not available); no system chromium binary exists. Tests cannot be executed in-sandbox — verified that the proxy returns HTTP 403 even when `PLAYWRIGHT_DOWNLOAD_HOST=https://playwright.azureedge.net` is set (azureedge mirror redirects to the same blocked download host). The user must run `cd packages/langium-web && npx playwright install chromium && npm run test:e2e` on their host (where, per `test-results/.last-run.json`, the 3 pre-existing tests were last recorded as `\"status\": \"passed\"`). The new tests follow the same patterns and selectors as the passing pre-existing tests (`.squiggly-error`, `.monaco-editor` clicks, `keyboard.press` / `keyboard.type` flows), so they have the same Monaco DOM contract.\n\n**Files changed:** `packages/langium-web/tests/e2e/editor.spec.ts` (rewritten — kept the 3 pre-existing tests, added 5 new ones, added 3 small helpers)."
+    },
+    {
+      "id": "US-032",
+      "title": "Wire arithmetics example to tree-sitter pipeline (end-to-end activation)",
+      "description": "As a core maintainer, I want the arithmetics example language to be the first real language running on the full tree-sitter pipeline, so that the end-to-end integration (WasmLoader → TreeSitterDocumentParser → IndexBuilder → DocumentIndex) is proven with real grammar artifacts and the Playwright e2e tests exercise the tree-sitter path.",
+      "acceptanceCriteria": [
+        "Run `langium generate` on `examples/arithmetics` and commit the generated `grammar.js`, `metadata.ts`, and `grammar.wasm` artifacts to the repo under `examples/arithmetics/src/language/generated/` (or the output dir configured in `langium-config.json`)",
+        "Update `examples/arithmetics/src/language/arithmetics-module.ts` (or the generated module.ts) to supply `GrammarWasmPath` pointing to the generated `grammar.wasm`",
+        "Override `GrammarMetadataProvider` binding in the arithmetics DI module to return the generated `GRAMMAR_METADATA` constant",
+        "After wiring: create a unit test confirming that parsing an arithmetics document produces a non-undefined `document.documentIndex` with at least one declaration entry",
+        "The Playwright e2e tests in `packages/langium-web` continue to pass; the browser network tab (or a log statement) confirms the `grammar.wasm` is loaded",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 32,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-033",
+      "title": "Move Chevrotain grammar parser into langium-cli (cli-owned GrammarParser)",
+      "description": "As a core maintainer, I want the Chevrotain-based parser implementation to live exclusively in langium-cli so that the langium runtime package has no Chevrotain dependency, while langium-cli and langium-vscode can still parse .langium grammar files.",
+      "acceptanceCriteria": [
+        "Copy `langium-parser.ts`, `lexer.ts`, `token-builder.ts`, `parser-builder-base.ts`, `indentation-aware.ts`, `cst-node-builder.ts`, `parser-config.ts`, and `regexp-utils.ts` from `packages/langium/src/parser/` and `packages/langium/src/utils/regexp-utils.ts` into `packages/langium-cli/src/grammar-parser/`",
+        "Create `packages/langium-cli/src/grammar-parser/index.ts` exporting all grammar parser services",
+        "Create `packages/langium-cli/src/create-grammar-services.ts` with a `createCliLangiumGrammarServices()` function that wires the local Chevrotain parser into the grammar service container, replacing the import from `langium/grammar`",
+        "Update all usages of `createLangiumGrammarServices()` in `packages/langium-cli/` (tests and source) to use `createCliLangiumGrammarServices()` instead",
+        "Update `packages/langium-vscode/` to depend on `langium-cli` and use `createCliLangiumGrammarServices()` for the grammar language service",
+        "`npx vitest run packages/langium-cli/test/` passes (132+ tests)",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 33,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-034",
+      "title": "Register tree-sitter LSP adapters as defaults; restore Chevrotain-based adapters for grammar language service",
+      "description": "As a core maintainer, I want the seven tree-sitter LSP adapters (US-009..015) to be the default providers in default-lsp-module.ts, so that all user-defined languages using the tree-sitter pipeline get diagnostics, go-to-definition, find-references, document-symbols, rename, and folding out of the box; while the grammar language service in langium-cli/langium-vscode continues to use the Chevrotain-based providers for .langium file editing.",
+      "acceptanceCriteria": [
+        "Wire `TreeSitterDiagnosticsProvider` (parse-error + cross-ref), `TreeSitterDefinitionProvider`, `TreeSitterReferencesProvider`, `TreeSitterDocumentSymbolsProvider`, `TreeSitterRenameProvider`, and `TreeSitterFoldingProvider` into `packages/langium/src/lsp/default-lsp-module.ts` replacing the corresponding Chevrotain-era providers as the module-level defaults",
+        "The tree-sitter adapters already return empty/null gracefully when `document.documentIndex` is undefined — confirm this is true for all 7 (no behavior change for languages without tree-sitter)",
+        "Update `createCliLangiumGrammarServices()` (from US-033) to override the LSP bindings with the Chevrotain-based providers (`DefaultDefinitionProvider`, `DefaultReferencesProvider`, `DefaultDocumentSymbolProvider`, `DefaultRenameProvider`, `DefaultFoldingRangeProvider`) so `.langium` file editing continues to work",
+        "After wiring, the arithmetics example in `packages/langium-web` gets go-to-definition, find-references, document-symbols, rename, and folding from the tree-sitter path",
+        "Unit test: given the default LSP module, the definition provider slot is bound to `TreeSitterDefinitionProvider`",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 34,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-035",
+      "title": "Remove Chevrotain parser implementation from langium package",
+      "description": "As a core maintainer, I want the Chevrotain-based parser implementation files deleted from packages/langium/src/parser/ so that the langium runtime has no Chevrotain dependency and no dead parser code, with langium-cli owning the only remaining Chevrotain-based parser (from US-033).",
+      "acceptanceCriteria": [
+        "Delete `packages/langium/src/parser/langium-parser.ts`, `lexer.ts`, `token-builder.ts`, `parser-builder-base.ts`, `indentation-aware.ts`, `cst-node-builder.ts`, `parser-config.ts` — these now live in `langium-cli/src/grammar-parser/` (US-033)",
+        "Delete or update `packages/langium/src/utils/regexp-utils.ts` to remove the `@chevrotain/regexp-to-ast`-based `getTerminalParts` and `isMultilineComment` — replace with the shim versions from US-026 (`getTerminalParts` returns `[]`, `isMultilineComment` uses a regex fallback) since the full AST-walk is only needed in langium-cli",
+        "Update `packages/langium/src/parser/index.ts` to remove all exports of deleted types (`LangiumParser`, `DefaultLexer`, `TokenBuilder`, `IndentationAwareTokenBuilder`, etc.)",
+        "Remove all imports of `chevrotain`, `chevrotain-allstar`, and `@chevrotain/regexp-to-ast` from every file under `packages/langium/src/` — grep confirms zero matches",
+        "`packages/langium/package.json` has no Chevrotain dependency (already the case from US-026 — verify still true)",
+        "`npm run build` passes (langium core + langium-vscode + examples)",
+        "Typecheck passes"
+      ],
+      "priority": 35,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-036",
+      "title": "Remove CstNode hierarchy and AstNode.$cstNode from langium",
+      "description": "As a core maintainer, I want the CstNode interface hierarchy and AstNode.$cstNode field removed from langium now that the Chevrotain parser no longer builds a CST for user documents, so that the codebase has no dead CST machinery and contributors are not misled into thinking the CST approach is still active.",
+      "acceptanceCriteria": [
+        "Remove `$cstNode?: CstNode` from the `AstNode` interface in `packages/langium/src/syntax-tree.ts`",
+        "Remove the `CstNode`, `CompositeCstNode`, `LeafCstNode`, `RootCstNode` interface hierarchy from `packages/langium/src/syntax-tree.ts`",
+        "Remove `AbstractCstNode`, `LeafCstNodeImpl`, `CompositeCstNodeImpl`, `RootCstNodeImpl`, `CstNodeContainer` implementation classes from `packages/langium/src/parser/cst-node-builder.ts` (the file can be deleted entirely if empty after removal)",
+        "Update `packages/langium/src/serializer/hydrator.ts` to remove the CstNode-impl-based deserialization logic — the hydrator only needs to restore `AstNode` fields, not reconstruct a CST",
+        "Update all files under `packages/langium/src/` that import or reference `CstNode`, `cstNode`, or `$cstNode` — grep the set with `grep -rl 'CstNode\\|cstNode\\|\\$cstNode' packages/langium/src` and port each one: LSP providers already use `documentIndex` (US-034), so remaining usages should be in ast-utils, grammar utilities, and test helpers",
+        "Update the AST generator template in `packages/langium-cli/src/generator/` to not emit `$cstNode` on generated `AstNode` interfaces",
+        "Regenerate grammar AST types (`npm run langium:generate`) and verify the generated files contain no `$cstNode`",
+        "`npm run build` passes",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 36,
+      "passes": false,
+      "notes": ""
     }
   ]
 }
