@@ -6,7 +6,7 @@
     {
       "id": "US-001",
       "title": "Add web-tree-sitter dependency and WASM Loader service",
-      "description": "As a service implementor, I want a WasmLoader service that accepts a grammar.wasm path at init, calls Language.load(), and exposes the initialized Language \u2014 working in both Node.js and web extension environments \u2014 so that downstream services can parse documents without knowing how the WASM is loaded.",
+      "description": "As a service implementor, I want a WasmLoader service that accepts a grammar.wasm path at init, calls Language.load(), and exposes the initialized Language — working in both Node.js and web extension environments — so that downstream services can parse documents without knowing how the WASM is loaded.",
       "acceptanceCriteria": [
         "Add `web-tree-sitter` to packages/langium/package.json dependencies",
         "Create packages/langium/src/parser/wasm-loader.ts with a WasmLoader service interface and DefaultWasmLoader implementation",
@@ -146,7 +146,6 @@
         "ParseErrorDiagnosticsProvider reads index.diagnostics and returns them as LSP Diagnostic[]",
         "Provider is registered in lsp/default-lsp-module.ts",
         "Unit test: given a DocumentIndex with one diagnostic, provider returns it unchanged",
-        "Verify in browser via packages/langium-web e2e tests: typing a syntax error in the arithmetics editor produces at least one error squiggle",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -162,7 +161,6 @@
         "Add CrossRefDiagnosticsProvider to packages/langium/src/lsp/tree-sitter-diagnostics-provider.ts",
         "For each ReferenceInfo in index.references, check if a matching DeclarationInfo exists in index.declarations; if not, emit a DiagnosticSeverity.Error 'Unresolved reference: [name]'",
         "Unit test: given an index with an unresolved reference, provider emits one error diagnostic; given a resolved reference, emits none",
-        "Verify in browser via packages/langium-web e2e tests: referencing an undefined name shows an 'Unresolved reference' error squiggle",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -179,7 +177,6 @@
         "Given a TextDocumentPositionParams, find any ReferenceInfo whose range contains the position, look up its name in index.declarations, return Location pointing to the declaration",
         "Returns null if no reference or declaration found at position",
         "Unit test: given a known reference position and matching declaration, returns correct Location",
-        "Verify in browser via packages/langium-web e2e tests: Ctrl+click (or F12) on a reference in the arithmetics editor navigates to the declaration",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -196,7 +193,6 @@
         "Given a ReferenceParams at a declaration position, return all ReferenceInfo entries with matching name as Location[]",
         "Optionally includes the declaration itself if includeDeclaration is true",
         "Unit test: given a name with two references, returns two Locations",
-        "Verify in browser via packages/langium-web e2e tests: right-click > Find All References on a declaration shows its usages in the peek panel",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -212,7 +208,6 @@
         "Create packages/langium/src/lsp/tree-sitter-document-symbols-provider.ts",
         "Returns all DeclarationInfo entries as DocumentSymbol[] with name, kind (default SymbolKind.Variable), and range",
         "Unit test: given an index with three declarations, returns three DocumentSymbols",
-        "Verify in browser via packages/langium-web e2e tests: the breadcrumb/outline shows declared names for the open arithmetics file",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -228,7 +223,6 @@
         "Create packages/langium/src/lsp/tree-sitter-rename-provider.ts",
         "Given a RenameParams, collect all DeclarationInfo and ReferenceInfo entries with matching name, return WorkspaceEdit with TextEdit[] replacing each range with newName",
         "Unit test: given one declaration and two references for name 'foo', rename to 'bar' returns three edits",
-        "Verify in browser via packages/langium-web e2e tests: right-click > Rename Symbol renames all occurrences in the editor simultaneously",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -245,7 +239,6 @@
         "Walk the tree-sitter SyntaxNode tree and emit FoldingRange for every named node that spans more than one line",
         "FoldingRange uses node.startPosition.row and node.endPosition.row",
         "Unit test: given a node spanning lines 1-5 and a one-line node, returns one FoldingRange",
-        "Verify in browser via packages/langium-web e2e tests: multi-line definitions in the arithmetics editor show fold icons in the gutter",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -449,6 +442,86 @@
       "priority": 27,
       "passes": true,
       "notes": "Parser implementation files (langium-parser, lexer, token-builder, indentation-aware, parser-builder-base) were stubbed to throw-on-runtime in US-026 (preserving public type surface so the build still type-checks). This iteration deletes the `CstNodeBuilder` class itself from packages/langium/src/parser/cst-node-builder.ts (the parse-time CST builder is no longer reachable since the legacy parser is stubbed). The implementation classes RootCstNodeImpl/CompositeCstNodeImpl/LeafCstNodeImpl/AbstractCstNode are KEPT in the same file because serializer/hydrator.ts still uses them for save/restore deserialization. The CstNode interface hierarchy in syntax-tree.ts is KEPT intentionally — 46 source files (every LSP provider, scope/linker, name-provider, hover, formatter, code-actions, validation, serialization) consume CstNode as the AST→source-mapping contract, and removal cascades into a full LSP-stack rewrite that is beyond the scope of this PRD. The cleanest follow-up is to wire the tree-sitter pipeline into DocumentBuilder so the LSP layer can drop the AstNode.$cstNode field — at that point the CstNode hierarchy can be removed wholesale. CstNodeBuilder is verified absent from any workspace service file (it was never wired into LangiumDefaultCoreServices.workspace). `npm run build` passes (langium core + langium-vscode + 4 examples). `npx tsc -b tsconfig.build.json --force` exits 0. Lint passes for the changed file."
+    },
+    {
+      "id": "US-028",
+      "title": "Restore grammar services: fix 119 broken tests after Chevrotain removal",
+      "description": "As a core maintainer, I want the Langium grammar services to be able to parse .langium grammar strings again after US-026 stubbed LangiumParser.parse(), so that the 119 broken tests pass and the langium-cli test suite is healthy.",
+      "acceptanceCriteria": [
+        "Root cause: DefaultLangiumDocumentFactory.create() calls LangiumParser.parse() which throws 'Chevrotain-based parser has been removed' — all tests using parseHelper() break via this call chain: parseHelper → fromString → create → parse → LangiumParser.parse() → throws",
+        "Fix the grammar services parsing path so that .langium grammar strings (e.g. 'grammar Foo rule A: name=ID;') can be parsed without Chevrotain. Preferred approach: add Chevrotain back as a devDependency of packages/langium-cli only (not langium runtime), create a local GrammarParser class in langium-cli that owns its Chevrotain-based parser independent of langium's stubbed LangiumParser, and update createLangiumGrammarServices() calls in langium-cli tests to use this cli-owned parser. Alternative approach: investigate loadGrammarFromJson (packages/langium/src/utils/grammar-loader.ts) and whether it can be extended to parse grammar strings without the stub.",
+        "All 9 previously-failing langium-cli test files pass: migration-checker, grammar-js-compiler, metadata-compiler, file-writer, wasm-builder, arithmetic-e2e, and any others broken by the stub",
+        "Previously passing test files (file-writer, wasm-builder — the 13 passing tests) still pass",
+        "`npx vitest run packages/langium-cli/test/` passes (132 tests or equivalent count)",
+        "npm run build still passes (no new build regressions)",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 28,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-029",
+      "title": "Wire tree-sitter parser into DefaultLangiumDocumentFactory with incremental parsing",
+      "description": "As a service implementor, I want DefaultLangiumDocumentFactory to use the tree-sitter parser (via WasmLoader) when a Language is loaded, so that user-defined language documents are parsed by tree-sitter and every edit triggers an incremental re-parse using the previous tree.",
+      "acceptanceCriteria": [
+        "Add `treeSitterTree?: import('web-tree-sitter').Tree` field to the LangiumDocument interface in packages/langium/src/workspace/documents.ts",
+        "Add `documentIndex?: DocumentIndex` field to the LangiumDocument interface",
+        "Update LangiumDocumentImpl (or equivalent concrete class) to hold these two fields, initialised to undefined",
+        "Create packages/langium/src/parser/tree-sitter-document-parser.ts with a TreeSitterDocumentParser service interface and DefaultTreeSitterDocumentParser implementation",
+        "DefaultTreeSitterDocumentParser.parse(text: string, previousTree?: Tree): Tree — uses WasmLoader.getLanguage() to set language on a new web-tree-sitter Parser, then calls parser.parse(text, previousTree) and returns the Tree",
+        "Wire DefaultTreeSitterDocumentParser into the DI container in default-module.ts",
+        "DefaultLangiumDocumentFactory.create(): if WasmLoader has a loaded Language, call TreeSitterDocumentParser.parse(text) and store result on doc.treeSitterTree; if WasmLoader is not initialized, skip gracefully (treeSitterTree stays undefined)",
+        "DefaultLangiumDocumentFactory.update(): if doc.treeSitterTree exists, call TreeSitterDocumentParser.parse(newText, doc.treeSitterTree) for incremental re-parse and update doc.treeSitterTree",
+        "Unit test: given a factory with a mock WasmLoader that returns a Language, factory.create() produces a document with non-null treeSitterTree",
+        "Unit test: factory.update() passes the previous tree to the parser (incremental path)",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 29,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-030",
+      "title": "Wire IndexBuilder into DocumentBuilder for atomic DocumentIndex rebuild on every document change",
+      "description": "As a service implementor, I want DocumentBuilder to call IndexBuilder.build() after each parse and atomically store the DocumentIndex on the document, so that LSP providers always see a consistent, up-to-date index and the language server stays responsive even in large workspaces.",
+      "acceptanceCriteria": [
+        "Add a GrammarMetadataProvider service interface to packages/langium/src/workspace/ (or services.ts): getMetadata(): GrammarMetadata | undefined — returns the GrammarMetadata for this language's DI container",
+        "Wire GrammarMetadataProvider into LangiumCoreServices so each per-language service container can supply its own metadata",
+        "Extend DocumentBuilder (DefaultDocumentBuilder or its build pipeline) to call IndexBuilder.build(doc.treeSitterTree, metadata, doc.uri.toString()) immediately after DocumentState.Parsed, when doc.treeSitterTree is non-null and GrammarMetadataProvider.getMetadata() returns a value",
+        "Store the resulting DocumentIndex on doc.documentIndex",
+        "If doc.treeSitterTree is null/undefined or metadata is unavailable, skip IndexBuilder gracefully (doc.documentIndex stays undefined)",
+        "Unit test: given a document with a mock SyntaxNode tree and a GrammarMetadataProvider returning ARITHMETIC_METADATA, after DocumentBuilder processes it, doc.documentIndex.declarations is non-empty",
+        "Unit test: when treeSitterTree is undefined, DocumentBuilder does not call IndexBuilder and doc.documentIndex remains undefined",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 30,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-031",
+      "title": "Playwright e2e: verify tree-sitter LSP features in the browser",
+      "description": "As a core maintainer, I want the Playwright e2e test suite in packages/langium-web to verify that the tree-sitter pipeline drives real LSP features in the Monaco editor, so that the end-to-end integration is proven in a browser environment and cannot silently regress.",
+      "acceptanceCriteria": [
+        "Prerequisite: US-028, US-029, and US-030 must pass first — the tree-sitter pipeline must be wired into DocumentBuilder before browser verification is meaningful",
+        "Extend packages/langium-web/tests/e2e/editor.spec.ts with the following Playwright tests (one per LSP feature). Run tests with: cd packages/langium-web && npm run test:e2e",
+        "Test: parse-error diagnostic — type invalid arithmetic code (e.g. 'Module bad\\ndef a: ;') and assert at least one .squiggly-error appears within 10 seconds",
+        "Test: cross-reference diagnostic — type an arithmetic program that references an undefined name (e.g. 'Module m\\ndef a: b;' where b is not declared) and assert a .squiggly-error squiggle appears on the undefined reference",
+        "Test: go-to-definition — load a program with a named definition, trigger F12 or the editor's go-to-def action on a reference, assert the cursor moves to the declaration line",
+        "Test: document symbols — after the language server settles on a valid program, call the document symbols action and assert the declared names appear in the breadcrumb or symbol list",
+        "Test: folding ranges — load a multi-line definition, assert fold widgets (the chevron gutter icons) appear for the multi-line block",
+        "All new tests pass when run with `npm run test:e2e` from packages/langium-web",
+        "The three pre-existing tests (editor mounts, valid code has no squiggles, syntax error has squiggles) continue to pass",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 31,
+      "passes": false,
+      "notes": ""
     }
   ]
 }
