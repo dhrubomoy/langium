@@ -1,10 +1,12 @@
 /******************************************************************************
- * Copyright 2021 TypeFox GmbH
+ * Copyright 2026 TypeFox GmbH
  * This program and the accompanying materials are made available under the
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
+
 import chalk from 'chalk';
-import { AstUtils, type Grammar, GrammarAST, GrammarUtils, stream } from 'langium';
+import type { SyntaxNode, ParsedGrammarSet } from '../grammar-parser/grammar-parser.js';
+import { getRules, getTerminals, getRuleName, getTerminalPattern } from '../grammar-parser/grammar-queries.js';
 
 //eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function log(level: 'log' | 'warn' | 'error', options: { watch?: boolean }, message: string, ...args: any[]): void {
@@ -17,33 +19,49 @@ export function log(level: 'log' | 'warn' | 'error', options: { watch?: boolean 
 
 export function getTime(): string {
     const date = new Date();
-    return `[${chalk.gray(`${padZeroes(date.getHours())}:${padZeroes(date.getMinutes())}:${padZeroes(date.getSeconds())}`)}] `;
+    return `[${chalk.gray(`${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`)}] `;
 }
 
-function padZeroes(i: number): string {
-    return i.toString().padStart(2, '0');
-}
+function pad(i: number): string { return i.toString().padStart(2, '0'); }
 
-export function collectKeywords(grammar: Grammar): string[] {
+/** Collect all keyword string values (quoted literals) reachable from parser rules */
+export function collectKeywords(set: ParsedGrammarSet): string[] {
     const keywords = new Set<string>();
-    const reachableRules = GrammarUtils.getAllReachableRules(grammar, false);
-
-    for (const keyword of stream(reachableRules)
-        .filter(rule => GrammarAST.isParserRule(rule) || GrammarAST.isInfixRule(rule))
-        .flatMap(rule => AstUtils.streamAllContents(rule).filter(GrammarAST.isKeyword))) {
-        keywords.add(keyword.value);
+    for (const root of set.values()) {
+        for (const rule of getRules(root)) {
+            const def = rule.childForFieldName('definition');
+            if (def) walkKeywords(def, keywords);
+        }
     }
-
     return Array.from(keywords).sort();
 }
 
-export function collectTerminalRegexps(grammar: Grammar): Record<string, RegExp> {
+function walkKeywords(node: SyntaxNode, out: Set<string>): void {
+    if (node.type === 'keyword') {
+        const val = node.childForFieldName('value')?.text;
+        if (val) out.add(val.replace(/^['"]|['"]$/g, ''));
+        return;
+    }
+    for (const child of node.namedChildren) {
+        if (!child) continue;
+        walkKeywords(child, out);
+    }
+}
+
+/** Collect terminal name → RegExp for all non-hidden terminals */
+export function collectTerminalRegexps(set: ParsedGrammarSet): Record<string, RegExp> {
     const result: Record<string, RegExp> = {};
-    const reachableRules = GrammarUtils.getAllReachableRules(grammar, false);
-    for (const terminalRule of stream(reachableRules).filter(GrammarAST.isTerminalRule)) {
-        const name = terminalRule.name;
-        const regexp = GrammarUtils.terminalRegex(terminalRule);
-        result[name] = regexp;
+    for (const root of set.values()) {
+        for (const t of getTerminals(root)) {
+            const name = getRuleName(t);
+            const pattern = getTerminalPattern(t);
+            if (pattern) {
+                try {
+                    const inner = pattern.replace(/^\/|\/[a-z]*$/g, '');
+                    result[name] = new RegExp(inner);
+                } catch { /* skip invalid patterns */ }
+            }
+        }
     }
     return result;
 }

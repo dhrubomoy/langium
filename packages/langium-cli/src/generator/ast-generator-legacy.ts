@@ -9,7 +9,7 @@ import { expandToNode, joinToNode, toString, type Generated } from 'langium/gene
 import type { AstTypes, Property, PropertyDefaultValue } from 'langium/grammar';
 import { collectAst, collectTypeHierarchy, escapeQuotes, findReferenceTypes, isAstType, mergeTypesAndInterfaces } from 'langium/grammar';
 import type { LangiumConfig, LangiumLanguageConfig } from '../package-types.js';
-import { collectKeywords, collectTerminalRegexps } from './langium-util.js';
+import { collectKeywords, collectTerminalRegexps } from './langium-util-legacy.js';
 import { generatedHeader } from './node-util.js';
 
 function generateAstHeader(langiumConfig: LangiumConfig): Generated {

@@ -194,7 +194,7 @@
         "Typecheck passes"
       ],
       "priority": 12,
-      "passes": false,
+      "passes": true,
       "notes": "See Task 11 in docs/superpowers/plans/2026-05-04-langium-cli-treesitter-generators.md. Both files are small (21 and 49 lines). Full replacement code for langium-util.ts is given verbatim in the plan. types-generator.ts replaces collectAst/collectTypeHierarchy with collectTypes/collectFields/getTypeHierarchy from grammar-queries. Depends on US-038."
     },
     {

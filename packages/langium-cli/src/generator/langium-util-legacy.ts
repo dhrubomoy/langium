@@ -1,0 +1,30 @@
+/******************************************************************************
+ * Copyright 2021 TypeFox GmbH
+ * This program and the accompanying materials are made available under the
+ * terms of the MIT License, which is available in the project root.
+ ******************************************************************************/
+import { AstUtils, type Grammar, GrammarAST, GrammarUtils, stream } from 'langium';
+
+export function collectKeywords(grammar: Grammar): string[] {
+    const keywords = new Set<string>();
+    const reachableRules = GrammarUtils.getAllReachableRules(grammar, false);
+
+    for (const keyword of stream(reachableRules)
+        .filter(rule => GrammarAST.isParserRule(rule) || GrammarAST.isInfixRule(rule))
+        .flatMap(rule => AstUtils.streamAllContents(rule).filter(GrammarAST.isKeyword))) {
+        keywords.add(keyword.value);
+    }
+
+    return Array.from(keywords).sort();
+}
+
+export function collectTerminalRegexps(grammar: Grammar): Record<string, RegExp> {
+    const result: Record<string, RegExp> = {};
+    const reachableRules = GrammarUtils.getAllReachableRules(grammar, false);
+    for (const terminalRule of stream(reachableRules).filter(GrammarAST.isTerminalRule)) {
+        const name = terminalRule.name;
+        const regexp = GrammarUtils.terminalRegex(terminalRule);
+        result[name] = regexp;
+    }
+    return result;
+}

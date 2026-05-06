@@ -24,7 +24,7 @@ import { elapsedTime, getUserChoice, schema } from './generator/node-util.js';
 import { emitTreeSitterArtifacts } from './generator/treesitter/file-writer.js';
 import { checkMigration } from './generator/treesitter/migration-checker.js';
 import { buildWasm } from './generator/treesitter/wasm-builder.js';
-import { generateTypesFile } from './generator/types-generator.js';
+import { generateTypesFile } from './generator/types-generator-legacy.js';
 import type { LangiumConfig, LangiumLanguageConfig } from './package-types.js';
 import { RelativePath } from './package-types.js';
 import { getFilePath, loadConfig } from './package.js';

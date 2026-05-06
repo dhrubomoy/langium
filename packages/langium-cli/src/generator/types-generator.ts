@@ -1,21 +1,28 @@
 /******************************************************************************
- * Copyright 2022 TypeFox GmbH
+ * Copyright 2026 TypeFox GmbH
  * This program and the accompanying materials are made available under the
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
-import type { Grammar, LangiumCoreServices } from 'langium';
-import { joinToNode, toString } from 'langium/generate';
-import { collectAst, LangiumGrammarGrammar } from 'langium/grammar';
-import { collectKeywords } from './langium-util.js';
 
-export function generateTypesFile(services: LangiumCoreServices, grammars: Grammar[]): string {
-    const { unions, interfaces } = collectAst(grammars, { services });
-    const reservedWords = new Set(collectKeywords(LangiumGrammarGrammar()));
+import type { ParsedGrammarSet } from '../grammar-parser/grammar-parser.js';
+import { collectFields, collectTypes } from '../grammar-parser/grammar-queries.js';
 
-    const fileNode = joinToNode([
-        joinToNode(unions, union => union.toDeclaredTypesString(reservedWords), { appendNewLineIfNotEmpty: true }),
-        joinToNode(interfaces, iFace => iFace.toDeclaredTypesString(reservedWords), { appendNewLineIfNotEmpty: true })
-    ]);
+export function generateTypesFile(set: ParsedGrammarSet): string {
+    const types = collectTypes(set);
 
-    return toString(fileNode);
+    const blocks = types.map(t => {
+        const fields = collectFields(t.name, set);
+        if (t.isInterface || fields.length > 0) {
+            const fieldStr = fields.map(f => {
+                const opt = f.operator === '?=' ? '?' : '';
+                const arr = f.operator === '+=' ? '[]' : '';
+                return `    ${f.name}${opt}: ${f.type}${arr};`;
+            }).join('\n');
+            return `export interface ${t.name} {\n${fieldStr}\n}`;
+        }
+        const union = fields.map(f => f.type).join(' | ') || 'never';
+        return `export type ${t.name} = ${union};`;
+    });
+
+    return blocks.join('\n\n') + '\n';
 }

@@ -6,7 +6,7 @@
 import type { Grammar } from 'langium';
 import { GrammarAST, GrammarUtils, RegExpUtils, stream } from 'langium';
 import type { LangiumLanguageConfig } from '../../package-types.js';
-import { collectKeywords } from '../langium-util.js';
+import { collectKeywords } from '../langium-util-legacy.js';
 
 /* eslint-disable dot-notation */
 
