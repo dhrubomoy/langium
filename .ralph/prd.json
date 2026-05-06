@@ -209,7 +209,7 @@
         "Typecheck passes"
       ],
       "priority": 13,
-      "passes": false,
+      "passes": true,
       "notes": "See Task 12 Step 1 in docs/superpowers/plans/2026-05-04-langium-cli-treesitter-generators.md. Current file is 456 lines — handled alone because of its size. The substitution table in the plan maps every old GrammarAST call to the new grammar-queries equivalent. Depends on US-044."
     },
     {

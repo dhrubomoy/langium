@@ -4,10 +4,14 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import { type Grammar, GrammarAST, GrammarUtils, RegExpUtils } from 'langium';
 import { type Generated, expandToNode, joinToNode, toString } from 'langium/generate';
+import type { ParsedGrammarSet, SyntaxNode } from '../../grammar-parser/grammar-parser.js';
+import {
+    getRules, getTerminals, getRuleName, getTerminalPattern,
+    isHiddenTerminal,
+} from '../../grammar-parser/grammar-queries.js';
+import { collectKeywords } from '../langium-util.js';
 import type { LangiumLanguageConfig } from '../../package-types.js';
-import { collectKeywords } from '../langium-util-legacy.js';
 
 /**
  * Monarch Language Definition, describes aspects & token categories of target language
@@ -27,139 +31,84 @@ interface Tokenizer {
     states: State[]
 }
 
-/**
- * Name of a State
- */
 type StateName = string;
 
-/**
- * Each state is defined as an array of rules which are used to match the input
- * Rules can be regular, or other States whose rules we should include in this state
- */
 interface State {
     name: StateName
     rules: Array<Rule | State>
 }
 
-/**
- * A rule that matches input. Can have either an action, or an array of cases.
- */
 interface Rule {
     regex: RegExp | string;
     action: Action | Case[];
 }
 
-/**
- * A case that selects a specific action by matching a guard pattern
- */
 interface Case {
     guard: string;
     action: Action;
 }
 
-/**
- * Determines whether a given object is a Rule instance
- * @param obj Object to check
- * @returns Whether this object is a Rule
- */
 function isRule(obj: State | Rule): obj is Rule {
     return (obj as Rule).regex !== undefined && (obj as Rule).action !== undefined;
 }
 
-/**
- * Name of a token type, such as 'string'
- */
 type Token = string;
-
-/**
- * Token class to be used for CSS rendering, such as 'keyword', 'component', or 'type.identifer'
- */
 type TokenClass = string;
-
-/**
- * Next state that proceeds from an action, can also be a pop or a push of the current state (like for nested block comments)
- */
 type NextState = StateName | '@pop' | '@push';
 
-/**
- * An action performed when a rule (or a case) matches token.
- * It can determine the token class, as well whether to push/pop a tokenizer state
- */
 interface Action {
     token?: Token
     tokenClass?: TokenClass
     next?: NextState
-    // other more advanced states omitted...
 }
 
-/**
- * Abstract representation of a Monarch grammar file
- */
 interface MonarchGrammar {
     readonly languageDefinition: LanguageDefinition;
     readonly tokenizer: Tokenizer;
 }
 
 /**
- * Generates a Monarch highlighting grammar file's contents, based on the passed Langium grammar
- * @param grammar Langium grammar to use in generating this Monarch syntax highlighting file content
- * @param config Langium Config to also use during generation
- * @returns Generated Monarch syntax highlighting file content
+ * Generates a Monarch highlighting grammar file's contents from a parsed Langium grammar set
  */
-export function generateMonarch(grammar: Grammar, config: LangiumLanguageConfig): string {
+export function generateMonarch(set: ParsedGrammarSet, config: LangiumLanguageConfig): string {
+    const symbols = getSymbols(set);
+    const bracketRegex = /[{}[\]()]/;
+    const operators = symbols.filter(s => !bracketRegex.test(s));
 
-    const symbols = getSymbols(grammar);
-    const regex = /[{}[\]()]/;
-    const operators = symbols.filter(s => !regex.test(s));
-
-    // build absract monarch grammar representation
     const monarchGrammar: MonarchGrammar = {
         languageDefinition: {
-            name: config.id,  // identifier for generating the grammar export
-            keywords: getKeywords(grammar),
+            name: config.id,
+            keywords: getKeywords(set),
             operators,
             symbols,
-            tokenPostfix: '.' + config.id, // category appended to all tokens
+            tokenPostfix: '.' + config.id,
         },
         tokenizer: {
-            states: getTokenizerStates(grammar)
+            states: getTokenizerStates(set)
         }
     };
 
-    // return concrete monarch grammar representation
     return prettyPrint(monarchGrammar);
 }
 
-/**
- * Gets Monarch tokenizer states from a Langium grammar
- * @param grammar Langium grammar to source tokenizer states from
- * @returns Array of tokenizer states
- */
-function getTokenizerStates(grammar: Grammar): State[] {
-
-    // initial state, name is arbitrary, just needs to come first
+function getTokenizerStates(set: ParsedGrammarSet): State[] {
     const initialState: State = {
         name: 'initial',
-        rules: getTerminalRules(grammar)
+        rules: getTerminalRules(set)
     };
 
     const whitespaceState: State = {
         name: 'whitespace',
-        rules: getWhitespaceRules(grammar)
+        rules: getWhitespaceRules(set)
     };
 
     const commentState: State = {
         name: 'comment',
-        rules: getCommentRules(grammar)
+        rules: getCommentRules(set)
     };
 
-    // order the following additional rules, to prevent
-    // comment sequences being classified as symbols
-
-    // add include for the whitespace state
     initialState.rules.push(whitespaceState);
 
-    // add operator & symbol case handling
     initialState.rules.push({
         regex: '@symbols',
         action: [
@@ -167,7 +116,6 @@ function getTokenizerStates(grammar: Grammar): State[] {
                 guard: '@operators',
                 action: { token: 'operator' }
             },
-            // by default, leave the symbol alone
             {
                 guard: '@default',
                 action: { token: '' }
@@ -175,18 +123,9 @@ function getTokenizerStates(grammar: Grammar): State[] {
         ]
     });
 
-    return [
-        initialState,
-        whitespaceState,
-        commentState
-    ];
+    return [initialState, whitespaceState, commentState];
 }
 
-/**
- * Pretty prints a monarch grammar into a concrete form, suitable for writing to a file
- * @param monarchGrammar Grammar to pretty print
- * @returns Monarch grammar in concrete form
- */
 function prettyPrint(monarchGrammar: MonarchGrammar): string {
     const name = monarchGrammar.languageDefinition.name;
     const node = expandToNode`
@@ -201,12 +140,6 @@ function prettyPrint(monarchGrammar: MonarchGrammar): string {
     return toString(node);
 }
 
-/**
- * Generates an entry for a language definition, given a name (token category) and values
- * @param name Category of language definition to add
- * @param values Values to add under the given category
- * @returns GeneratorNode containing this printed language definition entry
- */
 function genLanguageDefEntry(name: string, values: string[]): Generated {
     return expandToNode`
         ${name}: [
@@ -215,25 +148,15 @@ function genLanguageDefEntry(name: string, values: string[]): Generated {
     `;
 }
 
-/**
- * Pretty prints the language definition portion of a Monarch grammar
- * @param languageDef LanguageDefinition to pretty print
- * @param node Existing generator node to append printed language definition to
- */
 function prettyPrintLangDef(languageDef: LanguageDefinition): Generated {
     return expandToNode`
         ${genLanguageDefEntry('keywords', languageDef.keywords)}
         ${genLanguageDefEntry('operators', languageDef.operators)}
         ${/* special case, identify symbols via singular regex*/ undefined}
-        symbols: ${new RegExp(languageDef.symbols.map(RegExpUtils.escapeRegExp).join('|')).toString()},
+        symbols: ${new RegExp(languageDef.symbols.map(escapeRegExp).join('|')).toString()},
     `;
 }
 
-/**
- * Pretty prints the tokenizer portion of a Monarch grammar file
- * @param tokenizer Tokenizer portion to print out
- * @param node Existing generator node to append printed tokenizer to
- */
 function prettyPrintTokenizer(tokenizer: Tokenizer): Generated {
     return expandToNode`
         tokenizer: {
@@ -242,11 +165,6 @@ function prettyPrintTokenizer(tokenizer: Tokenizer): Generated {
     `;
 }
 
-/**
- * Pretty prints a tokenizer state, composed of various rules
- * @param state Tokenizer state to pretty print
- * @param node Existing enerator node to append printed state to
- */
 function prettyPrintState(state: State): Generated {
     return expandToNode`
         ${state.name}: [
@@ -255,90 +173,60 @@ function prettyPrintState(state: State): Generated {
     `;
 }
 
-/**
- * Pretty prints a Rule.
- * This can either be a literal rule to match w/ an action, or a reference to a state to include here
- * @param ruleOrState Rule to pretty print. If it's a state, we include that state's contents implicitly within this context.
- * @returns Generator node containing this printed rule
- */
 function prettyPrintRule(ruleOrState: Rule | State): Generated {
     if (isRule(ruleOrState)) {
-        // extract rule pattern, either just a string or a regex w/ parts
         const rulePatt = ruleOrState.regex instanceof RegExp ? ruleOrState.regex : new RegExp(ruleOrState.regex);
         return expandToNode`{ regex: ${rulePatt.toString()}, action: ${prettyPrintAction(ruleOrState.action)} },`;
     } else {
-        // include another state by name, implicitly includes all of its contents
         return expandToNode`{ include: '@${ruleOrState.name}' },`;
     }
 }
 
-/**
- * Pretty prints the action of a Rule
- * @param action Action to print. Can have several keywords to control what the state machine should do next.
- * @returns Action in concrete form
- */
 function prettyPrintAction(action: Action | Case[]): string {
     if (!Array.isArray(action)) {
-        // plain action
         return JSON.stringify(action);
     } else {
-        // array of cases, each with an action
         const prettyCases: string = action.map(c => `'${c.guard}': ` + prettyPrintAction(c.action)).join(', ');
         return '{ cases: { ' + prettyCases + ' }}';
     }
 }
 
 /**
- * Extracts Monarch token name from a Langium terminal rule, using either name or type.
- * @param rule Rule to convert to a Monarch token name
- * @returns Returns the equivalent monarch token name, or the original rule name
+ * Extracts a Monarch token name from a Langium terminal rule, using either name or `returns` type.
  */
-function getMonarchTokenName(rule: GrammarAST.TerminalRule): string {
-    if (rule.name.toLowerCase() === 'string') {
-        // string is clarified as a terminal by name, but not necessarily by type
+function getMonarchTokenName(rule: SyntaxNode): string {
+    const name = getRuleName(rule);
+    if (name.toLowerCase() === 'string') {
         return 'string';
-    } else if (rule.type) {
-        // use rule type
-        return rule.type.name;
-    } else {
-        // fallback to the original name
-        return rule.name;
     }
+    const ret = rule.childForFieldName('return_type')?.text;
+    if (ret) return ret;
+    return name;
 }
 
-/**
- * Gets whitespace rules from the langium grammar. Includes starting comment sequence.
- * @param grammar Langium grammar to extract whitespace rules from
- * @returns Array of Monarch whitespace rules
- */
-function getWhitespaceRules(grammar: Grammar): Rule[] {
+function getWhitespaceRules(set: ParsedGrammarSet): Rule[] {
     const rules: Rule[] = [];
-    for (const rule of grammar.rules) {
-        if (GrammarAST.isTerminalRule(rule)) {
-            const regex = GrammarUtils.terminalRegex(rule);
+    for (const root of set.values()) {
+        for (const t of [...getRules(root), ...getTerminals(root)]) {
+            if (t.type !== 'terminal_rule') continue;
+            const regex = terminalRegex(t);
+            const isComment = isCommentTerminal(t);
 
-            if (!GrammarUtils.isCommentTerminal(rule) && !RegExpUtils.isWhitespace(regex)) {
-                // skip rules that are not comments or whitespace
+            if (!isComment && !isWhitespace(regex)) {
                 continue;
             }
 
-            // token name is either comment or whitespace
-            const tokenName = GrammarUtils.isCommentTerminal(rule) ? 'comment' : 'white';
+            const tokenName = isComment ? 'comment' : 'white';
+            const part = getTerminalParts(regex)[0];
 
-            const part = RegExpUtils.getTerminalParts(regex)[0];
-
-            // check if this is a comment terminal w/ a start & end sequence (multi-line)
-            if (part && part.start !== '' && part.end !== '' && GrammarUtils.isCommentTerminal(rule)) {
-                // state-based comment rule, only add push to jump into it
+            if (part && part.start !== '' && part.end !== '' && isComment) {
                 rules.push({
                     regex: part.start,
                     action: { token: tokenName, next: '@' + tokenName }
                 });
-
             } else {
-                // single regex rule, generally for whitespace
                 rules.push({
-                    regex: regex,
+                    regex,
                     action: { token: tokenName }
                 });
             }
@@ -347,80 +235,66 @@ function getWhitespaceRules(grammar: Grammar): Rule[] {
     return rules;
 }
 
-/**
- * Gets comment state rules from the Langium grammar.
- * Accounts for multi-line comments, but without nesting.
- * @param grammar Langium grammar to extract comment rules from
- * @returns Array of Monarch comment rules
- */
-function getCommentRules(grammar: Grammar): Rule[] {
+function getCommentRules(set: ParsedGrammarSet): Rule[] {
     const rules: Rule[] = [];
-    for (const rule of grammar.rules) {
-        if (GrammarAST.isTerminalRule(rule) && GrammarUtils.isCommentTerminal(rule)) {
-            const tokenName = 'comment';
-            const part = RegExpUtils.getTerminalParts(GrammarUtils.terminalRegex(rule))[0];
-            if (part && part.start !== '' && part.end !== '') {
-                // rules to manage comment start/end
-                // rule order matters
+    for (const root of set.values()) {
+        for (const t of [...getRules(root), ...getTerminals(root)]) {
+            if (t.type !== 'terminal_rule') continue;
+            if (!isCommentTerminal(t)) continue;
 
+            const tokenName = 'comment';
+            const part = getTerminalParts(terminalRegex(t))[0];
+            if (part && part.start !== '' && part.end !== '') {
                 const start = part.start;
                 const end = part.end;
 
-                // 1st, add anything that's not in the start sequence
                 rules.push({
                     regex: `[^${start}]+`,
                     action: { token: tokenName }
                 });
 
-                // 2nd, end of sequence, pop this state, keeping others on the stack
                 rules.push({
                     regex: end,
                     action: { token: tokenName, next: '@pop' }
                 });
 
-                // 3rd, otherwise, start sequence characters are OK in this state
                 rules.push({
                     regex: `[${start}]`,
                     action: { token: tokenName }
                 });
-
             }
         }
     }
     return rules;
 }
 
-/**
- * Retrieves non-comment terminal rules, creating associated actions for them
- * @param grammar Grammar to get non-comment terminals from
- * @returns Array of Rules to add to a Monarch tokenizer state
- */
-function getTerminalRules(grammar: Grammar): Rule[] {
+function getTerminalRules(set: ParsedGrammarSet): Rule[] {
     const rules: Rule[] = [];
-    for (const rule of grammar.rules) {
-        if (GrammarAST.isTerminalRule(rule) && !GrammarUtils.isCommentTerminal(rule)) {
-            const regex = GrammarUtils.terminalRegex(rule);
+    const keywords = getKeywords(set);
+    for (const root of set.values()) {
+        for (const t of [...getRules(root), ...getTerminals(root)]) {
+            if (t.type !== 'terminal_rule') continue;
+            if (isCommentTerminal(t)) continue;
+            const regex = terminalRegex(t);
 
-            if (RegExpUtils.isWhitespace(regex)) {
-                // disallow terminal rules that match whitespace
+            if (isWhitespace(regex)) {
                 continue;
             }
 
-            const tokenName = getMonarchTokenName(rule);
-            // default action...
+            const tokenName = getMonarchTokenName(t);
             let action: Action | Case[] = { token: tokenName };
 
-            if (getKeywords(grammar).some(keyword => regex.test(keyword))) {
-                // this rule overlaps with at least one keyword
-                // add case so keywords aren't tagged incorrectly as this token type
-                action = [{
-                    guard: '@keywords',
-                    action: { token: 'keyword' }
-                },
-                {
-                    guard: '@default',
-                    action // include default action from above
-                }];
+            if (keywords.some(keyword => regex.test(keyword))) {
+                action = [
+                    {
+                        guard: '@keywords',
+                        action: { token: 'keyword' }
+                    },
+                    {
+                        guard: '@default',
+                        action
+                    }
+                ];
             }
 
             rules.push({
@@ -432,25 +306,67 @@ function getTerminalRules(grammar: Grammar): Rule[] {
     return rules;
 }
 
-/**
- * Keyword regex for matching keyword terminals, or for only collecting symbol terminals
- */
 const KeywordRegex = /[A-Za-z]/;
 
-/**
- * Retrieves keywords from the current grammar
- * @param grammar Grammar to get keywords from
- * @returns Array of keywords
- */
-function getKeywords(grammar: Grammar): string[] {
-    return collectKeywords(grammar).filter(kw => KeywordRegex.test(kw));
+function getKeywords(set: ParsedGrammarSet): string[] {
+    return collectKeywords(set).filter(kw => KeywordRegex.test(kw));
+}
+
+function getSymbols(set: ParsedGrammarSet): string[] {
+    return collectKeywords(set).filter(kw => !KeywordRegex.test(kw));
+}
+
+// ─── Local RegExp / terminal helpers (replacements for langium's RegExpUtils + GrammarUtils) ──
+
+/** Compile the pattern of a terminal_rule SyntaxNode into a RegExp, stripping the `/.../flags` wrapper. */
+function terminalRegex(rule: SyntaxNode): RegExp {
+    const pattern = getTerminalPattern(rule);
+    if (!pattern) return new RegExp('');
+    const inner = pattern.replace(/^\/|\/[a-z]*$/g, '');
+    try {
+        return new RegExp(inner);
+    } catch {
+        return new RegExp('');
+    }
+}
+
+/** A hidden terminal whose pattern is not whitespace is treated as a comment. */
+function isCommentTerminal(rule: SyntaxNode): boolean {
+    if (!isHiddenTerminal(rule)) return false;
+    return !isWhitespace(terminalRegex(rule));
+}
+
+const whitespaceCharacters = (
+    '\f\n\r\t\v\u0020\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007' +
+    '\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff').split('');
+
+function isWhitespace(value: RegExp | string): boolean {
+    const regexp = typeof value === 'string' ? safeRegExp(value) : value;
+    if (!regexp) return false;
+    return whitespaceCharacters.some(ws => regexp.test(ws));
+}
+
+function safeRegExp(src: string): RegExp | null {
+    try { return new RegExp(src); } catch { return null; }
+}
+
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
- * Retrieve symbols from langium grammar
- * @param grammar Grammar to get symbols from
- * @returns Array of symbols, effective inverse of getKeywords
+ * Extracts the leading and trailing literal-character sequences of a regex source.
+ * Used to recognise multi-line comment delimiters such as `/\/\*...\*\//` → `{start:'/*', end:'*\/'}`.
+ * Returns a single-element array when both ends contain literal escapes; otherwise an empty array.
+ * Simpler than langium's chevrotain-based parser, but covers the cases monarch needs.
  */
-function getSymbols(grammar: Grammar): string[] {
-    return collectKeywords(grammar).filter(kw => !KeywordRegex.test(kw));
+function getTerminalParts(regexp: RegExp | string): Array<{ start: string, end: string }> {
+    const src = typeof regexp === 'string' ? regexp : regexp.source;
+    const startMatch = src.match(/^(?:\\.)+/);
+    const endMatch = src.match(/(?:\\.)+$/);
+    if (startMatch && endMatch && startMatch.index !== endMatch.index) {
+        const decode = (s: string) => s.replace(/\\(.)/g, '$1');
+        return [{ start: decode(startMatch[0]), end: decode(endMatch[0]) }];
+    }
+    return [];
 }

@@ -15,7 +15,7 @@ import * as path from 'path';
 import { generateAstMultiLanguageProject, generateAstSingleLanguageProject, getLanguageIdentifier, type LanguageInfo } from './generator/ast-generator-legacy.js';
 import { generateBnf } from './generator/bnf-generator-legacy.js';
 import { serializeGrammar } from './generator/grammar-serializer.js';
-import { generateMonarch } from './generator/highlighting/monarch-generator.js';
+import { generateMonarch } from './generator/highlighting/monarch-generator-legacy.js';
 import { generatePrismHighlighting } from './generator/highlighting/prism-generator.js';
 import { generateTextMate } from './generator/highlighting/textmate-generator.js';
 import { getTime, log } from './generator/langium-util.js';
