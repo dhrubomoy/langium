@@ -19,7 +19,7 @@ import { generateMonarch } from './generator/highlighting/monarch-generator.js';
 import { generatePrismHighlighting } from './generator/highlighting/prism-generator.js';
 import { generateTextMate } from './generator/highlighting/textmate-generator.js';
 import { getTime, log } from './generator/langium-util.js';
-import { generateModule } from './generator/module-generator.js';
+import { generateModule } from './generator/module-generator-legacy.js';
 import { elapsedTime, getUserChoice, schema } from './generator/node-util.js';
 import { emitTreeSitterArtifacts } from './generator/treesitter/file-writer.js';
 import { checkMigration } from './generator/treesitter/migration-checker.js';

@@ -131,7 +131,7 @@
         "Typecheck passes"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "See Task 8 in docs/superpowers/plans/2026-05-04-langium-cli-treesitter-generators.md. Current file is 125 lines. The full replacement implementation is given verbatim in the plan. Depends on US-038."
     },
     {

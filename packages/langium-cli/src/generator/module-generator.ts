@@ -1,125 +1,47 @@
 /******************************************************************************
- * Copyright 2021 TypeFox GmbH
+ * Copyright 2026 TypeFox GmbH
  * This program and the accompanying materials are made available under the
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import type { Grammar, IParserConfig } from 'langium';
-import { type Generated, expandToNode, joinToNode, toString } from 'langium/generate';
-import type { LangiumConfig, LangiumLanguageConfig } from '../package-types.js';
+import { expandToNode, joinToNode, toString } from 'langium/generate';
+import type { ParsedGrammarSet } from '../grammar-parser/grammar-parser.js';
+import { getGrammarName } from '../grammar-parser/grammar-queries.js';
+import type { LangiumConfig } from '../package-types.js';
 import { generatedHeader } from './node-util.js';
 
-export function generateModule(grammars: Grammar[], config: LangiumConfig, grammarConfigMap: Map<Grammar, LangiumLanguageConfig>): string {
-    const grammarsWithName = grammars.filter(grammar => !!grammar.name);
-    const parserConfig = config.chevrotainParserConfig;
-    const mode = config.mode;
-    const hasIParserConfigImport = Boolean(parserConfig) || grammars.some(grammar => grammarConfigMap.get(grammar)?.chevrotainParserConfig !== undefined);
-    let needsGeneralParserConfig = undefined;
+export function generateModule(set: ParsedGrammarSet, config: LangiumConfig): string {
+    const grammarName = [...set.values()].map(getGrammarName).find(Boolean) ?? config.projectName;
+    const importExtension = config.importExtension ?? '';
+    const modeValue = config.mode === 'production' ? 'production' : 'development';
 
-    /* eslint-disable @stylistic/indent */
     const node = expandToNode`
         ${generatedHeader}
-    `.appendNewLine(
-    ).appendIf(!!config.langiumInternal,
-        expandToNode`
 
-            import type { LanguageMetaData } from '../../languages/language-meta-data${config.importExtension}';
-            import { ${config.projectName}AstReflection } from '../../languages/generated/ast${config.importExtension}';
-            import type { Module } from '../../dependency-injection${config.importExtension}';
-            import type { LangiumSharedCoreServices, LangiumCoreServices, LangiumGeneratedCoreServices, LangiumGeneratedSharedCoreServices } from '../../services${config.importExtension}';
-        `.appendTemplateIf(hasIParserConfigImport)`
-
-            import type { IParserConfig } from '../../parser/parser-config${config.importExtension}';
-        `
-    ).appendTemplateIf(!config.langiumInternal)`
-
-        import type { LangiumSharedCoreServices, LangiumCoreServices, LangiumGeneratedCoreServices, LangiumGeneratedSharedCoreServices, LanguageMetaData, Module${hasIParserConfigImport ? ', IParserConfig' : ''} } from 'langium';
-        import { ${config.projectName}AstReflection } from './ast${config.importExtension}';
-    `.appendTemplate`
-
-        import { ${joinToNode(grammarsWithName, grammar => grammar.name + 'Grammar', { separator: ', '}) } } from './grammar${config.importExtension}';
-        ${joinToNode(
-            grammarsWithName,
-            grammar => {
-                const config = grammarConfigMap.get(grammar)!;
-                const modeValue = mode === 'production' ? mode : 'development';
-                return expandToNode`
-
-                    export const ${ grammar.name }LanguageMetaData = {
-                        languageId: '${config.id}',
-                        fileExtensions: [${config.fileExtensions && joinToNode(config.fileExtensions, e => appendQuotesAndDot(e), { separator: ', ' })}],
-                        ${config.fileNames ? `fileNames: [${config.fileNames.map(name => `'${name}'`).join(', ')}],` : undefined}
-                        caseInsensitive: ${Boolean(config.caseInsensitive)},
-                        mode: '${modeValue}'
-                    } as const satisfies LanguageMetaData;
-                `;
-            },
-            { appendNewLineIfNotEmpty: true }
-        )}
-        ${joinToNode(
-            grammarsWithName,
-            grammar => {
-                const grammarParserConfig = grammarConfigMap.get(grammar)!.chevrotainParserConfig;
-                if (grammarParserConfig) {
-                    return expandToNode`
-
-                        export const ${grammar.name}ParserConfig: IParserConfig = {
-                            ${generateParserConfig(grammarParserConfig)}
-                        };
-                    `;
-                } else {
-                    needsGeneralParserConfig = true;
-                    return;
-                }
-            },
-            { appendNewLineIfNotEmpty: true }
-        )}
-        ${needsGeneralParserConfig && parserConfig && expandToNode`
-
-            export const parserConfig: IParserConfig = {
-                ${generateParserConfig(parserConfig)}
-            };
-        `}
+        import type { LangiumSharedCoreServices, LangiumCoreServices, LangiumGeneratedCoreServices, LangiumGeneratedSharedCoreServices, LanguageMetaData, Module } from 'langium';
+        import { ${config.projectName}AstReflection } from './ast${importExtension}';
 
         export const ${config.projectName}GeneratedSharedModule: Module<LangiumSharedCoreServices, LangiumGeneratedSharedCoreServices> = {
-            AstReflection: () => new ${config.projectName}AstReflection()
+            AstReflection: () => new ${config.projectName}AstReflection(),
         };
-        ${joinToNode(
-            grammarsWithName,
-            grammar => {
-                const grammarConfig = grammarConfigMap.get(grammar)!;
-                return expandToNode`
 
-                    export const ${grammar.name}GeneratedModule: Module<LangiumCoreServices, LangiumGeneratedCoreServices> = {
-                        Grammar: () => ${grammar.name}Grammar(),
-                        LanguageMetaData: () => ${grammar.name}LanguageMetaData,
-                        parser: {${(grammarConfig.chevrotainParserConfig || parserConfig) && expandToNode`
-                        ${'' /** needed to add the linebreak after the opening brace in case content is to be added, and to enable 'expandToNode' to identify the correct intendation of the subseqent parts. */}
-                            ${grammarConfig.chevrotainParserConfig ? `ParserConfig: () => ${grammar.name}ParserConfig` : undefined}
-                            ${!grammarConfig.chevrotainParserConfig && parserConfig ? 'ParserConfig: () => parserConfig' : undefined}
-                        `}}
-                    };
-                `;
-            },
-            { appendNewLineIfNotEmpty: true}
-        )}
-    `;
-    /* eslint-enable @stylistic/indent */
+        ${joinToNode(config.languages, lang => {
+            const safeId = lang.id.replace(/-/g, '_');
+            return expandToNode`
+                export const ${safeId}LanguageMetaData = {
+                    languageId: '${lang.id}',
+                    fileExtensions: [${(lang.fileExtensions ?? []).map(e => `'${e.startsWith('.') ? e : '.' + e}'`).join(', ')}],
+                    caseInsensitive: ${Boolean(lang.caseInsensitive)},
+                    mode: '${modeValue}',
+                } as const satisfies LanguageMetaData;
+
+                export const ${grammarName}GeneratedModule: Module<LangiumCoreServices, LangiumGeneratedCoreServices> = {
+                    LanguageMetaData: () => ${safeId}LanguageMetaData,
+                    parser: {},
+                };
+            `.appendNewLine();
+        })}
+    `.appendNewLine();
 
     return toString(node);
-}
-
-function generateParserConfig(config: IParserConfig): Generated {
-    return joinToNode(
-        Object.entries(config),
-        ([key, value]) => `${key}: ${typeof value === 'string' ? `'${value}'` : value},`,
-        { appendNewLineIfNotEmpty: true }
-    );
-}
-
-function appendQuotesAndDot(input: string): string {
-    if (!input.startsWith('.')) {
-        input = '.' + input;
-    }
-    return `'${input}'`;
 }

@@ -7,7 +7,7 @@
 import type { LangiumConfig, LangiumLanguageConfig } from '../../src/package-types.js';
 import type { Grammar } from 'langium';
 import { describe, expect, test } from 'vitest';
-import { generateModule } from '../../src/generator/module-generator.js';
+import { generateModule } from '../../src/generator/module-generator-legacy.js';
 import { RelativePath } from '../../src/package-types.js';
 
 describe('Module generator', () => {
