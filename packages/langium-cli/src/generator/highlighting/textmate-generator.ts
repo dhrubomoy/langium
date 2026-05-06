@@ -258,10 +258,10 @@ function escapeRegExp(value: string): string {
 function getTerminalParts(regexp: RegExp | string): Array<{ start: string, end: string }> {
     const src = typeof regexp === 'string' ? regexp : regexp.source;
     const startMatch = src.match(/^(?:\\.)+/);
+    if (!startMatch) return [];
     const endMatch = src.match(/(?:\\.)+$/);
-    if (startMatch && endMatch && startMatch.index !== endMatch.index) {
-        const decode = (s: string) => s.replace(/\\(.)/g, '$1');
-        return [{ start: decode(startMatch[0]), end: decode(endMatch[0]) }];
+    if (endMatch && startMatch.index !== endMatch.index) {
+        return [{ start: startMatch[0], end: endMatch[0] }];
     }
-    return [];
+    return [{ start: startMatch[0], end: '' }];
 }

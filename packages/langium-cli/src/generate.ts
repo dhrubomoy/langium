@@ -220,6 +220,7 @@ export async function runGenerator(config: LangiumConfig, options: GenerateOptio
             const grammarJs = compileGrammarJs(langSet);
             const grammarJsPath = path.resolve(treesitterDir, 'grammar.js');
             await writeWithFail(grammarJsPath, grammarJs, options);
+            await writeWithFail(path.resolve(treesitterDir, 'package.json'), '{"type": "commonjs"}\n', options);
             const metadata = compileMetadata(langSet);
             await writeWithFail(path.resolve(treesitterDir, 'metadata.ts'), metadata, options);
             try {
