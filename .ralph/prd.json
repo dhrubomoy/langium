@@ -82,7 +82,7 @@
         "Typecheck passes"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "See Task 5 in docs/superpowers/plans/2026-05-04-langium-cli-treesitter-generators.md. Full test and implementation code is given verbatim in the plan. Follow TDD: write failing tests first, then implement. Depends on US-036."
     },
     {
