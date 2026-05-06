@@ -398,7 +398,13 @@ export function addCompletionHandler(connection: Connection, services: LangiumSh
 
 export function addFindReferencesHandler(connection: Connection, services: LangiumSharedServices, requiredState: ServiceRequirement = WorkspaceState.IndexedReferences): void {
     connection.onReferences(createRequestHandler(
-        (services, document, params, cancelToken) => services.lsp?.ReferencesProvider?.findReferences(document, params, cancelToken),
+        (services, document, params, cancelToken) => {
+            const index = document.documentIndex;
+            if (index) {
+                return services.lsp?.TreeSitterReferencesProvider?.findReferences(index, params) ?? undefined;
+            }
+            return services.lsp?.ReferencesProvider?.findReferences(document, params, cancelToken);
+        },
         services,
         requiredState
     ));
@@ -414,7 +420,13 @@ export function addCodeActionHandler(connection: Connection, services: LangiumSh
 
 export function addDocumentSymbolHandler(connection: Connection, services: LangiumSharedServices, requiredState: ServiceRequirement = DocumentState.Parsed): void {
     connection.onDocumentSymbol(createRequestHandler(
-        (services, document, params, cancelToken) => services.lsp?.DocumentSymbolProvider?.getSymbols(document, params, cancelToken),
+        (services, document, params, cancelToken) => {
+            const index = document.documentIndex;
+            if (index) {
+                return services.lsp?.TreeSitterDocumentSymbolsProvider?.getSymbols(index) ?? undefined;
+            }
+            return services.lsp?.DocumentSymbolProvider?.getSymbols(document, params, cancelToken);
+        },
         services,
         requiredState
     ));
@@ -422,7 +434,13 @@ export function addDocumentSymbolHandler(connection: Connection, services: Langi
 
 export function addGotoDefinitionHandler(connection: Connection, services: LangiumSharedServices, requiredState: ServiceRequirement = DocumentState.Linked): void {
     connection.onDefinition(createRequestHandler(
-        (services, document, params, cancelToken) => services.lsp?.DefinitionProvider?.getDefinition(document, params, cancelToken),
+        (services, document, params, cancelToken) => {
+            const index = document.documentIndex;
+            if (index) {
+                return services.lsp?.TreeSitterDefinitionProvider?.getDefinition(index, params) ?? undefined;
+            }
+            return services.lsp?.DefinitionProvider?.getDefinition(document, params, cancelToken);
+        },
         services,
         requiredState
     ));
@@ -497,7 +515,13 @@ export function addFormattingHandler(connection: Connection, services: LangiumSh
 export function addRenameHandler(connection: Connection, services: LangiumSharedServices, requiredState: ServiceRequirement = WorkspaceState.IndexedReferences): void {
 
     connection.onRenameRequest(createRequestHandler(
-        (services, document, params, cancelToken) => services.lsp?.RenameProvider?.rename(document, params, cancelToken),
+        (services, document, params, cancelToken) => {
+            const index = document.documentIndex;
+            if (index) {
+                return services.lsp?.TreeSitterRenameProvider?.rename(index, params) ?? undefined;
+            }
+            return services.lsp?.RenameProvider?.rename(document, params, cancelToken);
+        },
         services,
         requiredState
     ));
