@@ -34,6 +34,18 @@ Started: Tue  5 May 2026 20:34:51 EDT
 
 ---
 
+## 2026-05-06 - US-053
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Updated `addFoldingRangeHandler` in `packages/langium/src/lsp/language-server.ts:489` to dispatch to `services.lsp?.TreeSitterFoldingRangeProvider?.getFoldingRanges(tree.rootNode)` when `document.treeSitterTree` is set, and fall back to the existing `services.lsp?.FoldingRangeProvider?.getFoldingRanges(document, params, cancelToken)` otherwise. Pure dispatcher addition — no signature or interface changes.
+- Folding is the only handler that branches on `document.treeSitterTree` (a `Tree` from `web-tree-sitter`), not `document.documentIndex` like definition/references/symbols/rename do. `TreeSitterFoldingRangeProvider.getFoldingRanges(rootNode: SyntaxNode)` takes the rootNode directly, since folding only needs the structural tree, not the symbol/reference index. Both attributes are populated together by `DefaultIndexBuilder` after `WasmLoader.init()` resolves, so the branch is taken in lockstep with the other tree-sitter handlers from US-052.
+- Files changed: `packages/langium/src/lsp/language-server.ts` (single function body, ~6 lines), `.ralph/prd.json`, `.ralph/progress.txt`.
+- Verification: `npx tsc -p packages/langium/tsconfig.json --noEmit` produces no output (typecheck clean). `npx vitest run packages/langium/test/lsp/` reports 9 failed test files / 31 failed tests / 74 passed / 3 skipped — every failure is `TypeError: Object.groupBy is not a function` from the pre-existing Node 20.19.4 vs 21+ incompatibility documented in Codebase Patterns line 7. Zero new regressions.
+- **Learnings for future iterations:**
+  - The folding-range handler is the odd one out among the LSP request handlers. Definition/References/Symbols/Rename all gate on `document.documentIndex`; folding gates on `document.treeSitterTree` because folding doesn't need symbol resolution — just the syntax tree's structure. When wiring future tree-sitter providers, check the provider signature: any `(rootNode: SyntaxNode) => …` provider should branch on `treeSitterTree`, while any `(index: DocumentIndex) => …` provider should branch on `documentIndex`.
+  - Both `treeSitterTree` and `documentIndex` are populated together by the same builder run after `WasmLoader.init()`. There's no scenario where one is set and the other isn't (for tree-sitter languages). So the `if (tree)` and `if (index)` branches are equivalent in practice — using the right attribute is a documentation choice (signal which input the provider actually consumes), not a correctness requirement.
+
+---
+
 ## 2026-05-06 - US-051
 Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
 - Replaced `examples/arithmetics/src/language-server/main.ts` with the snippet from the plan: destructure `{ shared, arithmetics }` from `createArithmeticsServices`, call `arithmetics.parser.WasmLoader.init()`, and chain `.then(() => startLanguageServer(shared))` / `.catch(err => { console.error(...); process.exit(1); })`. The `WasmLoader` is wired into the per-language services container via `parser.WasmLoader` (see `packages/langium/src/services.ts:73` and `default-module.ts:70`), and `createArithmeticsServices` already returns `{ shared, arithmetics }` — no module-side changes needed.

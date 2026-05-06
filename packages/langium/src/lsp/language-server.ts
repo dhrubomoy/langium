@@ -488,7 +488,13 @@ export function addHoverHandler(connection: Connection, services: LangiumSharedS
 
 export function addFoldingRangeHandler(connection: Connection, services: LangiumSharedServices, requiredState: ServiceRequirement = DocumentState.Parsed): void {
     connection.onFoldingRanges(createRequestHandler(
-        (services, document, params, cancelToken) => services.lsp?.FoldingRangeProvider?.getFoldingRanges(document, params, cancelToken),
+        (services, document, params, cancelToken) => {
+            const tree = document.treeSitterTree;
+            if (tree) {
+                return services.lsp?.TreeSitterFoldingRangeProvider?.getFoldingRanges(tree.rootNode) ?? undefined;
+            }
+            return services.lsp?.FoldingRangeProvider?.getFoldingRanges(document, params, cancelToken);
+        },
         services,
         requiredState
     ));
