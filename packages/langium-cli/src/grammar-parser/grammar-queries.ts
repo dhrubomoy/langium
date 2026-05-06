@@ -4,7 +4,7 @@
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import type { SyntaxNode } from './grammar-parser.js';
+import type { SyntaxNode, ParsedGrammarSet } from './grammar-parser.js';
 
 // ─── Result record types (no $cstNode, no lazy refs) ────────────────────────
 
@@ -159,4 +159,130 @@ function extractTypeText(node: SyntaxNode | null): string {
         if (first) return extractTypeText(first);
     }
     return node.text;
+}
+
+// ─── Semantic analysis ────────────────────────────────────────────────────────
+
+function getInterfaceSuperTypes(iface: SyntaxNode): string[] {
+    const nameNode = iface.childForFieldName('name');
+    return iface.namedChildren
+        .filter((n): n is SyntaxNode => n !== null && n.type === 'ID' && n !== nameNode)
+        .map(n => n.text);
+}
+
+/** Collect all type names across the grammar set (rules, interfaces, type aliases) */
+export function collectTypes(set: ParsedGrammarSet): TypeInfo[] {
+    const seen = new Map<string, TypeInfo>();
+
+    for (const root of set.values()) {
+        for (const iface of getInterfaces(root)) {
+            const name = iface.childForFieldName('name')?.text ?? '';
+            if (name && !seen.has(name)) {
+                seen.set(name, { name, superTypes: getInterfaceSuperTypes(iface), isInterface: true });
+            }
+        }
+
+        for (const td of getTypeDecls(root)) {
+            const name = td.childForFieldName('name')?.text ?? '';
+            if (name && !seen.has(name)) {
+                seen.set(name, { name, superTypes: [], isInterface: false });
+            }
+        }
+
+        for (const rule of getRules(root)) {
+            const returnType = getRuleReturnType(rule) ?? getInferredTypeName(rule) ?? getRuleName(rule);
+            if (returnType && !seen.has(returnType)) {
+                seen.set(returnType, { name: returnType, superTypes: [], isInterface: false });
+            }
+            const def = rule.childForFieldName('definition');
+            if (def) {
+                collectActionTypes(def, seen);
+            }
+        }
+    }
+
+    return Array.from(seen.values());
+}
+
+function collectActionTypes(node: SyntaxNode, out: Map<string, TypeInfo>): void {
+    if (node.type === 'action') {
+        const typeName = node.childForFieldName('type')?.text
+            ?? node.childForFieldName('inferred_type')?.childForFieldName('name')?.text;
+        if (typeName && !out.has(typeName)) {
+            out.set(typeName, { name: typeName, superTypes: [], isInterface: false });
+        }
+    }
+    for (const child of node.namedChildren) {
+        if (!child) continue;
+        collectActionTypes(child, out);
+    }
+}
+
+/** Returns type → supertype names map */
+export function getTypeHierarchy(set: ParsedGrammarSet): Map<string, string[]> {
+    const map = new Map<string, string[]>();
+    for (const root of set.values()) {
+        for (const iface of getInterfaces(root)) {
+            const name = iface.childForFieldName('name')?.text ?? '';
+            if (name) {
+                map.set(name, getInterfaceSuperTypes(iface));
+            }
+        }
+    }
+    return map;
+}
+
+/** Collect all fields for a named type across the grammar set */
+export function collectFields(typeName: string, set: ParsedGrammarSet): FieldInfo[] {
+    const fields = new Map<string, FieldInfo>();
+
+    for (const root of set.values()) {
+        for (const iface of getInterfaces(root)) {
+            if ((iface.childForFieldName('name')?.text ?? '') !== typeName) continue;
+            const attrs = iface.namedChildren.filter(
+                (n): n is SyntaxNode => n !== null && n.type === 'type_attribute'
+            );
+            for (const attr of attrs) {
+                const name = attr.childForFieldName('name')?.text ?? '';
+                const isOptional = attr.childForFieldName('optional') !== null;
+                const typeText = extractTypeDefText(attr.childForFieldName('type'));
+                if (name && !fields.has(name)) {
+                    fields.set(name, { name, operator: '=', type: typeText, isRef: false, isOptional });
+                }
+            }
+        }
+
+        for (const rule of getRules(root)) {
+            const ruleType = getRuleReturnType(rule) ?? getInferredTypeName(rule) ?? getRuleName(rule);
+            if (ruleType !== typeName) continue;
+            for (const a of getAssignments(rule)) {
+                if (!fields.has(a.feature)) {
+                    fields.set(a.feature, {
+                        name: a.feature,
+                        operator: a.operator,
+                        type: a.typeText,
+                        isRef: a.isRef,
+                        isOptional: a.operator === '?=' || a.operator === '=',
+                    });
+                }
+            }
+        }
+    }
+
+    return Array.from(fields.values());
+}
+
+function extractTypeDefText(node: SyntaxNode | null): string {
+    if (!node) return 'unknown';
+    return node.text.trim();
+}
+
+/** Find a rule SyntaxNode by name across the whole grammar set */
+export function resolveRuleRef(name: string, set: ParsedGrammarSet): SyntaxNode | null {
+    for (const root of set.values()) {
+        const found = [...getRules(root), ...getTerminals(root)]
+            .find(r => getRuleName(r) === name);
+        if (found) return found;
+    }
+    return null;
 }
