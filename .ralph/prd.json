@@ -163,7 +163,7 @@
         "Typecheck passes"
       ],
       "priority": 10,
-      "passes": false,
+      "passes": true,
       "notes": "See Task 10 Steps 1-4 in docs/superpowers/plans/2026-05-04-langium-cli-treesitter-generators.md. Current file is 309 lines. Change parameter from Grammar to ParsedGrammarSet and rewrite internal traversal using grammar-queries helpers. Depends on US-038."
     },
     {

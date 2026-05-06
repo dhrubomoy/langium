@@ -14,7 +14,7 @@ import {
     compileParserRuleEntry,
     compileTerminalRuleEntry,
     compileWord
-} from './grammar-js-compiler.js';
+} from './grammar-js-compiler-legacy.js';
 import { compileMetadata } from './metadata-compiler.js';
 
 const COPYRIGHT_HEADER = `/******************************************************************************
