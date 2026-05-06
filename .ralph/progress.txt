@@ -1,0 +1,80 @@
+# Ralph Progress Log
+Started: Tue  5 May 2026 20:34:51 EDT
+
+## Codebase Patterns
+- This is an npm workspaces monorepo. Tree-sitter binary is hoisted to root `node_modules/.bin/tree-sitter` even when declared as devDep of `packages/langium-cli`. Verify with `cd packages/langium-cli && npx tree-sitter --version`.
+- Pre-existing test failures: 119 langium-cli tests fail with `Object.groupBy is not a function` because the sandbox runs Node 20.19.4 but `Object.groupBy` requires Node 21+. This is NOT introduced by tree-sitter changes; verify any new test failures are not on this list before claiming a regression.
+- TypeScript typecheck for the monorepo workspace: `npx tsc -p packages/langium-cli` (no output means success).
+- Run langium-cli tests in isolation: `npx vitest run packages/langium-cli`.
+- Tree-sitter artifacts live in `packages/langium-cli/src/grammar-parser/lang/` (grammar.js, langium-grammar.wasm, generated C parser sources, the commonjs `package.json` override, tree-sitter.json). The parent `src/grammar-parser/` is ESM and contains the TypeScript sources (`grammar-parser.ts`, `grammar-queries.ts`). Do NOT put any `.ts` files inside `lang/` — they would inherit `type: "commonjs"` and break under `verbatimModuleSyntax`.
+- The `lang/` directory needs its own minimal `package.json` with `"type": "commonjs"` because langium-cli's package.json declares `"type": "module"` and tree-sitter's `grammar.js` uses CommonJS `module.exports`.
+- Tree-sitter's regex engine (`regex-syntax` crate) does NOT support look-around (`(?=...)`, `(?!...)`, etc). When porting a Langium regex into grammar.js, rewrite lookaheads as character-class enumeration inside `token(seq(...))`.
+- `tree-sitter generate` writes its output to the CWD's `src/`, NOT relative to the grammar.js argument. Always `cd src/grammar-parser/lang && tree-sitter generate` (matches the build:grammar-wasm npm script). Running it from `packages/langium-cli` with the path arg dumps output in the wrong place.
+- `tree-sitter generate` is hardcoded to find a file literally named `grammar.js` in CWD; passing a path like `grammar.cjs` or `./other-name.js` does NOT work even if Node would otherwise resolve it.
+- `tree-sitter build --wasm` requires either Docker with platform-matching emsdk image or a local `emcc`. The bundled docker fallback uses `emscripten/emsdk:3.1.64` which is amd64-only; on arm64 hosts install emscripten locally (`apt-get install emscripten` on Ubuntu, gives 3.1.69 which works fine).
+- web-tree-sitter v0.26+ uses NAMED exports (`import { Parser, Language } from 'web-tree-sitter'`) and `Language.load(...)` is a static method on `Language`, not on `Parser.Language`. The plan's smoke-test snippet is for the v0.20 API.
+- web-tree-sitter v0.26 has no `SyntaxNode` export — the class is `Node`. Re-export it under a `SyntaxNode` alias from `grammar-parser.ts` if downstream code expects that name.
+
+---
+
+## 2026-05-06 - US-036
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Created `packages/langium-cli/src/grammar-parser/grammar-parser.ts` exporting `DefaultGrammarParser` (with `parse(text)` and `parseWithImports(entryPath)`), `ParsedGrammarSet` type alias, `GrammarParser` interface, and `SyntaxNode` re-export. Adapted from the plan's v0.20 web-tree-sitter snippet to the v0.26 API: named imports `{ Parser, Language }`, `Language.load(WASM_PATH)` (static on Language), and `parser.parse(text)` returning `Tree | null` (null-checked).
+- Created `packages/langium-cli/src/grammar-parser/grammar-queries.ts` as the stub the plan calls for: `getImports(root)` filters root.namedChildren for `grammar_import` nodes; `getImportPath(importNode)` reads the `path` field (a STRING token with surrounding quotes) and slices off the first and last char.
+- Created `packages/langium-cli/test/grammar-parser/grammar-parser.test.ts` with the 3 plan tests: root type, grammar name field, presence of parser_rule + terminal_rule children. All 3 pass.
+- Restructured the grammar-parser directory to resolve a TS/JS module-type clash: `verbatimModuleSyntax` + `module: nodenext` follows the nearest `package.json` `type` field, and the `package.json {"type":"commonjs"}` previously in `src/grammar-parser/` (needed for tree-sitter to evaluate grammar.js) made the whole dir CJS, which then errored on every ESM `import`/`export` in our new .ts files. Tried renaming `grammar.js` → `grammar.cjs` first; tree-sitter generate is hardcoded to look for a file literally named `grammar.js` and refuses any other name. Settled on moving `grammar.js`, `langium-grammar.wasm`, the generated C parser `src/`, the commonjs `package.json`, and `tree-sitter.json` into a `lang/` subdirectory; the parent `grammar-parser/` now inherits ESM from langium-cli's package.json. Updated `WASM_PATH` to `./lang/langium-grammar.wasm` and the `build:grammar-wasm` script to `cd src/grammar-parser/lang && tree-sitter generate && tree-sitter build --wasm`.
+- Added `web-tree-sitter: ~0.26.0` to langium-cli's runtime dependencies (it had been resolving transitively via `langium`).
+- Files changed: `packages/langium-cli/package.json` (deps + script), `packages/langium-cli/src/grammar-parser/grammar-parser.ts` (new), `packages/langium-cli/src/grammar-parser/grammar-queries.ts` (new), `packages/langium-cli/test/grammar-parser/grammar-parser.test.ts` (new), `packages/langium-cli/src/grammar-parser/lang/{grammar.js,package.json,tree-sitter.json,langium-grammar.wasm,src/...}` (moved from parent), `package-lock.json`.
+- Verification: `npx tsc -p packages/langium-cli` passes (no output). `npx vitest run packages/langium-cli/test/grammar-parser/grammar-parser.test.ts` → 3/3 PASS. `npx vitest run packages/langium-cli` → same 119 pre-existing `Object.groupBy` failures as baseline, plus our 3 new passes (17 total passing, +3 over baseline). Zero regressions.
+- **Learnings for future iterations:**
+  - The plan's grammar-parser snippet uses the legacy web-tree-sitter v0.20 API (`import Parser from 'web-tree-sitter'`, `Parser.Language.load(...)`). v0.26 — the version installed via `langium`'s transitive dep — only supports named imports and `Language.load(...)`. Don't copy the plan verbatim; translate to the modern API.
+  - When you create new `.ts` files inside a directory that has a `package.json {"type":"commonjs"}` override, TypeScript's `verbatimModuleSyntax` will reject every `import`/`export` statement. The fix is structural: either move the .ts files out of the CJS-typed directory, or move the .js artifacts into a deeper subdir so the parent dir is ESM. Renaming grammar.js to grammar.cjs is NOT viable — tree-sitter's CLI hardcodes the filename `grammar.js` and ignores any explicit path arg.
+  - `Parser.parse()` in web-tree-sitter v0.26 returns `Tree | null` (not just `Tree`), where null indicates the parse was canceled by a progress callback or there's no language set. Always null-check.
+  - In grammar.js, the `grammar_import` rule uses `field('path', $.STRING)`, where STRING is a token with surrounding quotes. `getImportPath` must strip both leading and trailing quote characters via `slice(1, -1)` (works for both single and double quotes since the regex matches either).
+
+---
+
+## 2026-05-06 - US-035
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Compiled `packages/langium-cli/src/grammar-parser/langium-grammar.wasm` (55KB) by running `tree-sitter generate` and `tree-sitter build --wasm` against grammar.js.
+- Generated C parser sources committed under `src/grammar-parser/src/` (grammar.json 54KB, node-types.json 30KB, parser.c 353KB, plus tree_sitter/{alloc,array,parser}.h).
+- Added `src/grammar-parser/package.json` with `"type": "commonjs"` and `src/grammar-parser/tree-sitter.json` (the latter scaffolded automatically by `tree-sitter generate`).
+- Fixed `RegexLiteral` in grammar.js: rewrote the regex `\/(?![*+?])(?:[^...]|...)+\/[a-z]*` as a `token(seq(...))` because tree-sitter's regex engine doesn't support the negative lookahead `(?![*+?])`. Semantics preserved via choice() over character classes for the first body char.
+- Wrote a smoke test (`packages/langium-cli/test-wasm-smoke.mjs`) that loads the WASM via `web-tree-sitter`, parses a 4-rule Arithmetic grammar, and asserts root type 'grammar' with no ERROR nodes. Ran it (output: `root type: grammar`, children include parser_rule × 3 and terminal_rule × 1, ERROR nodes: none), then deleted it before commit.
+- Files changed: `packages/langium-cli/src/grammar-parser/{grammar.js,langium-grammar.wasm,package.json,tree-sitter.json,src/...}`.
+- Typecheck (`npx tsc -p packages/langium-cli`) passes. Test run shows the same 119 pre-existing `Object.groupBy` failures as baseline — no regression.
+- **Learnings for future iterations:**
+  - Tree-sitter's bundled docker fallback hardcodes `emscripten/emsdk:3.1.64` which is amd64-only; on arm64 hosts that fallback fails silently with `exec format error`. Install emscripten locally via `apt-get install emscripten` (gives 3.1.69, works fine for `tree-sitter build --wasm`).
+  - `tree-sitter generate <path>` writes its output to the CWD's `src/`, NOT relative to the path argument. Must `cd src/grammar-parser` first (matches `build:grammar-wasm` npm script). Otherwise files land in `packages/langium-cli/src/` and pollute the source tree.
+  - `tree-sitter generate` auto-creates a `tree-sitter.json` next to grammar.js (and migrates the `tree-sitter` field out of any existing package.json). Both the directory's `package.json` (with `"type": "commonjs"`) and `tree-sitter.json` should be committed — they're load-bearing for re-running the build.
+  - web-tree-sitter v0.26.x changed the import shape: use `import { Parser, Language } from 'web-tree-sitter'` and `Language.load(path)` as a static method on `Language`, NOT `Parser.Language.load(...)`. The plan's smoke-test snippet uses the older v0.20 API.
+  - Tree-sitter's regex engine (the `regex-syntax` Rust crate) does not support look-around (`(?=)`, `(?!)`, `(?<=)`, `(?<!)`). When porting any regex from a Langium grammar/lexer, restructure as `token(seq(string-literal, choice(/charclass/, /\\./, ...), repeat(...), ...))` to express the same constraint without lookahead.
+  - The "unnecessary conflicts" warning emitted by `tree-sitter generate` (for the three feature_name conflicts in grammar.js) is informational only — the build still succeeds and the conflicts may become load-bearing once cross_reference grammar paths are exercised. Don't remove them just to silence the warning.
+
+---
+
+## 2026-05-06 - US-034
+- Created `packages/langium-cli/src/grammar-parser/grammar.js` with the full tree-sitter grammar for the Langium grammar language (verbatim from plan Task 2).
+- Includes 423 lines covering: grammar root, grammar_import, parser_rule, terminal_rule, infix_rule, interface_decl, type_decl, alternatives, assignment, cross_reference, action plus the full tree of supporting non-terminals.
+- Defines `word: $ => $.ID`, `extras` (whitespace + ML_COMMENT + SL_COMMENT), and three `conflicts` between feature_name and {simple_type, rule_call, terminal_rule_call}.
+- Includes `commaSep1` helper at bottom of file.
+- Files changed: `packages/langium-cli/src/grammar-parser/grammar.js` (new).
+- Verified `npx tsc -p packages/langium-cli` passes (no output) and `node` can require() the grammar.js module with stub globals — JS syntax is valid.
+- **Learnings for future iterations:**
+  - Tree-sitter `grammar.js` files are CommonJS (use `module.exports`) and reference globals like `grammar`, `seq`, `choice`, `repeat`, `field`, etc. that tree-sitter provides at generate time. Don't try to import them. To smoke-check JS syntax outside tree-sitter, stub these in via `node -e` before doing the real `tree-sitter generate`.
+  - When the plan says "copy verbatim from line N", the safest approach is to read that exact range of the plan and pass it through the Write tool unchanged — minor reflow can shift indentation that tree-sitter doesn't care about but reviewers will notice.
+  - The `grammar-parser/` directory was already empty in this branch (Chevrotain files were removed earlier than the file map suggests). Subsequent stories that "delete" those files (US-049) should treat them as already-deleted and just ensure the package.json deps are dropped.
+
+---
+
+## 2026-05-06 - US-033
+- Added `tree-sitter-cli: ^0.24.0` to `packages/langium-cli/package.json` devDependencies.
+- Added `build:grammar-wasm` npm script: `cd src/grammar-parser && tree-sitter generate && tree-sitter build --wasm`.
+- Ran `npm install` — tree-sitter binary hoisted to `node_modules/.bin/tree-sitter` (verified `npx tree-sitter --version` reports 0.24.7 from inside packages/langium-cli).
+- Files changed: `packages/langium-cli/package.json`, `package-lock.json`.
+- **Learnings for future iterations:**
+  - npm workspaces hoist binaries to the root `node_modules/.bin/`, so the literal acceptance criterion "node_modules/.bin/tree-sitter exists in the langium-cli package" is satisfied via npx resolution chain — don't expect a per-package `node_modules` to exist.
+  - The package-lock.json gets regenerated by npm install; commit it together with package.json.
+  - `npm install` warns about Node EBADENGINE (sandbox has 20.19.4, packages require >=20.10.0 — this is satisfied; the warning is for a different version mismatch elsewhere in the lockfile and is harmless).
+  - 119 pre-existing test failures in langium-cli stem from `Object.groupBy` (Node 21+) — verified by stashing my changes and re-running. Future stories should ignore these and focus on whether THEIR new tests pass.
+---
