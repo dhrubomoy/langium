@@ -291,6 +291,83 @@
       "priority": 18,
       "passes": true,
       "notes": "See Task 15 in docs/superpowers/plans/2026-05-04-langium-cli-treesitter-generators.md. Verification-only story — no new code. If any check fails, fix the underlying issue before marking complete. Depends on US-049."
+    },
+    {
+      "id": "US-051",
+      "title": "Initialize WasmLoader before starting the arithmetic language server",
+      "description": "As a developer, I need WasmLoader.init() called in main.ts before startLanguageServer so that document.treeSitterTree and document.documentIndex are always built for arithmetic documents.",
+      "acceptanceCriteria": [
+        "examples/arithmetics/src/language-server/main.ts calls arithmetics.parser.WasmLoader.init() and awaits it before calling startLanguageServer(shared)",
+        "A failure to initialize exits the process with code 1 and logs the error",
+        "npx tsc -p examples/arithmetics/tsconfig.src.json --noEmit produces no output",
+        "Typecheck passes"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": "See Task 1 in docs/superpowers/plans/2026-05-06-arithmetic-treesitter-end-to-end.md. Replace the entire body of main.ts with the snippet provided verbatim in the plan. The exact new content is shown on lines 58–79 of the plan."
+    },
+    {
+      "id": "US-052",
+      "title": "Wire definition, references, symbols, and rename handlers to tree-sitter providers",
+      "description": "As a developer, I need the four LSP request handlers in language-server.ts to prefer tree-sitter providers when document.documentIndex is set, falling back to Chevrotain providers for other languages.",
+      "acceptanceCriteria": [
+        "addGotoDefinitionHandler checks document.documentIndex and calls TreeSitterDefinitionProvider.getDefinition when set",
+        "addFindReferencesHandler checks document.documentIndex and calls TreeSitterReferencesProvider.findReferences when set",
+        "addDocumentSymbolHandler checks document.documentIndex and calls TreeSitterDocumentSymbolsProvider.getSymbols when set",
+        "addRenameHandler.onRenameRequest checks document.documentIndex and calls TreeSitterRenameProvider.rename when set; onPrepareRename is unchanged",
+        "Each handler falls back to the existing Chevrotain provider when documentIndex is absent",
+        "npx tsc -p packages/langium/tsconfig.json --noEmit produces no output",
+        "npx vitest run packages/langium/test/lsp/ passes",
+        "Typecheck passes"
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": "See Task 2 in docs/superpowers/plans/2026-05-06-arithmetic-treesitter-end-to-end.md. Exact replacement snippets for all four handler functions are provided verbatim in the plan (Steps 1–4). Modify packages/langium/src/lsp/language-server.ts only."
+    },
+    {
+      "id": "US-053",
+      "title": "Wire folding ranges handler to tree-sitter provider",
+      "description": "As a developer, I need addFoldingRangeHandler in language-server.ts to use TreeSitterFoldingRangeProvider when document.treeSitterTree is set, since folding takes rootNode not DocumentIndex.",
+      "acceptanceCriteria": [
+        "addFoldingRangeHandler checks document.treeSitterTree and calls TreeSitterFoldingRangeProvider.getFoldingRanges(tree.rootNode) when set",
+        "Falls back to the existing FoldingRangeProvider when treeSitterTree is absent",
+        "npx tsc -p packages/langium/tsconfig.json --noEmit produces no output",
+        "npx vitest run packages/langium/test/lsp/ passes",
+        "Typecheck passes"
+      ],
+      "priority": 21,
+      "passes": false,
+      "notes": "See Task 3 in docs/superpowers/plans/2026-05-06-arithmetic-treesitter-end-to-end.md. Exact replacement snippet for addFoldingRangeHandler is provided verbatim in the plan (Step 1). Modify packages/langium/src/lsp/language-server.ts only. Depends on US-052."
+    },
+    {
+      "id": "US-054",
+      "title": "Wire diagnostics handler to tree-sitter ParseError and CrossRef providers",
+      "description": "As a developer, I need addDiagnosticsHandler in language-server.ts to send tree-sitter diagnostics (parse errors + cross-ref errors) for documents that have documentIndex set, instead of the Chevrotain document.diagnostics array.",
+      "acceptanceCriteria": [
+        "addDiagnosticsHandler uses serviceRegistry.getServices(document.uri) to obtain per-language services",
+        "When document.documentIndex is set, diagnostics are sourced from ParseErrorDiagnosticsProvider.getDiagnostics and CrossRefDiagnosticsProvider.getDiagnostics",
+        "When documentIndex is absent, diagnostics fall back to document.diagnostics (unchanged Chevrotain path)",
+        "npx tsc -p packages/langium/tsconfig.json --noEmit produces no output",
+        "npx vitest run packages/langium passes",
+        "Typecheck passes"
+      ],
+      "priority": 22,
+      "passes": false,
+      "notes": "See Task 4 in docs/superpowers/plans/2026-05-06-arithmetic-treesitter-end-to-end.md. Exact replacement snippet for addDiagnosticsHandler is provided verbatim in the plan (Step 1). Modify packages/langium/src/lsp/language-server.ts only. Depends on US-053."
+    },
+    {
+      "id": "US-055",
+      "title": "Add end-to-end integration tests for the arithmetic tree-sitter LSP pipeline",
+      "description": "As a developer, I need integration tests that exercise every tree-sitter LSP provider end-to-end with a real parsed arithmetic document so that regressions are caught immediately.",
+      "acceptanceCriteria": [
+        "examples/arithmetics/test/arithmetics-treesitter.test.ts contains 6 tests covering: documentIndex populated with declarations, DocumentSymbols returns symbols, FoldingRanges spans multiple lines, DefinitionProvider resolves a cross-reference, CrossRefDiagnosticsProvider reports unresolved reference, ParseErrorDiagnosticsProvider returns no errors for a valid document",
+        "npx vitest run examples/arithmetics/test/arithmetics-treesitter.test.ts reports 6 tests passing",
+        "npx vitest run examples/arithmetics passes with no regressions",
+        "Typecheck passes"
+      ],
+      "priority": 23,
+      "passes": false,
+      "notes": "See Task 5 in docs/superpowers/plans/2026-05-06-arithmetic-treesitter-end-to-end.md. Replace the entire contents of arithmetics-treesitter.test.ts with the snippet provided verbatim in the plan (lines 317–409). Depends on US-054."
     }
   ]
 }
