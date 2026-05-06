@@ -34,6 +34,18 @@ Started: Tue  5 May 2026 20:34:51 EDT
 
 ---
 
+## 2026-05-06 - US-051
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Replaced `examples/arithmetics/src/language-server/main.ts` with the snippet from the plan: destructure `{ shared, arithmetics }` from `createArithmeticsServices`, call `arithmetics.parser.WasmLoader.init()`, and chain `.then(() => startLanguageServer(shared))` / `.catch(err => { console.error(...); process.exit(1); })`. The `WasmLoader` is wired into the per-language services container via `parser.WasmLoader` (see `packages/langium/src/services.ts:73` and `default-module.ts:70`), and `createArithmeticsServices` already returns `{ shared, arithmetics }` — no module-side changes needed.
+- Files changed: `examples/arithmetics/src/language-server/main.ts`, `.ralph/prd.json`, `.ralph/progress.txt`.
+- Verification: `npx tsc -p examples/arithmetics/tsconfig.src.json --noEmit` produces no output (typecheck clean).
+- **Learnings for future iterations:**
+  - The arithmetic example's service-DI structure already exposes `arithmetics` (not just `shared`) from `createArithmeticsServices`. Per-language services are reachable via `arithmetics.parser.WasmLoader` because `WasmLoader` lives in `LangiumDefaultCoreServices.parser` (per-language), not in shared services. When wiring tree-sitter init for OTHER languages, repeat the same pattern: pull the per-language container out of `createXyzServices`, init its `parser.WasmLoader`, then `startLanguageServer(shared)`.
+  - The `WasmLoader.init()` failure path is a common mistake: without `.catch(...)` the unhandled rejection silently kills the LSP without a useful error in the client log. Keep the `console.error('[…] Failed to initialize tree-sitter WASM:', err); process.exit(1)` pattern as standard.
+  - This story also fixes a real gap: previously the `WasmLoader` was constructed but never initialized in the live LSP, so `document.treeSitterTree` and `document.documentIndex` were never built. The Chevrotain pipeline always handled requests, even though the tree-sitter providers were registered. US-052–US-054 finish the wiring; US-051 is the unlock.
+
+---
+
 ## 2026-05-06 - US-050
 Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
 - Phase 1 verification story. Surfaced and fixed three real bugs that the earlier per-generator stories had missed because none ran a true e2e `npx langium generate` against a consumer grammar:

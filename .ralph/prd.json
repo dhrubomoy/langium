@@ -303,7 +303,7 @@
         "Typecheck passes"
       ],
       "priority": 19,
-      "passes": false,
+      "passes": true,
       "notes": "See Task 1 in docs/superpowers/plans/2026-05-06-arithmetic-treesitter-end-to-end.md. Replace the entire body of main.ts with the snippet provided verbatim in the plan. The exact new content is shown on lines 58–79 of the plan."
     },
     {

@@ -10,7 +10,11 @@ import { createConnection, ProposedFeatures } from 'vscode-languageserver/node.j
 import { createArithmeticsServices } from './arithmetics-module.js';
 
 const connection = createConnection(ProposedFeatures.all);
+const { shared, arithmetics } = createArithmeticsServices({ connection, ...NodeFileSystem });
 
-const { shared } = createArithmeticsServices({ connection, ...NodeFileSystem });
-
-startLanguageServer(shared);
+arithmetics.parser.WasmLoader.init()
+    .then(() => startLanguageServer(shared))
+    .catch(err => {
+        console.error('[arithmetics] Failed to initialize tree-sitter WASM:', err);
+        process.exit(1);
+    });
