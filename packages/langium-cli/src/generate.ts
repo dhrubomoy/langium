@@ -12,7 +12,7 @@ import { createGrammarDiagramHtml, createGrammarDiagramSvg } from 'langium-railr
 import { createLangiumGrammarServices, resolveImport, resolveImportUri, resolveTransitiveImports, type LangiumGrammarServices } from 'langium/grammar';
 import { NodeFileSystem } from 'langium/node';
 import * as path from 'path';
-import { generateAstMultiLanguageProject, generateAstSingleLanguageProject, getLanguageIdentifier, type LanguageInfo } from './generator/ast-generator.js';
+import { generateAstMultiLanguageProject, generateAstSingleLanguageProject, getLanguageIdentifier, type LanguageInfo } from './generator/ast-generator-legacy.js';
 import { generateBnf } from './generator/bnf-generator.js';
 import { serializeGrammar } from './generator/grammar-serializer.js';
 import { generateMonarch } from './generator/highlighting/monarch-generator.js';

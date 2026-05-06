@@ -115,7 +115,7 @@
         "Typecheck passes"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": "See Task 7 in docs/superpowers/plans/2026-05-04-langium-cli-treesitter-generators.md. Current file is 269 lines. The output format must remain identical — same TypeScript interface declarations and AstReflection. Follow TDD. Depends on US-038."
     },
     {
