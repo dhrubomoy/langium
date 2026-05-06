@@ -115,7 +115,7 @@ describe('file-writer serializeMetadata', () => {
 
     test('produces valid TypeScript exporting GRAMMAR_METADATA', async () => {
         const grammar = await parseGrammar(ARITHMETIC_GRAMMAR);
-        const { compileMetadata } = await import('../../../src/generator/treesitter/metadata-compiler.js');
+        const { compileMetadata } = await import('../../../src/generator/treesitter/metadata-compiler-legacy.js');
         const meta = compileMetadata(grammar);
         const ts = serializeMetadata(meta);
         expect(ts).toContain("import type { GrammarMetadata } from 'langium/generate';");
@@ -127,7 +127,7 @@ describe('file-writer serializeMetadata', () => {
 
     test('serialized metadata round-trips via JSON.parse on the body', async () => {
         const grammar = await parseGrammar(ARITHMETIC_GRAMMAR);
-        const { compileMetadata } = await import('../../../src/generator/treesitter/metadata-compiler.js');
+        const { compileMetadata } = await import('../../../src/generator/treesitter/metadata-compiler-legacy.js');
         const meta = compileMetadata(grammar);
         const ts = serializeMetadata(meta);
         const match = ts.match(/= (\{[\s\S]*\});\n$/);

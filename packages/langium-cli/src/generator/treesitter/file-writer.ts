@@ -15,7 +15,7 @@ import {
     compileTerminalRuleEntry,
     compileWord
 } from './grammar-js-compiler-legacy.js';
-import { compileMetadata } from './metadata-compiler.js';
+import { compileMetadata } from './metadata-compiler-legacy.js';
 
 const COPYRIGHT_HEADER = `/******************************************************************************
  * Copyright 2026 TypeFox GmbH

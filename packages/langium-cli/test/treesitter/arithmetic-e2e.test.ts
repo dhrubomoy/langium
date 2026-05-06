@@ -13,7 +13,7 @@ import * as path from 'path';
 import * as url from 'url';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { emitTreeSitterArtifacts } from '../../src/generator/treesitter/file-writer.js';
-import { compileMetadata } from '../../src/generator/treesitter/metadata-compiler.js';
+import { compileMetadata } from '../../src/generator/treesitter/metadata-compiler-legacy.js';
 
 const services = createLangiumGrammarServices(EmptyFileSystem);
 const parse = parseHelper<Grammar>(services.grammar);

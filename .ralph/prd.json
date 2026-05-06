@@ -179,7 +179,7 @@
         "Typecheck passes"
       ],
       "priority": 11,
-      "passes": false,
+      "passes": true,
       "notes": "See Task 10 Steps 5-7 in docs/superpowers/plans/2026-05-04-langium-cli-treesitter-generators.md. Current file is 169 lines. Same substitution pattern as US-042. Depends on US-042."
     },
     {
