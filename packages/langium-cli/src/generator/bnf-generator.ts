@@ -1,254 +1,79 @@
 /******************************************************************************
- * Copyright 2025 TypeFox GmbH
+ * Copyright 2026 TypeFox GmbH
  * This program and the accompanying materials are made available under the
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
 
-import { CstUtils, GrammarAST as ast, type Grammar } from 'langium';
-import { EOL } from 'langium/generate';
-import _ from 'lodash';
+import type { SyntaxNode, ParsedGrammarSet } from '../grammar-parser/grammar-parser.js';
+import { getRules, getTerminals, getRuleName } from '../grammar-parser/grammar-queries.js';
 
-export function generateBnf(grammars: Grammar[], options: GeneratorOptions = { dialect: 'GBNF' }): string {
-    const grammarsWithName = grammars.filter(grammar => !!grammar.name);
-
-    const isHiddenTerminalRule = (rule: ast.AbstractRule): boolean => {
-        return ast.isTerminalRule(rule) && rule.hidden;
-    };
-
-    const ctx: GeneratorContext = {
-        rootAssigned: options.dialect === 'EBNF',
-        hasHiddenRules: grammarsWithName.some(grammar => grammar.rules.some(isHiddenTerminalRule)),
-        dialect: options.dialect,
-        commentStyle: options.commentStyle ?? (options.dialect === 'GBNF' ? 'hash' : 'parentheses')
-    };
-
-    const hiddenRules: ast.AbstractRule[] = [];
-
-    let result: string = '';
-    grammarsWithName.forEach(grammar => {
-        grammar.rules.forEach(rule => {
-            result += processRule(rule, ctx);
-            result += EOL + EOL;
-            if (isHiddenTerminalRule(rule)) {
-                hiddenRules.push(rule);
-            }
-        });
-    });
-
-    if (hiddenRules.length > 0) {
-        result += `${processName('HIDDEN', ctx)} ::= ( ${hiddenRules.map(rule => processName(rule.name, ctx)).join(' | ')} )${EOL}`;
-    }
-    return result;
+export interface BnfOptions {
+    dialect?: 'EBNF' | 'GBNF';
 }
 
-function processRule(rule: ast.AbstractRule, ctx: GeneratorContext): string {
-    const markRoot = !ctx.rootAssigned && ast.isParserRule(rule) && rule.entry;
-    if (markRoot) {
-        ctx.rootAssigned = true;
-    }
-
-    // GBNF expects 'root' as the root rule name, Lark e.g. expects 'start'.
-    const ruleComment = processComment(rule, ctx);
-    const hiddenPrefix = (ast.isTerminalRule(rule) && !rule.hidden) ? hiddenRuleCall(ctx) : '';
-    const ruleName = markRoot ? 'root' : rule.name;
-    if (ast.isParserRule(rule) && rule.parameters.length > 0) {
-        // parser rule with parameters
-        const variations: Array<Record<string, boolean>> = parserRuleVariations(rule.parameters);
-        let content = '';
-        variations.forEach((variation, idx) => {
-            const variationCtx = { ...ctx, parserRuleVariation: variation };
-            content += `${ruleComment}${processName(ruleName, variationCtx, variation)} ::= ${hiddenPrefix}${processElement(rule.definition, variationCtx)}`;
-            if (idx < variations.length - 1) {
-                content += EOL;
-            }
-        });
-        return content;
-    }
-    if (ast.isInfixRule(rule)) {
-        return `${ruleComment}${processName(ruleName, ctx)} ::= ${hiddenPrefix}${processInfix(rule, ctx)}`;
-    } else {
-        return `${ruleComment}${processName(ruleName, ctx)} ::= ${hiddenPrefix}${processElement(rule.definition, ctx)}`;
-    }
-}
-
-function processInfix(rule: ast.InfixRule, ctx: GeneratorContext): string {
-    const infixRuleName = processName(rule.name, ctx);
-    const variation = collectArguments(rule.call.rule.ref, rule.call.arguments, ctx);
-    const ruleName = rule.call.rule.ref?.name ?? rule.call.rule.$refText;
-    const call = processName(ruleName, ctx, variation);
-    const operators = rule.operators.precedences.flatMap(prec => prec.operators.map(op => `"${op.value}"`));
-    const allOperators = `(${operators.join(' | ')})`;
-    return `${infixRuleName} ::= ${call} (${allOperators} ${call})*`;
-}
-
-function processElement(element: ast.AbstractElement, ctx: GeneratorContext): string {
-    const processRecursively = (element: ast.AbstractElement) => {
-        return processElement(element, ctx);
-    };
-    if (ast.isKeyword(element)) {
-        return `${hiddenRuleCall(ctx)}"${element.value}"`;
-    } else if (ast.isGroup(element) || ast.isTerminalGroup(element)) {
-        if (ast.isGroup(element) && element.guardCondition && !evaluateCondition(element.guardCondition, ctx)) {
-            // Skip group if guard condition is false
-            return ' ';
+export function generateBnf(set: ParsedGrammarSet, options: BnfOptions = { dialect: 'GBNF' }): string {
+    void options;
+    const lines: string[] = [];
+    for (const root of set.values()) {
+        for (const rule of [...getRules(root), ...getTerminals(root)]) {
+            const name = getRuleName(rule);
+            const def = rule.childForFieldName('definition');
+            const rhs = def ? nodeToEbnf(def) : '/* empty */';
+            lines.push(`${name} ::= ${rhs}`);
         }
-        const content = element.elements.map(processRecursively).filter(notEmpty).join(' ');
-        if (element.cardinality && notEmpty(content)) {
-            return `( ${content} )${processCardinality(element)}`;
-        }
-        return content;
-    } else if (ast.isAssignment(element)) {
-        return processRecursively(element.terminal) + processCardinality(element);
-    } else if (ast.isRuleCall(element) || ast.isTerminalRuleCall(element)) {
-        const variation = ast.isRuleCall(element) ? collectArguments(element.rule.ref, element.arguments, ctx) : undefined;
-        const ruleName = element.rule.ref?.name ?? element.rule.$refText;
-        return processName(ruleName, ctx, variation) + processCardinality(element);
-    } else if (ast.isAlternatives(element) || ast.isTerminalAlternatives(element)) {
-        const content = element.elements.map(processRecursively).filter(notEmpty).join(' | ');
-        if (notEmpty(content)) {
-            return '(' + content + ')' + processCardinality(element);
-        }
-        return '';
-    } else if (ast.isRegexToken(element)) {
-        // First remove trailing and leading slashes. Replace escaped slashes `\/` with unescaped slashes `/`.
-        return element.regex.replace(/(^|[^\\])\//g, (_, p1) => p1 + '').replace(/\\\//g, '/');
-    } else if (ast.isCrossReference(element)) {
-        return (element.terminal ? processRecursively(element.terminal) : 'ID') + processCardinality(element);
-    } else if (ast.isAction(element)) {
-        return '';
     }
-    console.error(`Not handled AbstractElement type: ${element?.$type}`);
-    return `not-handled-(${element?.$type})`;
+    return lines.join('\n\n');
 }
 
-function processCardinality(element: ast.AbstractElement): string {
-    return element.cardinality ?? '';
+function namedChildrenNonNull(node: SyntaxNode): SyntaxNode[] {
+    return node.namedChildren.filter((c): c is SyntaxNode => c !== null);
 }
 
-function processName(ruleName: string, ctx: GeneratorContext, parserRuleVariation?: Record<string, boolean>): string {
-    const name = parserRuleVariation
-        ? `${ruleName}${Object.entries(parserRuleVariation)
-            .filter(entry => entry[1]).map(entry => entry[0].charAt(0).toUpperCase() + entry[0].slice(1))
-            .join('')}`
-        : ruleName;
-    switch (ctx.dialect) {
-        case 'GBNF':
-            // convert camel case to Kebab Case for GBNF (GGML AI)
-            return _.kebabCase(name);
-        case 'EBNF':
-            return `<${name}>`;
+function nodeToEbnf(node: SyntaxNode): string {
+    switch (node.type) {
+        case 'alternatives':
+        case 'assignable_alternatives':
+        case 'terminal_alternatives': {
+            const parts = namedChildrenNonNull(node).map(nodeToEbnf).filter(Boolean);
+            return parts.join(' | ');
+        }
+        case 'conditional_branch':
+        case 'unordered_group':
+        case 'group':
+        case 'terminal_group':
+            return namedChildrenNonNull(node).map(nodeToEbnf).filter(Boolean).join(' ');
+        case 'abstract_token':
+        case 'abstract_token_with_cardinality':
+        case 'terminal_token': {
+            const children = namedChildrenNonNull(node);
+            const last = children[children.length - 1];
+            const card = last?.type === 'cardinality' ? last.text : '';
+            const inner = children.filter(c => c.type !== 'cardinality').map(nodeToEbnf).join('');
+            return card ? `(${inner})${card}` : inner;
+        }
+        case 'assignment': {
+            const feature = node.childForFieldName('feature')?.text ?? '';
+            const terminal = node.childForFieldName('terminal');
+            return terminal ? nodeToEbnf(terminal) : feature;
+        }
+        case 'keyword':
+            return node.childForFieldName('value')?.text ?? node.text;
+        case 'rule_call':
+        case 'terminal_rule_call':
+            return node.childForFieldName('rule')?.text ?? node.text;
+        case 'cross_reference':
+            return `[${node.childForFieldName('type')?.text ?? ''}]`;
+        case 'regex_token':
+        case 'terminal_token_element':
+        case 'character_range':
+            return node.text;
+        case 'parenthesized_element':
+        case 'parenthesized_assignable':
+        case 'parenthesized_terminal':
+            return `(${namedChildrenNonNull(node).map(nodeToEbnf).join('')})`;
         default:
-            return name;
+            return node.namedChildCount > 0
+                ? namedChildrenNonNull(node).map(nodeToEbnf).filter(Boolean).join(' ')
+                : '';
     }
 }
-
-function processComment(rule: ast.AbstractRule, ctx: GeneratorContext) {
-    const comment = CstUtils.findCommentNode(rule.$cstNode, ['ML_COMMENT'])?.text
-        ?.replace(/\r?\n|\r/g, ' ') // Replace line breaks
-        ?.replace(/^\/\*\s*/, '')   // Remove leading `/*`
-        ?.replace(/\s*\*\/$/, '');  // Remove trailing `*/`
-    if (comment && comment.trim().length > 0) {
-        switch (ctx.commentStyle) {
-            case 'skip':
-                return ' ';
-            case 'parentheses':
-                return `(* ${comment} *)${EOL}`;
-            case 'slash':
-                return `/* ${comment} */${EOL}`;
-            case 'hash':
-                return `# ${comment}${EOL}`;
-        }
-    }
-    return '';
-}
-
-/**
- * Generates a call to the `HIDDEN` rule with a trailing space, if there are hidden rules in the grammar.
- * @param ctx GeneratorContext
- * @returns `HIDDEN* ` if there are hidden rules in the grammar.
- */
-function hiddenRuleCall(ctx: GeneratorContext): string {
-    return ctx.hasHiddenRules ? (processName('HIDDEN', ctx) + '* ') : '';
-}
-
-function notEmpty(text: string): boolean {
-    return text.trim().length > 0;
-}
-
-/**
- * @param params parserRule parameters
- * @returns all possible combination of guards for the parserRule - 2^params.length
- */
-function parserRuleVariations(params: ast.Parameter[]): Array<Record<string, boolean>> {
-    const variationsCount = Math.pow(2, params.length);
-    const variations: Array<Record<string, boolean>> = [];
-    for (let i = 0; i < variationsCount; i++) {
-        const variation: Record<string, boolean> = {};
-        params.map((param, index) => {
-            // eslint-disable-next-line no-bitwise
-            const isTrue = (i & (1 << index)) !== 0;
-            return variation[param.name] = isTrue;
-        });
-        variations.push(variation);
-    }
-    return variations;
-}
-
-function collectArguments(rule: ast.AbstractRule | undefined, namedArgs: ast.NamedArgument[], ctx: GeneratorContext): Record<string, boolean> | undefined {
-    if (ast.isParserRule(rule) && namedArgs.length > 0 && rule.parameters.length === namedArgs.length) {
-        const variation: Record<string, boolean> = {};
-        namedArgs.forEach((arg, idx) => {
-            variation[rule.parameters[idx].name] = evaluateCondition(arg.value, ctx);
-        });
-        return variation;
-    }
-    return undefined;
-}
-
-function evaluateCondition(condition: ast.Condition, ctx: GeneratorContext): boolean {
-    switch (condition.$type) {
-        case 'BooleanLiteral':
-            return condition.true;
-        case 'Conjunction':
-            return evaluateCondition(condition.left, ctx) && evaluateCondition(condition.right, ctx);
-        case 'Disjunction':
-            return evaluateCondition(condition.left, ctx) || evaluateCondition(condition.right, ctx);
-        case 'Negation':
-            return !evaluateCondition(condition.value, ctx);
-        case 'ParameterReference': {
-            if (!ctx.parserRuleVariation) {
-                return false;
-            }
-            return ctx.parserRuleVariation[condition.parameter.ref?.name ?? condition.parameter.$refText];
-        }
-        default:
-            throw new Error(`Unhandled Condition type: ${(condition as ast.Condition).$type}`);
-    }
-}
-
-/**
- * Default: GBNF
- * EBNF doesn't support RegEx terminal rules.
- */
-export type BnfDialect = 'GBNF' | 'EBNF';
-
-/**
- * By default, comments are generated according to the dialect.
- * Use this option to force a specific comment style.
- * Use `parentheses` for `(* comment *)`, `slash` for `/* comment *\/`, `hash` for `# comment`
- * and `skip` to disable comment generation.
- */
-export type CommentStyle = 'skip' | 'parentheses' | 'slash' | 'hash';
-
-export type GeneratorOptions = {
-    dialect: BnfDialect;
-    commentStyle?: CommentStyle;
-};
-
-type GeneratorContext = GeneratorOptions & {
-    rootAssigned: boolean;
-    hasHiddenRules: boolean;
-    commentStyle: CommentStyle;
-    parserRuleVariation?: Record<string, boolean>;
-};
-
