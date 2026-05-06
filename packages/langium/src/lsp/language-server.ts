@@ -368,6 +368,7 @@ export function addFileOperationHandler(connection: Connection, services: Langiu
 
 export function addDiagnosticsHandler(connection: Connection, services: LangiumSharedServices): void {
     const documentBuilder = services.workspace.DocumentBuilder;
+    const serviceRegistry = services.ServiceRegistry;
     documentBuilder.onUpdate(async (_, deleted) => {
         for (const uri of deleted) {
             connection.sendDiagnostics({
@@ -377,7 +378,16 @@ export function addDiagnosticsHandler(connection: Connection, services: LangiumS
         }
     });
     documentBuilder.onDocumentPhase(DocumentState.Validated, async (document) => {
-        if (document.diagnostics) {
+        const index = document.documentIndex;
+        if (index && serviceRegistry.hasServices(document.uri)) {
+            const lang: LangiumCoreAndPartialLSPServices = serviceRegistry.getServices(document.uri);
+            const parseErrors = lang.lsp?.ParseErrorDiagnosticsProvider?.getDiagnostics(index) ?? [];
+            const crossRefErrors = lang.lsp?.CrossRefDiagnosticsProvider?.getDiagnostics(index) ?? [];
+            connection.sendDiagnostics({
+                uri: document.uri.toString(),
+                diagnostics: [...parseErrors, ...crossRefErrors]
+            });
+        } else if (document.diagnostics) {
             connection.sendDiagnostics({
                 uri: document.uri.toString(),
                 diagnostics: document.diagnostics
