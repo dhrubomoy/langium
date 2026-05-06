@@ -16,8 +16,8 @@ import { generateAstMultiLanguageProject, generateAstSingleLanguageProject, getL
 import { generateBnf } from './generator/bnf-generator-legacy.js';
 import { serializeGrammar } from './generator/grammar-serializer.js';
 import { generateMonarch } from './generator/highlighting/monarch-generator-legacy.js';
-import { generatePrismHighlighting } from './generator/highlighting/prism-generator.js';
-import { generateTextMate } from './generator/highlighting/textmate-generator.js';
+import { generatePrismHighlighting } from './generator/highlighting/prism-generator-legacy.js';
+import { generateTextMate } from './generator/highlighting/textmate-generator-legacy.js';
 import { getTime, log } from './generator/langium-util.js';
 import { generateModule } from './generator/module-generator-legacy.js';
 import { elapsedTime, getUserChoice, schema } from './generator/node-util.js';

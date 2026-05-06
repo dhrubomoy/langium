@@ -3,14 +3,10 @@
  * This program and the accompanying materials are made available under the
  * terms of the MIT License, which is available in the project root.
  ******************************************************************************/
+import { GrammarAST, type Grammar, GrammarUtils, RegExpUtils } from 'langium';
 import { expandToNode, joinToNode, toString, type Generated } from 'langium/generate';
-import type { ParsedGrammarSet, SyntaxNode } from '../../grammar-parser/grammar-parser.js';
-import {
-    getRules, getTerminals, getRuleName, getTerminalPattern,
-    isHiddenTerminal,
-} from '../../grammar-parser/grammar-queries.js';
-import { collectKeywords } from '../langium-util.js';
 import type { LangiumLanguageConfig } from '../../package-types.js';
+import { collectKeywords } from '../langium-util-legacy.js';
 
 interface HighlightElement {
     pattern: string;
@@ -20,32 +16,32 @@ interface HighlightElement {
 type PrismHighlighter = Record<string, HighlightElement | HighlightElement[]>;
 
 const idRegex = /^[a-zA-Z_]+$/;
-export function generatePrismHighlighting(set: ParsedGrammarSet, config: LangiumLanguageConfig): string {
+export function generatePrismHighlighting(grammar: Grammar, config: LangiumLanguageConfig): string {
     const highlighter: PrismHighlighter = {};
-    const keywords = collectKeywords(set);
-    const terminals = getAllTerminals(set);
+    const keywords = collectKeywords(grammar);
+    const terminals = getTerminals(grammar);
     const modifier = config.caseInsensitive ? 'i' : '';
 
-    const commentTerminals = terminals.filter(isCommentTerminal);
+    const commentTerminals = terminals.filter(GrammarUtils.isCommentTerminal);
     if (commentTerminals.length === 1) {
         highlighter.comment = {
-            pattern: terminalRegex(commentTerminals[0]).toString(),
+            pattern: GrammarUtils.terminalRegex(commentTerminals[0]).toString(),
             greedy: true
         };
     } else if (commentTerminals.length > 0) {
         highlighter.comment = commentTerminals.map(e => ({
-            pattern: terminalRegex(e).toString(),
+            pattern: GrammarUtils.terminalRegex(e).toString(),
             greedy: true
         }));
     }
-    const stringTerminal = terminals.find(e => getRuleName(e).toLowerCase() === 'string');
+    const stringTerminal = terminals.find(e => e.name.toLowerCase() === 'string');
     if (stringTerminal) {
         highlighter.string = {
-            pattern: terminalRegex(stringTerminal).toString(),
+            pattern: GrammarUtils.terminalRegex(stringTerminal).toString(),
             greedy: true
         };
     }
-    const filteredKeywords = keywords.filter(e => idRegex.test(e)).sort((a, b) => b.length - a.length).map(escapeRegExp);
+    const filteredKeywords = keywords.filter(e => idRegex.test(e)).sort((a, b) => b.length - a.length).map(RegExpUtils.escapeRegExp);
     highlighter.keyword = {
         pattern: `/\\b(${filteredKeywords.join('|')})\\b/${modifier}`
     };
@@ -92,49 +88,6 @@ function generateElement(element: HighlightElement): Generated {
     `;
 }
 
-function getAllTerminals(set: ParsedGrammarSet): SyntaxNode[] {
-    const result: SyntaxNode[] = [];
-    for (const root of set.values()) {
-        for (const t of [...getRules(root), ...getTerminals(root)]) {
-            if (t.type !== 'terminal_rule') continue;
-            result.push(t);
-        }
-    }
-    return result;
-}
-
-// ─── Local RegExp / terminal helpers (replacements for langium's RegExpUtils + GrammarUtils) ──
-
-function terminalRegex(rule: SyntaxNode): RegExp {
-    const pattern = getTerminalPattern(rule);
-    if (!pattern) return new RegExp('');
-    const inner = pattern.replace(/^\/|\/[a-z]*$/g, '');
-    try {
-        return new RegExp(inner);
-    } catch {
-        return new RegExp('');
-    }
-}
-
-function isCommentTerminal(rule: SyntaxNode): boolean {
-    if (!isHiddenTerminal(rule)) return false;
-    return !isWhitespace(terminalRegex(rule));
-}
-
-const whitespaceCharacters = (
-    '\f\n\r\t\v\u0020\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007' +
-    '\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff').split('');
-
-function isWhitespace(value: RegExp | string): boolean {
-    const regexp = typeof value === 'string' ? safeRegExp(value) : value;
-    if (!regexp) return false;
-    return whitespaceCharacters.some(ws => regexp.test(ws));
-}
-
-function safeRegExp(src: string): RegExp | null {
-    try { return new RegExp(src); } catch { return null; }
-}
-
-function escapeRegExp(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function getTerminals(grammar: Grammar): GrammarAST.TerminalRule[] {
+    return grammar.rules.filter(GrammarAST.isTerminalRule);
 }

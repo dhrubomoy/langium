@@ -3,10 +3,13 @@
  * This program and the accompanying materials are made available under the
  * terms of the MIT License, which is available in the project root.
 ******************************************************************************/
-import type { Grammar } from 'langium';
-import { GrammarAST, GrammarUtils, RegExpUtils, stream } from 'langium';
+import type { ParsedGrammarSet, SyntaxNode } from '../../grammar-parser/grammar-parser.js';
+import {
+    getRules, getTerminals, getRuleName, getTerminalPattern,
+    isHiddenTerminal,
+} from '../../grammar-parser/grammar-queries.js';
+import { collectKeywords } from '../langium-util.js';
 import type { LangiumLanguageConfig } from '../../package-types.js';
-import { collectKeywords } from '../langium-util-legacy.js';
 
 /* eslint-disable dot-notation */
 
@@ -47,70 +50,73 @@ interface Captures {
     [captureId: string]: Pattern;
 }
 
-export function generateTextMate(grammar: Grammar, config: LangiumLanguageConfig): string {
+export function generateTextMate(set: ParsedGrammarSet, config: LangiumLanguageConfig): string {
     const json: TextMateGrammar = {
         name: config.id,
         scopeName: `source.${config.id}`,
         fileTypes: config.fileExtensions ?? [],
-        patterns: getPatterns(grammar, config),
-        repository: getRepository(grammar, config)
+        patterns: getPatterns(set, config),
+        repository: getRepository(set, config)
     };
 
     return JSON.stringify(json, null, 2) + '\n';
 }
 
-function getPatterns(grammar: Grammar, config: LangiumLanguageConfig): Pattern[] {
+function getPatterns(set: ParsedGrammarSet, config: LangiumLanguageConfig): Pattern[] {
     const patterns: Pattern[] = [];
     patterns.push({
         include: '#comments'
     });
-    patterns.push(getControlKeywords(grammar, config));
-    patterns.push(...getStringPatterns(grammar, config));
+    patterns.push(getControlKeywords(set, config));
+    patterns.push(...getStringPatterns(set, config));
     return patterns;
 }
 
-function getRepository(grammar: Grammar, config: LangiumLanguageConfig): Repository {
+function getRepository(set: ParsedGrammarSet, config: LangiumLanguageConfig): Repository {
     const repository: Repository = {};
     const commentPatterns: Pattern[] = [];
     let stringEscapePattern: Pattern | undefined;
-    for (const rule of grammar.rules) {
-        if (GrammarAST.isTerminalRule(rule) && GrammarUtils.isCommentTerminal(rule)) {
-            const parts = RegExpUtils.getTerminalParts(GrammarUtils.terminalRegex(rule));
-            for (const part of parts) {
-                if (part.end) {
-                    commentPatterns.push({
-                        'name': `comment.block.${config.id}`,
-                        'begin': part.start,
-                        'beginCaptures': {
-                            '0': {
-                                'name': `punctuation.definition.comment.${config.id}`
+    for (const root of set.values()) {
+        for (const rule of [...getRules(root), ...getTerminals(root)]) {
+            if (rule.type !== 'terminal_rule') continue;
+            if (isCommentTerminal(rule)) {
+                const parts = getTerminalParts(terminalRegex(rule));
+                for (const part of parts) {
+                    if (part.end) {
+                        commentPatterns.push({
+                            'name': `comment.block.${config.id}`,
+                            'begin': part.start,
+                            'beginCaptures': {
+                                '0': {
+                                    'name': `punctuation.definition.comment.${config.id}`
+                                }
+                            },
+                            'end': part.end,
+                            'endCaptures': {
+                                '0': {
+                                    'name': `punctuation.definition.comment.${config.id}`
+                                }
                             }
-                        },
-                        'end': part.end,
-                        'endCaptures': {
-                            '0': {
-                                'name': `punctuation.definition.comment.${config.id}`
-                            }
-                        }
-                    });
-                } else {
-                    commentPatterns.push({
-                        'begin': part.start,
-                        'beginCaptures': {
-                            '1': {
-                                'name': `punctuation.whitespace.comment.leading.${config.id}`
-                            }
-                        },
-                        'end': '(?=$)',
-                        'name': `comment.line.${config.id}`
-                    });
+                        });
+                    } else {
+                        commentPatterns.push({
+                            'begin': part.start,
+                            'beginCaptures': {
+                                '1': {
+                                    'name': `punctuation.whitespace.comment.leading.${config.id}`
+                                }
+                            },
+                            'end': '(?=$)',
+                            'name': `comment.line.${config.id}`
+                        });
+                    }
                 }
+            } else if (getRuleName(rule).toLowerCase() === 'string') {
+                stringEscapePattern = {
+                    'name': `constant.character.escape.${config.id}`,
+                    'match': '\\\\(x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|u\\{[0-9A-Fa-f]+\\}|[0-2][0-7]{0,2}|3[0-6][0-7]?|37[0-7]?|[4-7][0-7]?|.|$)'
+                };
             }
-        } else if (GrammarAST.isTerminalRule(rule) && rule.name.toLowerCase() === 'string') {
-            stringEscapePattern = {
-                'name': `constant.character.escape.${config.id}`,
-                'match': '\\\\(x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|u\\{[0-9A-Fa-f]+\\}|[0-2][0-7]{0,2}|3[0-6][0-7]?|37[0-7]?|[4-7][0-7]?|.|$)'
-            };
         }
     }
 
@@ -125,9 +131,9 @@ function getRepository(grammar: Grammar, config: LangiumLanguageConfig): Reposit
     return repository;
 }
 
-function getControlKeywords(grammar: Grammar, pack: LangiumLanguageConfig): Pattern {
+function getControlKeywords(set: ParsedGrammarSet, pack: LangiumLanguageConfig): Pattern {
     const regex = /[A-Za-z]/;
-    const controlKeywords = collectKeywords(grammar).filter(kw => regex.test(kw));
+    const controlKeywords = collectKeywords(set).filter(kw => regex.test(kw));
     const groups = groupKeywords(controlKeywords);
     return {
         'name': `keyword.control.${pack.id}`,
@@ -144,7 +150,7 @@ function groupKeywords(keywords: string[]): string[] {
     } = { letter: [], leftSpecial: [], rightSpecial: [], special: [] };
 
     keywords.forEach(keyword => {
-        const keywordPattern = RegExpUtils.escapeRegExp(keyword);
+        const keywordPattern = escapeRegExp(keyword);
         if (/\w/.test(keyword[0])) {
             if (/\w/.test(keyword[keyword.length - 1])) {
                 groups.letter.push(keywordPattern);
@@ -168,12 +174,21 @@ function groupKeywords(keywords: string[]): string[] {
     return res;
 }
 
-function getStringPatterns(grammar: Grammar, pack: LangiumLanguageConfig): Pattern[] {
-    const terminals = stream(grammar.rules).filter(GrammarAST.isTerminalRule);
-    const stringTerminal = terminals.find(e => e.name.toLowerCase() === 'string');
+function getStringPatterns(set: ParsedGrammarSet, pack: LangiumLanguageConfig): Pattern[] {
+    let stringTerminal: SyntaxNode | undefined;
+    for (const root of set.values()) {
+        for (const t of [...getRules(root), ...getTerminals(root)]) {
+            if (t.type !== 'terminal_rule') continue;
+            if (getRuleName(t).toLowerCase() === 'string') {
+                stringTerminal = t;
+                break;
+            }
+        }
+        if (stringTerminal) break;
+    }
     const stringPatterns: Pattern[] = [];
     if (stringTerminal) {
-        const parts = RegExpUtils.getTerminalParts(GrammarUtils.terminalRegex(stringTerminal));
+        const parts = getTerminalParts(terminalRegex(stringTerminal));
         for (const part of parts) {
             if (part.end) {
                 stringPatterns.push({
@@ -202,4 +217,51 @@ function delimiterName(delimiter: string): string {
     } else {
         return 'delimiter';
     }
+}
+
+// ─── Local RegExp / terminal helpers (replacements for langium's RegExpUtils + GrammarUtils) ──
+
+function terminalRegex(rule: SyntaxNode): RegExp {
+    const pattern = getTerminalPattern(rule);
+    if (!pattern) return new RegExp('');
+    const inner = pattern.replace(/^\/|\/[a-z]*$/g, '');
+    try {
+        return new RegExp(inner);
+    } catch {
+        return new RegExp('');
+    }
+}
+
+function isCommentTerminal(rule: SyntaxNode): boolean {
+    if (!isHiddenTerminal(rule)) return false;
+    return !isWhitespace(terminalRegex(rule));
+}
+
+const whitespaceCharacters = (
+    '\f\n\r\t\v\u0020\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007' +
+    '\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff').split('');
+
+function isWhitespace(value: RegExp | string): boolean {
+    const regexp = typeof value === 'string' ? safeRegExp(value) : value;
+    if (!regexp) return false;
+    return whitespaceCharacters.some(ws => regexp.test(ws));
+}
+
+function safeRegExp(src: string): RegExp | null {
+    try { return new RegExp(src); } catch { return null; }
+}
+
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function getTerminalParts(regexp: RegExp | string): Array<{ start: string, end: string }> {
+    const src = typeof regexp === 'string' ? regexp : regexp.source;
+    const startMatch = src.match(/^(?:\\.)+/);
+    const endMatch = src.match(/(?:\\.)+$/);
+    if (startMatch && endMatch && startMatch.index !== endMatch.index) {
+        const decode = (s: string) => s.replace(/\\(.)/g, '$1');
+        return [{ start: decode(startMatch[0]), end: decode(endMatch[0]) }];
+    }
+    return [];
 }
