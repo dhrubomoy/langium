@@ -274,7 +274,7 @@
         "Typecheck passes"
       ],
       "priority": 17,
-      "passes": false,
+      "passes": true,
       "notes": "See Task 14 in docs/superpowers/plans/2026-05-04-langium-cli-treesitter-generators.md. Only delete files confirmed unreferenced after generate.ts refactor in US-047/US-048. Run npm install after editing package.json. Depends on US-048."
     },
     {
