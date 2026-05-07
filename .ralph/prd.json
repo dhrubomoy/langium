@@ -419,13 +419,14 @@
       "description": "As a developer, I need a Playwright test that verifies find-references works end-to-end in Monaco, driven by the tree-sitter ReferencesProvider.",
       "acceptanceCriteria": [
         "A test 'find-references shows all usages of a declaration' is added to packages/langium-web/tests/e2e/editor.spec.ts",
-        "Test positions the cursor on the declaration of 'a' (line 3) in the initial editor content, triggers Shift+F12 (Find All References), and verifies the references peek widget or panel becomes visible",
-        "npx playwright test --grep 'find-references' (run from packages/langium-web with dev server running) exits 0",
+        "Test positions cursor on the 'a' declaration (line 3), triggers Shift+F12, and asserts that .zone-widget or .monaco-peekview-widget becomes visible within 10 seconds",
+        "cd packages/langium-web && npx playwright test --grep 'find-references' exits 0",
+        "Tests pass",
         "Typecheck passes"
       ],
       "priority": 27,
       "passes": false,
-      "notes": "The initial editor code (arithmeticsConfig.ts) has 'def a: 5;' on line 3 and 'def c: a + b;' on line 5 — 'a' on line 5 is a cross-reference (PrimaryExpression.func, isRef:true in metadata; parens are optional so bare 'a' is also indexed). Shift+F12 triggers Find All References in Monaco. The references peek widget renders as .zone-widget or .monaco-peekview-widget. Position cursor at line 3 (declaration), trigger Shift+F12, assert widget becomes visible. Depends on US-058."
+      "notes": "The initial editor code (arithmeticsConfig.ts) has 'def a: 5;' on line 3 and 'def c: a + b;' on line 5 — 'a' on line 5 is a cross-reference (PrimaryExpression.func with isRef:true; parens are optional so bare 'a' is also indexed). Shift+F12 triggers Find All References in Monaco. The references peek widget renders as .zone-widget or .monaco-peekview-widget. Depends on US-058."
     },
     {
       "id": "US-060",
@@ -433,26 +434,29 @@
       "description": "As a developer, I need a Playwright test that verifies rename works end-to-end in Monaco, driven by the tree-sitter RenameProvider.",
       "acceptanceCriteria": [
         "A test 'rename updates all occurrences of a symbol' is added to packages/langium-web/tests/e2e/editor.spec.ts",
-        "Test positions cursor on 'a' in the initial editor content, presses F2, types a new name (e.g. 'x'), presses Enter, and verifies the editor content no longer contains the original name 'a' as a symbol",
-        "npx playwright test --grep 'rename' (run from packages/langium-web with dev server running) exits 0",
+        "Test positions cursor on the 'a' declaration (line 3), presses F2, types 'x', presses Enter, and asserts the editor content contains 'x' where 'a' appeared",
+        "cd packages/langium-web && npx playwright test --grep 'rename' exits 0",
+        "Tests pass",
         "Typecheck passes"
       ],
       "priority": 28,
       "passes": false,
-      "notes": "F2 triggers onRenameRequest in Monaco. The rename input widget appears as .rename-box or input inside .rename-input. After typing a new name and pressing Enter, the editor updates all occurrences. Use page.evaluate(() => document.querySelector('.monaco-editor .view-lines')?.textContent) to assert the new name appears and old symbol name is gone. Depends on US-058."
+      "notes": "F2 triggers onRenameRequest in Monaco. The rename input widget appears as .rename-box or an input inside .rename-input. After pressing Enter, all occurrences update. Assert via page.evaluate(() => document.querySelector('.monaco-editor .view-lines')?.textContent) that 'x' appears and 'def a' no longer appears. Depends on US-058."
     },
     {
       "id": "US-061",
-      "title": "Full Playwright e2e run — all tests pass, no WASM errors in console",
-      "description": "As a developer, I need to confirm that all Playwright e2e tests pass against the Vite dev server with the tree-sitter path active for all LSP features.",
+      "title": "Full Playwright e2e run — all 10 tests pass on the tree-sitter path",
+      "description": "As a developer, I need all Playwright e2e tests (8 existing + find-references + rename) to pass against the Vite dev server with tree-sitter active, confirming no regressions and no WASM errors.",
       "acceptanceCriteria": [
-        "cd packages/langium-web && npx playwright test exits 0 with all tests (including find-references and rename) passing",
-        "No browser console errors about WASM 404s, fetch failures, or Parser.init() failures appear in test output",
+        "cd packages/langium-web && npx playwright test exits 0",
+        "Output shows 10 tests passed, 0 failed",
+        "No browser console errors containing '404', 'WASM', 'Parser.init', or 'fetch' appear in the Playwright output",
+        "Tests pass",
         "Typecheck passes"
       ],
       "priority": 29,
       "passes": false,
-      "notes": "Verification-only story. Run with --reporter=list to see individual test names. If any test fails: check browser console for WASM errors first (US-058 blocker), then check if the LSP handler is reaching the tree-sitter branch (add a console.log to verify documentIndex is set). Depends on US-060."
+      "notes": "Verification-only story — no new code. Run with --reporter=list to see individual test names. If any of the 8 existing tests fail after the tree-sitter wiring (US-056–US-058), they are hitting the Chevrotain fallback rather than the tree-sitter path — check that documentIndex is being set by adding a temporary console.log in the handler. Depends on US-060."
     }
   ]
 }
