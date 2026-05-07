@@ -368,6 +368,91 @@
       "priority": 23,
       "passes": true,
       "notes": "See Task 5 in docs/superpowers/plans/2026-05-06-arithmetic-treesitter-end-to-end.md. Replace the entire contents of arithmetics-treesitter.test.ts with the snippet provided verbatim in the plan (lines 317–409). Depends on US-054."
+    },
+    {
+      "id": "US-056",
+      "title": "Fix grammar WASM path resolution in arithmetics-module.ts for browser workers",
+      "description": "As a developer, I need resolveGrammarWasmPath() to work in a Vite browser worker where import.meta.url is an http:// URL, so the grammar WASM can be loaded without throwing.",
+      "acceptanceCriteria": [
+        "resolveGrammarWasmPath() in examples/arithmetics/src/language-server/arithmetics-module.ts does not call fileURLToPath() when import.meta.url is not a file: URL",
+        "In browser context (http: URL), returns new URL('./generated/treesitter/resources/grammar.wasm', import.meta.url).href directly",
+        "In Node.js context (file: URL or CJS __dirname), existing behavior is preserved",
+        "npx tsc -p examples/arithmetics/tsconfig.src.json --noEmit produces no output",
+        "Typecheck passes"
+      ],
+      "priority": 24,
+      "passes": false,
+      "notes": "Current code calls fileURLToPath(new URL(..., import.meta.url)) unconditionally. In a Vite browser worker, import.meta.url is 'http://localhost:5173/...' and fileURLToPath throws 'The URL must be of scheme file'. Fix: guard with import.meta.url.startsWith('file:') — if true, call fileURLToPath as before; otherwise return new URL('./generated/treesitter/resources/grammar.wasm', import.meta.url).href. The CJS __dirname check at line 29 is already first, so only the ESM branch needs the guard."
+    },
+    {
+      "id": "US-057",
+      "title": "Wire WasmLoader.init() in arithmetics-server-start.ts before starting the language server",
+      "description": "As a developer, I need the Vite browser worker to initialize tree-sitter before starting the language server so that document.documentIndex is built for every arithmetic document in the web app.",
+      "acceptanceCriteria": [
+        "packages/langium-web/src/worker/arithmetics-server-start.ts destructures { shared, arithmetics } from createArithmeticsServices()",
+        "arithmetics.parser.WasmLoader.init() is awaited before startLanguageServer(shared) is called",
+        "On WASM init failure, an error is logged to console.error",
+        "Typecheck passes"
+      ],
+      "priority": 25,
+      "passes": false,
+      "notes": "Same pattern as examples/arithmetics/src/language-server/main.ts (US-051). The start() function currently only destructures { shared }. Change to { shared, arithmetics }. Make start() async (or use .then().catch()) and call arithmetics.parser.WasmLoader.init() before startLanguageServer(shared). Depends on US-056."
+    },
+    {
+      "id": "US-058",
+      "title": "Make tree-sitter runtime WASM (tree-sitter.wasm) accessible in the Vite browser worker",
+      "description": "As a developer, I need web-tree-sitter's Parser.init() to successfully locate and load tree-sitter.wasm when running inside a Vite browser worker, so the tree-sitter runtime initializes without a 404.",
+      "acceptanceCriteria": [
+        "node_modules/web-tree-sitter/tree-sitter.wasm is copied to packages/langium-web/public/tree-sitter.wasm OR equivalent Vite asset mechanism is configured",
+        "Parser.init() receives a locateFile option that resolves tree-sitter.wasm to '/tree-sitter.wasm' (served from public/)",
+        "No 404 or WASM fetch error appears in the browser console when the editor loads",
+        "npm run dev in packages/langium-web starts without errors",
+        "Typecheck passes"
+      ],
+      "priority": 26,
+      "passes": false,
+      "notes": "web-tree-sitter's Parser.init() calls locateFile('tree-sitter.wasm', scriptDir) to find its runtime WASM. In a Vite pre-bundled worker, scriptDir is node_modules/.vite/deps/ — tree-sitter.wasm is not there. Fix: (A) Copy node_modules/web-tree-sitter/tree-sitter.wasm to packages/langium-web/public/tree-sitter.wasm. (B) Override DefaultWasmLoader.doInit() in a BrowserWasmLoader subclass that calls Parser.init({ locateFile: (name: string) => '/' + name }) before Language.load(). Wire BrowserWasmLoader into the DI via a custom module in arithmetics-server-start.ts. Alternatively, call Parser.init({ locateFile: ... }) directly in start() BEFORE WasmLoader.init() — subsequent calls to Parser.init() are no-ops. Depends on US-057."
+    },
+    {
+      "id": "US-059",
+      "title": "Add Playwright e2e test for find-references",
+      "description": "As a developer, I need a Playwright test that verifies find-references works end-to-end in Monaco, driven by the tree-sitter ReferencesProvider.",
+      "acceptanceCriteria": [
+        "A test 'find-references shows all usages of a declaration' is added to packages/langium-web/tests/e2e/editor.spec.ts",
+        "Test positions the cursor on the declaration of 'a' (line 3) in the initial editor content, triggers Shift+F12 (Find All References), and verifies the references peek widget or panel becomes visible",
+        "npx playwright test --grep 'find-references' (run from packages/langium-web with dev server running) exits 0",
+        "Typecheck passes"
+      ],
+      "priority": 27,
+      "passes": false,
+      "notes": "The initial editor code (arithmeticsConfig.ts) has 'def a: 5;' on line 3 and 'def c: a + b;' on line 5 — 'a' on line 5 is a cross-reference (PrimaryExpression.func, isRef:true in metadata; parens are optional so bare 'a' is also indexed). Shift+F12 triggers Find All References in Monaco. The references peek widget renders as .zone-widget or .monaco-peekview-widget. Position cursor at line 3 (declaration), trigger Shift+F12, assert widget becomes visible. Depends on US-058."
+    },
+    {
+      "id": "US-060",
+      "title": "Add Playwright e2e test for rename",
+      "description": "As a developer, I need a Playwright test that verifies rename works end-to-end in Monaco, driven by the tree-sitter RenameProvider.",
+      "acceptanceCriteria": [
+        "A test 'rename updates all occurrences of a symbol' is added to packages/langium-web/tests/e2e/editor.spec.ts",
+        "Test positions cursor on 'a' in the initial editor content, presses F2, types a new name (e.g. 'x'), presses Enter, and verifies the editor content no longer contains the original name 'a' as a symbol",
+        "npx playwright test --grep 'rename' (run from packages/langium-web with dev server running) exits 0",
+        "Typecheck passes"
+      ],
+      "priority": 28,
+      "passes": false,
+      "notes": "F2 triggers onRenameRequest in Monaco. The rename input widget appears as .rename-box or input inside .rename-input. After typing a new name and pressing Enter, the editor updates all occurrences. Use page.evaluate(() => document.querySelector('.monaco-editor .view-lines')?.textContent) to assert the new name appears and old symbol name is gone. Depends on US-058."
+    },
+    {
+      "id": "US-061",
+      "title": "Full Playwright e2e run — all tests pass, no WASM errors in console",
+      "description": "As a developer, I need to confirm that all Playwright e2e tests pass against the Vite dev server with the tree-sitter path active for all LSP features.",
+      "acceptanceCriteria": [
+        "cd packages/langium-web && npx playwright test exits 0 with all tests (including find-references and rename) passing",
+        "No browser console errors about WASM 404s, fetch failures, or Parser.init() failures appear in test output",
+        "Typecheck passes"
+      ],
+      "priority": 29,
+      "passes": false,
+      "notes": "Verification-only story. Run with --reporter=list to see individual test names. If any test fails: check browser console for WASM errors first (US-058 blocker), then check if the LSP handler is reaching the tree-sitter branch (add a console.log to verify documentIndex is set). Depends on US-060."
     }
   ]
 }
